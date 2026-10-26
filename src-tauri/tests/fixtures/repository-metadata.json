@@ -1,0 +1,220 @@
+{
+  "schema_version": 2,
+  "system": "Sony - PlayStation 2",
+  "console_metadata": {
+    "labels": {
+      "mul": "PlayStation 2"
+    },
+    "short_descriptions": {
+      "en": "Sony's second home video game console, part of the sixth generation of consoles",
+      "es": "consola de videojuegos de sexta generación fabricada por primera vez por Sony en 2000"
+    },
+    "sources": {
+      "wikidata": {
+        "wikidata_id": "Q10680"
+      }
+    },
+    "fields": {
+      "release_date": [
+        {
+          "value": {
+            "time": "+2000-03-04T00:00:00Z",
+            "timezone": 0,
+            "before": 0,
+            "after": 0,
+            "precision": 11,
+            "calendarmodel": "http://www.wikidata.org/entity/Q1985727"
+          },
+          "rank": "normal"
+        }
+      ],
+      "developer": [
+        {
+          "value": {
+            "entity-type": "item",
+            "numeric-id": 41187,
+            "id": "Q41187"
+          },
+          "labels": {
+            "en": "Sony Group",
+            "es": "Sony",
+            "mul": "Sony Group"
+          },
+          "rank": "normal"
+        },
+        {
+          "value": {
+            "entity-type": "item",
+            "numeric-id": 18594,
+            "id": "Q18594"
+          },
+          "labels": {
+            "en": "Sony Interactive Entertainment",
+            "es": "Sony Interactive Entertainment",
+            "mul": "Sony Interactive Entertainment"
+          },
+          "rank": "normal"
+        }
+      ],
+      "manufacturer": [
+        {
+          "value": {
+            "entity-type": "item",
+            "numeric-id": 18594,
+            "id": "Q18594"
+          },
+          "labels": {
+            "en": "Sony Interactive Entertainment",
+            "es": "Sony Interactive Entertainment",
+            "mul": "Sony Interactive Entertainment"
+          },
+          "rank": "normal"
+        }
+      ]
+    }
+  },
+  "metadata": {
+    "wikidata:Q975773": {
+      "labels": {
+        "en": "Gran Turismo 3: A-Spec",
+        "es": "Gran Turismo 3: A-Spec",
+        "mul": "Gran Turismo 3: A-Spec"
+      },
+      "short_descriptions": {
+        "en": "2001 video game",
+        "es": "videojuego de 2001"
+      },
+      "fields": {
+        "developer": [
+          {
+            "value": {
+              "entity-type": "item",
+              "numeric-id": 1053684,
+              "id": "Q1053684"
+            },
+            "labels": {
+              "en": "Polyphony Digital",
+              "es": "Polyphony Digital",
+              "mul": "Polyphony Digital"
+            },
+            "rank": "normal"
+          }
+        ],
+        "publisher": [
+          {
+            "value": {
+              "entity-type": "item",
+              "numeric-id": 18594,
+              "id": "Q18594"
+            },
+            "labels": {
+              "en": "Sony Interactive Entertainment",
+              "es": "Sony Interactive Entertainment",
+              "mul": "Sony Interactive Entertainment"
+            },
+            "rank": "normal"
+          }
+        ],
+        "genre": [
+          {
+            "value": {
+              "entity-type": "item",
+              "numeric-id": 860750,
+              "id": "Q860750"
+            },
+            "labels": {
+              "en": "racing video game",
+              "es": "carreras"
+            },
+            "rank": "normal"
+          }
+        ],
+        "max_players": [],
+        "min_players": [],
+        "game_mode": [
+          {
+            "value": {
+              "entity-type": "item",
+              "numeric-id": 6895044,
+              "id": "Q6895044"
+            },
+            "labels": {
+              "en": "multiplayer video game",
+              "es": "multijugador"
+            },
+            "rank": "normal"
+          },
+          {
+            "value": {
+              "entity-type": "item",
+              "numeric-id": 208850,
+              "id": "Q208850"
+            },
+            "labels": {
+              "en": "single-player video game",
+              "es": "un jugador"
+            },
+            "rank": "normal"
+          }
+        ],
+        "release_date": [
+          {
+            "value": {
+              "time": "+2001-04-28T00:00:00Z",
+              "timezone": 0,
+              "before": 0,
+              "after": 0,
+              "precision": 11,
+              "calendarmodel": "http://www.wikidata.org/entity/Q1985727"
+            },
+            "rank": "normal"
+          }
+        ],
+        "platform": [
+          {
+            "value": {
+              "entity-type": "item",
+              "numeric-id": 10680,
+              "id": "Q10680"
+            },
+            "labels": {
+              "mul": "PlayStation 2"
+            },
+            "rank": "normal"
+          }
+        ]
+      }
+    }
+  },
+  "games": {
+    "PBPX-95502": {
+      "entries": [
+        {
+          "redump_id": "23179",
+          "entry_id": "23179",
+          "provider": "redump",
+          "name": "Gran Turismo 3 - A-Spec (Japan, Asia)",
+          "serial_raw": "PBPX 95502, SCPS 15009, SCPS 55007, SCPS 72001",
+          "serials": [
+            "PBPX-95502",
+            "SCPS-15009",
+            "SCPS-55007",
+            "SCPS-72001"
+          ],
+          "category": "Games",
+          "version": "1.01"
+        }
+      ],
+      "images": {},
+      "metadata_id": "wikidata:Q975773"
+    },
+    "UNKNOWN": {
+      "entries": [
+        {
+          "name": "Unknown Game (USA)"
+        }
+      ],
+      "images": {}
+    }
+  }
+}

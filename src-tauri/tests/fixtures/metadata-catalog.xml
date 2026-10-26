@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Metadata>
+  <Platform><Name>Sega Genesis</Name><ReleaseDate>1988-10-29T00:00:00Z</ReleaseDate><Developer>Sega</Developer><Manufacturer>Sega &amp; partners</Manufacturer></Platform>
+  <Game>
+    <DatabaseID>1</DatabaseID><Name>Sonic the Hedgehog</Name><Platform>Sega Genesis</Platform>
+    <ReleaseDate>1991-06-23T00:00:00Z</ReleaseDate><Developer>Sonic Team</Developer><Publisher>Sega</Publisher>
+    <Genres>Platform; Action</Genres><MaxPlayers>1</MaxPlayers><Cooperative>false</Cooperative>
+    <Overview>Sonic &amp; friends: &#60;fast&#62; adventures. <![CDATA[<script>plain text</script>]]></Overview>
+  </Game>
+  <Game>
+    <DatabaseID>2</DatabaseID><Name>Sonic the Hedgehog 2</Name><Platform>Sega Genesis</Platform>
+    <ReleaseDate>1992-11-24</ReleaseDate><MaxPlayers>2</MaxPlayers><Cooperative>true</Cooperative>
+  </Game>
+  <Game><DatabaseID>3</DatabaseID><Name>Sonic the Hedgehog</Name><Platform>Sega Master System</Platform><ReleaseDate>2025-02-29</ReleaseDate><MaxPlayers>0</MaxPlayers></Game>
+  <Game><DatabaseID>4</DatabaseID><Name>Shared Name</Name><Platform>Sega Genesis</Platform><ReleaseYear>1994</ReleaseYear></Game>
+  <Game><DatabaseID>5</DatabaseID><Name>Another Name</Name><Platform>Sega Genesis</Platform></Game>
+  <GameAlternateName><DatabaseID>1</DatabaseID><AlternateName>Sónic!</AlternateName></GameAlternateName>
+  <GameAlternateName><DatabaseID>4</DatabaseID><AlternateName>Ambiguous</AlternateName></GameAlternateName>
+  <GameAlternateName><DatabaseID>5</DatabaseID><AlternateName>Ambiguous</AlternateName></GameAlternateName>
+  <GameImage><DatabaseID>1</DatabaseID><FileName>cover-us.png</FileName><Type>Box - Front</Type><Region>North America</Region><CRC32>1</CRC32></GameImage>
+  <GameImage><DatabaseID>1</DatabaseID><FileName>cover-eu.png</FileName><Type>Box - Front</Type><Region>Europe</Region><CRC32>2</CRC32></GameImage>
+  <GameImage><DatabaseID>1</DatabaseID><FileName>logo.png</FileName><Type>Clear Logo</Type><Region>World</Region><CRC32>3</CRC32></GameImage>
+  <GameImage><DatabaseID>1</DatabaseID><FileName>screen-1.png</FileName><Type>Screenshot - Gameplay</Type><Region>World</Region><CRC32>4</CRC32></GameImage>
+  <GameImage><DatabaseID>1</DatabaseID><FileName>screen-duplicate.png</FileName><Type>Screenshot - Gameplay</Type><Region>Europe</Region><CRC32>4</CRC32></GameImage>
+  <GameImage><DatabaseID>1</DatabaseID><FileName>screen-2.png</FileName><Type>Screenshot - Gameplay</Type><Region>World</Region><CRC32>5</CRC32></GameImage>
+  <GameImage><DatabaseID>1</DatabaseID><FileName>title.png</FileName><Type>Screenshot - Game Title</Type></GameImage>
+  <GameImage><DatabaseID>1</DatabaseID><FileName>back.png</FileName><Type>Box - Back</Type></GameImage>
+  <GameImage><DatabaseID>1</DatabaseID><FileName>spine-us.png</FileName><Type>Box - Spine</Type><Region>North America</Region><CRC32>6</CRC32></GameImage>
+  <GameImage><DatabaseID>1</DatabaseID><FileName>spine-eu.png</FileName><Type>Box - Spine</Type><Region>Europe</Region><CRC32>7</CRC32></GameImage>
+  <GameImage><DatabaseID>1</DatabaseID><FileName>art.png</FileName><Type>Fanart - Background</Type></GameImage>
+  <GameImage><DatabaseID>1</DatabaseID><FileName>other.png</FileName><Type>Advertisement Flyer - Front</Type></GameImage>
+  <GameImage><DatabaseID>1</DatabaseID><FileName>../../bad.png</FileName><Type>Box - Front</Type></GameImage>
+</Metadata>

@@ -1,0 +1,11 @@
+[
+  {"id":"pcsx2","name":"PCSX2","aliases":["pcsx2"],"arguments":"-fullscreen -batch -- \"%ROM%\"","source":"https://pcsx2.net/docs/advanced/cli/"},
+  {"id":"duckstation","name":"DuckStation","aliases":["duckstation"],"arguments":"-fullscreen -batch -- \"%ROM%\"","source":"https://github.com/stenzek/duckstation"},
+  {"id":"dolphin","name":"Dolphin","aliases":["dolphin"],"arguments":"--batch --config Dolphin.Display.Fullscreen=True --exec \"%ROM%\"","source":"https://github.com/dolphin-emu/dolphin/blob/master/Source/Core/UICommon/CommandLineParse.cpp"},
+  {"id":"retroarch","name":"RetroArch","aliases":["retroarch"],"arguments":"--fullscreen \"%ROM%\"","source":"https://docs.libretro.com/guides/cli-intro/"},
+  {"id":"rpcs3","name":"RPCS3","aliases":["rpcs3"],"arguments":"--no-gui --fullscreen \"%ROM%\"","source":"https://github.com/RPCS3/rpcs3/blob/master/rpcs3/rpcs3.cpp"},
+  {"id":"shadps4","name":"shadPS4","aliases":["shadps4"],"arguments":"--fullscreen true -g \"%ROM%\"","source":"https://github.com/shadps4-emu/shadPS4#usage-examples"},
+  {"id":"ppsspp","name":"PPSSPP","aliases":["ppsspp","ppssppwindows"],"arguments":"--fullscreen \"%ROM%\"","source":"https://github.com/hrydgard/ppsspp/blob/master/Windows/main.cpp"},
+  {"id":"cemu","name":"Cemu","aliases":["cemu"],"arguments":"-f -g \"%ROM%\"","source":"https://github.com/cemu-project/Cemu/blob/main/src/config/LaunchSettings.cpp"},
+  {"id":"melonds","name":"melonDS","aliases":["melonds"],"arguments":"--fullscreen \"%ROM%\"","source":"https://github.com/melonDS-emu/melonDS/blob/master/src/frontend/qt_sdl/CLI.cpp"}
+]

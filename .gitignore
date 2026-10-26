@@ -1,0 +1,81 @@
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+node_modules
+dist
+dist-ssr
+*.local
+
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+
+target/*
+
+# Generated locally from the pinned PDF.js dependency.
+src/vendor/pdfjs/
+
+# Generated from the editable language catalogs.
+src/locales/catalogs.js
+
+# Local environments and secrets. Sanitized examples can be versioned.
+.env
+.env.*
+!.env.example
+!.env.*.example
+*.pem
+*.key
+*.pfx
+*.p12
+*.jks
+*.keystore
+
+# Personal libraries, downloaded media, caches and backups outside build output.
+/data/
+/cache/
+/backups/
+/src-tauri/data/
+/src-tauri/cache/
+/src-tauri/backups/
+opencabinet.config.json
+opencabinet.config.json.*
+*box.config.json
+*box.config.json.*
+.*-move.json
+.*-instance.lock
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+*.sqlite
+*.sqlite-journal
+*.sqlite-wal
+*.sqlite-shm
+*.sqlite3
+*.sqlite3-journal
+*.sqlite3-wal
+*.sqlite3-shm
+*.bak
+*.backup
+*.orig
+
+# Built Windows applications and installers.
+.private/
+*.exe
+*.msi
+*.msix
+*.appx

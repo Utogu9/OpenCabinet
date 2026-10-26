@@ -1,0 +1,42 @@
+[package]
+name = "opencabinet"
+version = "0.1.0"
+description = "OpenCabinet: a desktop game library and launcher with interactive 3D game boxes."
+authors = ["Utogu"]
+license = "MIT"
+rust-version = "1.90"
+edition = "2024"
+
+[lib]
+name = "opencabinet_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+serde_json = "1"
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = ["protocol-asset"] }
+tauri-plugin-opener = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+rusqlite = { version = "0.40.2", features = ["bundled", "hooks"] }
+rfd = "0.15"
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls"] }
+tokio = { version = "1", features = ["sync", "macros"] }
+quick-xml = "0.38"
+zip = { version = "9", default-features = false, features = ["deflate"] }
+unicode-normalization = "0.1"
+sevenz-rust = { version = "0.6.1", default-features = false }
+tauri-plugin-updater = "2"
+
+[target.'cfg(windows)'.dependencies]
+winreg = "0.56"
+windows-sys = { version = "0.61.2", features = ["Win32_Foundation", "Win32_System_Diagnostics_ToolHelp", "Win32_System_Threading", "Win32_UI_WindowsAndMessaging", "Win32_UI_Shell"] }
+
+[profile.release]
+codegen-units = 1
+lto = true
+opt-level = 3
+panic = "abort"
+strip = true

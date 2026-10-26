@@ -1,0 +1,28 @@
+{
+  "name": "opencabinet",
+  "private": true,
+  "version": "0.1.0",
+  "description": "OpenCabinet: a desktop game library and launcher with interactive 3D game boxes.",
+  "author": "Utogu",
+  "license": "MIT",
+  "engines": {
+    "node": ">=22.13.0"
+  },
+  "type": "module",
+  "scripts": {
+    "prepare:pdf": "node scripts/prepare-pdfjs.cjs",
+    "prepare:icons": "node scripts/prepare-icons.cjs",
+    "postinstall": "npm run prepare:locales && npm run prepare:pdf",
+    "test": "node --test",
+    "dev": "tauri dev",
+    "build": "tauri build",
+    "prepare:locales": "node scripts/prepare-locales.cjs"
+  },
+  "dependencies": {
+    "@tauri-apps/api": "^2.12.4",
+    "pdfjs-dist": "6.4.299"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2.0.0"
+  }
+}

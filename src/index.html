@@ -1,0 +1,1293 @@
+<!doctype html>
+<html lang="es-AR" data-i18n-pending>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>OpenCabinet</title>
+    <link rel="icon" type="image/webp" href="assets/OpenCabinetLogo.webp" />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <!-- Barra de Menú Superior Estilo Escritorio -->
+    <nav class="top-menu-bar" data-tauri-drag-region aria-label="" data-i18n-aria-label="msg.d8b275b2f1">
+      <span class="titlebar-app-name" data-tauri-drag-region>OpenCabinet</span>
+      <div class="menu-item-dropdown" id="menu-options-dropdown">
+        <button class="menu-title" id="btn-menu-options"><span data-i18n="msg.a6ed6dbae7"></span></button>
+        <div class="dropdown-menu" id="dropdown-options-menu">
+          <button class="dropdown-item" id="btn-open-emulators">
+            <span>🕹️</span> <span data-i18n="msg.b302f50687"></span>
+          </button>
+          <button class="dropdown-item" id="btn-open-platforms">
+            <span>🎮</span> <span data-i18n="msg.3df52e855a"></span>
+          </button>
+          <button class="dropdown-item" id="btn-library-categories" type="button"><span>🗂️</span> <span data-i18n="msg.8c6ce4c469"></span></button>
+          <button class="dropdown-item" id="btn-open-preferences" type="button">
+            <span>⚙️</span> <span data-i18n="msg.d5d19e9b70"></span>
+          </button>
+        </div>
+      </div>
+      <div class="menu-item-dropdown" id="menu-tools-dropdown">
+        <button class="menu-title" id="btn-menu-tools"><span data-i18n="msg.ab21560c63"></span></button>
+        <div class="dropdown-menu" id="dropdown-tools-menu">
+          <button class="dropdown-item" id="btn-scan-roms">
+            <span>📁</span> <span data-i18n="msg.4f57902244"></span>
+          </button>
+        </div>
+      </div>
+      <button class="menu-title" id="btn-open-about" type="button"><span data-i18n="msg.26ff89f034"></span></button>
+      <div class="titlebar-drag-space" data-tauri-drag-region></div>
+      <div class="window-controls" role="group" aria-label="" data-i18n-aria-label="msg.652e42644d">
+        <button class="window-control" id="btn-window-minimize" type="button" aria-label="" data-i18n-aria-label="msg.3fc5f90b27" title="" data-i18n-title="msg.3fc5f90b27">
+          <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true">
+            <path d="M1 6.5h10" />
+          </svg>
+        </button>
+        <button class="window-control" id="btn-window-maximize" type="button" aria-label="" data-i18n-aria-label="msg.092b9ccfbf" title="" data-i18n-title="msg.092b9ccfbf" data-maximized="false">
+          <svg class="window-maximize-icon" width="12" height="12" viewBox="0 0 12 12" aria-hidden="true">
+            <rect x="1.5" y="1.5" width="9" height="9" />
+          </svg>
+          <svg class="window-restore-icon" width="12" height="12" viewBox="0 0 12 12" aria-hidden="true">
+            <path d="M3.5 3.5v-2h7v7h-2" />
+            <rect x="1.5" y="3.5" width="7" height="7" />
+          </svg>
+        </button>
+        <button class="window-control window-control-close" id="btn-window-close" type="button" aria-label="" data-i18n-aria-label="msg.aeccae342e" title="" data-i18n-title="msg.aeccae342e">
+          <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true">
+            <path d="m1.5 1.5 9 9m0-9-9 9" />
+          </svg>
+        </button>
+      </div>
+    </nav>
+
+    <!-- Área Principal del Catálogo de Juegos -->
+    <main>
+      <div id="toast-notification" class="toast hidden"></div>
+      <aside class="library-sidebar" aria-label="" data-i18n-aria-label="msg.c9169c12cb">
+        <div class="library-search">
+          <input
+            type="search"
+            autocomplete="off"
+            class="search-bar"
+            placeholder="" data-i18n-placeholder="msg.5fdc2758ed"
+            aria-label="" data-i18n-aria-label="msg.1faad7fe20"
+            id="search-input"
+          />
+          <label class="library-grouping-label" for="library-grouping"><span data-i18n="msg.fc7da37279"></span></label>
+          <select id="library-grouping" aria-controls="platform-list">
+            <option value="platform" data-i18n="msg.9f52c41426"></option>
+            <option value="categories" data-i18n="msg.7ef4eab73e"></option>
+            <option value="developer" data-i18n="msg.38ba62181c"></option>
+            <option value="publisher" data-i18n="msg.936a161c39"></option>
+            <option value="manufacturer" data-i18n="msg.b79530ac7c"></option>
+            <option value="date" data-i18n="msg.31b614ced2"></option>
+            <option value="year" data-i18n="msg.4538cdea32"></option>
+            <option value="hours" data-i18n="msg.a28c7c72ce"></option>
+            <option value="sessions" data-i18n="msg.28c60e4793"></option>
+          </select>
+        </div>
+        <nav class="platform-list" id="platform-list" aria-label="" data-i18n-aria-label="msg.9f52c41426"></nav>
+      </aside>
+      <div class="catalog-section" id="catalog-scroll">
+        <p class="game-selection-status hidden" id="game-selection-status" role="status"></p>
+        <div class="grid" id="games-grid" aria-busy="true" data-library-state="loading"><div class="library-load-status" role="status"><p><span data-i18n="msg.daf2f4eb7a"></span></p></div></div>
+      </div>
+
+      <!-- Panel Lateral Derecho de Información del Juego -->
+      <div
+        class="details-resizer"
+        id="details-resizer"
+        role="separator"
+        aria-label="" data-i18n-aria-label="msg.8efa1c350e"
+        aria-orientation="vertical"
+        aria-controls="game-details-panel"
+        tabindex="0"
+        title="" data-i18n-title="msg.f55be0ea72"
+      ></div>
+      <aside class="details-sidebar" id="game-details-panel">
+        <div class="details-placeholder" id="details-placeholder">
+          <div class="placeholder-icon">🎮</div>
+          <p><span data-i18n="msg.3126100b6c"></span></p>
+        </div>
+        <div class="details-content hidden" id="details-content">
+          <div class="details-logo-container" id="details-logo-container">
+            <button class="logo-edit-button" id="btn-edit-game" type="button" aria-label="" data-i18n-aria-label="msg.ab5c261bc2" title="" data-i18n-title="msg.ab5c261bc2">✏️</button>
+            <button class="logo-edit-button logo-delete-button" id="btn-delete-game" type="button" aria-label="" data-i18n-aria-label="msg.88a7099673" title="" data-i18n-title="msg.88a7099673">🗑️</button>
+            <button class="logo-edit-button platform-only" id="btn-edit-platform-details" type="button" aria-label="" data-i18n-aria-label="msg.2d1d5f9ba1" title="" data-i18n-title="msg.e86e413389">✏️</button>
+          </div>
+          <h2 class="details-title" id="details-title"></h2>
+          <span class="details-platform" id="details-platform"></span>
+          <section class="details-gallery" id="details-gallery" aria-label="" data-i18n-aria-label="msg.a7f0af4e37">
+            <div class="media-view-switch" role="group" aria-label="" data-i18n-aria-label="msg.95b234304a">
+              <button id="btn-media-box" type="button" aria-pressed="true" aria-controls="game-box-panel"><span data-i18n="msg.72af42e083"></span></button>
+              <button id="btn-media-photos" type="button" aria-pressed="false" aria-controls="gallery-photos"><span data-i18n="msg.cbbba360eb"></span></button>
+            </div>
+            <div id="game-box-slot">
+            <div class="game-box-panel" id="game-box-panel">
+              <div class="game-box-stage" id="game-box-stage" tabindex="0" role="group" aria-roledescription="visor 3D"></div>
+              <div class="game-box-controls" role="group" aria-label="" data-i18n-aria-label="msg.6f5d592e40">
+                <button class="secondary-btn" id="btn-box-reset" type="button" aria-label="" data-i18n-aria-label="msg.a1cf4ac3a3" title="" data-i18n-title="msg.ec98ce3343">↺</button>
+                <button class="secondary-btn hidden" id="btn-box-open" type="button" aria-pressed="false" aria-controls="game-box-stage" title="" data-i18n-title="msg.32e88846b5"><span data-i18n="msg.2d3b26a1ab"></span></button>
+                <button class="secondary-btn" id="btn-box-zoom-out" type="button" aria-label="" data-i18n-aria-label="msg.16f9366d68">−</button>
+                <button class="secondary-btn hidden" id="btn-box-read-manual" type="button" title="" data-i18n-title="msg.0980ab583c" aria-label="" data-i18n-aria-label="msg.297ba61d09">📖</button>
+                <button class="secondary-btn" id="btn-box-zoom-in" type="button" aria-label="" data-i18n-aria-label="msg.036559fc74">+</button>
+                <button class="secondary-btn" id="btn-box-fullscreen" type="button" aria-label="" data-i18n-aria-label="msg.8948026d35" title="" data-i18n-title="msg.c6ea3e3f37">⛶</button>
+              </div>
+              <div class="game-box-manual-controls hidden" id="game-box-manual-controls">
+                <label class="hidden" id="game-box-manual-label" for="game-box-manual-select"><span data-i18n="msg.50758e58e7"></span></label>
+                <select class="hidden" id="game-box-manual-select" aria-label="" data-i18n-aria-label="msg.1d47332509"></select>
+                <p class="game-box-help" id="game-box-manual-status" role="status"></p>
+              </div>
+            </div>
+            </div>
+            <div class="gallery-photos hidden" id="gallery-photos">
+              <div class="gallery-viewer" id="gallery-viewer"></div>
+              <div class="gallery-controls">
+                <button class="secondary-btn" id="gallery-previous" type="button" aria-label="" data-i18n-aria-label="msg.928f791195">‹</button>
+                <span id="gallery-caption" aria-live="polite"></span>
+                <button class="secondary-btn" id="gallery-next" type="button" aria-label="" data-i18n-aria-label="msg.dd19d0e4c9">›</button>
+              </div>
+              <div class="gallery-thumbnails" id="gallery-thumbnails" aria-label="" data-i18n-aria-label="msg.027cd9116c"></div>
+            </div>
+          </section>
+
+          <button class="play-btn-large" id="btn-play-game">
+            <span class="play-icon-shape">▶</span> <span data-i18n="msg.bf4705377b"></span>
+          </button>
+          <div class="platform-only platform-play-actions" aria-label="" data-i18n-aria-label="msg.9034522fa3">
+            <button class="secondary-btn" id="btn-platform-last" type="button"><span data-i18n="msg.124ba96734"></span></button>
+            <button class="secondary-btn" id="btn-platform-most" type="button"><span data-i18n="msg.49c4bbcec2"></span></button>
+            <button class="primary-btn" id="btn-platform-random" type="button"><span data-i18n="msg.3e86cbbd60"></span></button>
+          </div>
+
+          <div class="details-meta-grid">
+            <div class="meta-item">
+              <span class="meta-label"><span data-i18n="msg.31b614ced2"></span></span>
+              <span class="meta-value" id="details-release-date">-</span>
+            </div>
+            <div class="meta-item">
+              <span class="meta-label"><span data-i18n="msg.38ba62181c"></span></span>
+              <span class="meta-value" id="details-developer">-</span>
+            </div>
+            <div class="meta-item">
+              <span class="meta-label" id="details-publisher-label"><span data-i18n="msg.936a161c39"></span></span>
+              <span class="meta-value" id="details-publisher">-</span>
+            </div>
+            <div class="meta-item">
+              <span class="meta-label"><span data-i18n="msg.a703c4c9fb"></span></span>
+              <span class="meta-value" id="details-play-time"><span data-i18n="msg.ed28aee471"></span></span>
+            </div>
+          </div>
+          <section class="details-info-box" id="game-information" aria-labelledby="details-info-title">
+            <h3 id="details-info-title"><span data-i18n="msg.7263ec8c2d"></span></h3>
+            <div class="meta-item">
+              <span class="meta-label"><span data-i18n="msg.736f64cd6d"></span></span>
+              <span class="meta-value" id="details-genre">-</span>
+            </div>
+            <div class="meta-item">
+              <span class="meta-label"><span data-i18n="msg.14a7cbd8af"></span></span>
+              <span class="meta-value" id="details-game-mode">-</span>
+            </div>
+            <div class="meta-item">
+              <span class="meta-label"><span data-i18n="msg.75d6b4579e"></span></span>
+              <span class="meta-value" id="details-rom-file">-</span>
+            </div>
+            <div class="meta-item">
+              <span class="meta-label"><span data-i18n="msg.666766f897"></span></span>
+              <span class="meta-value" id="details-last-played"><span data-i18n="msg.12fcd0c7b7"></span></span>
+            </div>
+            <div class="meta-item">
+              <span class="meta-label"><span data-i18n="msg.a3b719fa32"></span></span>
+              <span class="meta-value" id="details-max-players">-</span>
+            </div>
+          </section>
+          <section class="details-info-box platform-only" aria-labelledby="platform-info-title">
+            <h3 id="platform-info-title"><span data-i18n="msg.7263ec8c2d"></span></h3>
+            <div class="meta-item"><span class="meta-label"><span data-i18n="msg.a52b5c097a"></span></span><span class="meta-value" id="platform-total-games">0</span></div>
+            <div class="meta-item"><span class="meta-label"><span data-i18n="msg.3aa2fc0e2f"></span></span><span class="meta-value" id="platform-default-emulator"><span data-i18n="msg.8cbe82eda0"></span></span></div>
+            <div class="meta-item"><span class="meta-label"><span data-i18n="msg.1b6c77ac48"></span></span><span class="meta-value" id="platform-last-game"><span data-i18n="msg.12fcd0c7b7"></span></span></div>
+            <div class="meta-item"><span class="meta-label"><span data-i18n="msg.666766f897"></span></span><span class="meta-value" id="platform-last-played"><span data-i18n="msg.12fcd0c7b7"></span></span></div>
+            <div class="meta-item"><span class="meta-label"><span data-i18n="msg.28c60e4793"></span></span><span class="meta-value" id="platform-sessions">0</span></div>
+            <div class="meta-item"><span class="meta-label"><span data-i18n="msg.a5a787f1e8"></span></span><span class="meta-value" id="platform-total-time"><span data-i18n="msg.ed28aee471"></span></span></div>
+            <div class="meta-item"><span class="meta-label"><span data-i18n="msg.06f51b8f2a"></span></span><span class="meta-value" id="platform-most-game"><span data-i18n="msg.12fcd0c7b7"></span></span></div>
+          </section>
+          <section class="details-info-box" id="game-description" aria-labelledby="details-description-title">
+            <h3 id="details-description-title"><span data-i18n="msg.ee00b96fff"></span></h3>
+            <p id="details-description"><span data-i18n="msg.591e5cef97"></span></p>
+          </section>
+        </div>
+      </aside>
+    </main>
+
+    <aside class="import-task hidden" id="import-task" aria-labelledby="import-task-title">
+      <div class="import-task-header">
+        <h3 id="import-task-title"><span data-i18n="msg.461a09faea"></span></h3>
+        <button class="task-restore-btn" id="btn-import-task-restore" type="button" aria-label="" data-i18n-aria-label="msg.6efdbfe2e1" title="" data-i18n-title="msg.6efdbfe2e1">↗</button>
+        <button class="close-btn hidden" id="btn-import-task-dismiss" type="button" aria-label="" data-i18n-aria-label="msg.9a0b73067d">&times;</button>
+      </div>
+      <p id="import-task-label" role="status"></p>
+      <progress id="import-task-bar" max="100" aria-label="" data-i18n-aria-label="msg.5f03290423"></progress>
+      <p id="import-task-counts"></p>
+      <div class="import-task-actions">
+        <button class="secondary-btn hidden" id="btn-import-task-retry" type="button"><span data-i18n="msg.a9254c5f81"></span></button>
+        <button class="primary-btn hidden" id="btn-import-task-continue" type="button"><span data-i18n="msg.63e2bbaf1c"></span></button>
+        <button class="secondary-btn" id="btn-import-task-cancel" type="button"><span data-i18n="msg.bb9dbb406d"></span></button>
+      </div>
+    </aside>
+
+    <aside class="import-task hidden" id="retroarch-task" aria-labelledby="retroarch-task-title">
+      <div class="import-task-header">
+        <h3 id="retroarch-task-title">RetroArch</h3>
+        <button class="task-restore-btn" id="btn-retroarch-task-restore" type="button" aria-label="" data-i18n-aria-label="msg.a83d7dad65" title="" data-i18n-title="msg.a83d7dad65">↗</button>
+        <button class="close-btn hidden" id="btn-retroarch-task-dismiss" type="button" aria-label="" data-i18n-aria-label="msg.f789aafa91">&times;</button>
+      </div>
+      <p class="task-label" id="retroarch-task-label" role="status"></p>
+      <progress id="retroarch-task-bar" max="100" aria-label="" data-i18n-aria-label="msg.2e4466cb22"></progress>
+      <p class="task-counts" id="retroarch-task-counts"></p>
+      <div class="import-task-actions"><button class="secondary-btn" id="btn-retroarch-task-cancel" type="button"><span data-i18n="msg.bb9dbb406d"></span></button></div>
+    </aside>
+
+    <aside class="import-task hidden" id="bulk-images-task" aria-labelledby="bulk-images-task-title">
+      <div class="import-task-header">
+        <h3 id="bulk-images-task-title"><span data-i18n="msg.488a8c208f"></span></h3>
+        <button class="task-restore-btn" id="btn-bulk-images-task-restore" type="button" aria-label="" data-i18n-aria-label="msg.5d1b8f2811" title="" data-i18n-title="msg.5d1b8f2811">↗</button>
+        <button class="close-btn hidden" id="btn-bulk-images-task-dismiss" type="button" aria-label="" data-i18n-aria-label="msg.c966a5a413">&times;</button>
+      </div>
+      <p class="task-label" id="bulk-images-task-label" role="status"></p>
+      <progress id="bulk-images-task-bar" max="100" aria-label="" data-i18n-aria-label="msg.6d105c98fe"></progress>
+      <div class="import-task-actions"><button class="secondary-btn" id="btn-bulk-images-task-cancel" type="button"><span data-i18n="msg.bb9dbb406d"></span></button></div>
+    </aside>
+
+    <dialog class="confirmation-dialog platform-details-dialog" id="platform-details-dialog" aria-labelledby="platform-editor-title">
+      <form id="platform-details-form" autocomplete="off">
+        <div class="modal-header"><h2 id="platform-editor-title"><span data-i18n="msg.e86e413389"></span></h2><button class="close-btn" id="btn-close-platform-details" type="button" aria-label="" data-i18n-aria-label="msg.bc74c76062">&times;</button></div>
+        <div class="game-editor-layout">
+          <nav class="game-editor-nav" role="tablist" aria-label="" data-i18n-aria-label="msg.670ff5176d" aria-orientation="vertical">
+            <button type="button" id="platform-edit-tab-details" role="tab" aria-controls="platform-edit-panel-details" aria-selected="true"><span data-i18n="msg.c8a74ca68d"></span></button>
+            <button type="button" id="platform-edit-tab-boxes" role="tab" aria-controls="platform-edit-panel-boxes" aria-selected="false" tabindex="-1"><span data-i18n="msg.1f9d0c92c3"></span></button>
+            <button type="button" id="platform-edit-tab-images" role="tab" aria-controls="platform-edit-panel-images" aria-selected="false" tabindex="-1"><span data-i18n="msg.98f60447c3"></span></button>
+            <button type="button" id="platform-edit-tab-variables" role="tab" aria-controls="platform-edit-panel-variables" aria-selected="false" tabindex="-1"><span data-i18n="msg.02db55bac5"></span></button>
+          </nav>
+          <div id="platform-editor-panels">
+          <section id="platform-edit-panel-details" role="tabpanel" aria-labelledby="platform-edit-tab-details">
+        <div class="form-grid">
+          <div class="form-group full-width"><label for="platform-release-date"><span data-i18n="msg.31b614ced2"></span></label><input id="platform-release-date" type="date" /></div>
+          <div class="form-group full-width">
+            <label for="platform-default-emulator-select"><span data-i18n="msg.3aa2fc0e2f"></span></label>
+            <select id="platform-default-emulator-select" aria-describedby="platform-default-emulator-help"></select>
+            <p class="help-text" id="platform-default-emulator-help"><span data-i18n="msg.8777176b0c"></span></p>
+          </div>
+          <div class="form-group"><label for="platform-developer"><span data-i18n="msg.38ba62181c"></span></label><input id="platform-developer" type="text" /></div>
+          <div class="form-group"><label for="platform-manufacturer"><span data-i18n="msg.b79530ac7c"></span></label><input id="platform-manufacturer" type="text" /></div>
+        </div>
+          </section>
+          <section id="platform-edit-panel-boxes" class="hidden" role="tabpanel" aria-labelledby="platform-edit-tab-boxes">
+        <details class="platform-box-settings" id="platform-box-settings">
+          <summary><span data-i18n="msg.6acc8b3735"></span></summary>
+          <p class="help-text"><span data-i18n="msg.8e1163de38"></span></p>
+          <div class="form-group"><label for="platform-box-region"><span data-i18n="msg.76c0827159"></span></label><select id="platform-box-region"><option value="base" data-i18n="msg.d5b32e74af"></option><option value="europe" data-i18n="msg.c034296faf"></option><option value="north_america" data-i18n="msg.a7cf28d675"></option><option value="japan" data-i18n="msg.b69d7b129c"></option></select></div>
+          <label class="box-setting-check hidden" id="platform-box-inherit-row"><input id="platform-box-inherit" type="checkbox" checked /> <span data-i18n="msg.36249d2b81"></span></label>
+          <div id="platform-box-fields" class="form-grid">
+            <div class="form-group full-width"><label for="platform-box-model"><span data-i18n="msg.064fc75997"></span></label><select id="platform-box-model"></select></div>
+            <div class="box-custom-dimensions full-width hidden" id="platform-box-dimensions">
+              <div class="form-group"><label for="platform-box-width"><span data-i18n="msg.9e7e200b2d"></span></label><input id="platform-box-width" type="number" min="20" max="500" step="0.1" /></div>
+              <div class="form-group"><label for="platform-box-height"><span data-i18n="msg.879e82d55d"></span></label><input id="platform-box-height" type="number" min="20" max="500" step="0.1" /></div>
+              <div class="form-group"><label for="platform-box-depth"><span data-i18n="msg.25d13e7840"></span></label><input id="platform-box-depth" type="number" min="1" max="150" step="0.1" /></div>
+            </div>
+            <div class="form-group"><label for="platform-box-spine"><span data-i18n="msg.6bd965138c"></span></label><select id="platform-box-spine"><option value="" data-i18n="msg.b803f24d52"></option><option value="left" data-i18n="msg.4c3c1258fb"></option><option value="top" data-i18n="msg.60099afac8"></option></select></div>
+            <div class="form-group"><label for="platform-box-color"><span data-i18n="msg.8131c9c883"></span></label><input id="platform-box-color" type="color" value="#353b46" /><label class="box-setting-check"><input id="platform-box-auto-color" type="checkbox" checked /> <span data-i18n="msg.b803f24d52"></span></label></div>
+          </div>
+          <div id="platform-box-preview" class="game-box-stage" tabindex="0" role="group" aria-label="" data-i18n-aria-label="msg.b9dd7ab7d4"></div>
+          <p class="game-box-format" id="platform-box-preview-label"></p>
+          <p class="help-text"><span data-i18n="msg.0da95291c4"></span></p>
+          <button class="secondary-btn" type="button" id="btn-reset-platform-box"><span data-i18n="msg.95b39f2816"></span></button>
+        </details>
+          </section>
+        <section class="game-image-editor hidden" id="platform-edit-panel-images" role="tabpanel" aria-labelledby="platform-edit-tab-images">
+          <h3 id="platform-images-title"><span data-i18n="msg.1a6acdfd76"></span></h3>
+          <div class="image-add-controls"><select id="platform-image-kind" aria-label="" data-i18n-aria-label="msg.bff41f6d57"><option value="logo" data-i18n="msg.d707dc2f19"></option><option value="screenshot" data-i18n="msg.e0236ea3bc"></option><option value="artwork" data-i18n="msg.3dbb2d3239"></option><option value="other" data-i18n="msg.371008571b"></option></select><button class="secondary-btn" id="btn-add-platform-images" type="button"><span data-i18n="msg.4ebca1adca"></span></button></div>
+          <section class="platform-download-panel" aria-label="" data-i18n-aria-label="msg.9a11051043">
+            <button class="secondary-btn" id="btn-platform-lb-search" type="button"><span data-i18n="msg.01cd2f796a"></span></button>
+            <label for="platform-lb-source"><span data-i18n="msg.8f7fb99d79"></span></label><select id="platform-lb-source" aria-label="" data-i18n-aria-label="msg.8f7fb99d79"></select>
+            <button class="secondary-btn" id="btn-platform-lb-metadata" type="button" disabled><span data-i18n="msg.2acc658bfe"></span></button>
+            <div class="platform-download-options" id="platform-lb-options"></div>
+            <label class="preference-toggle platform-download-all"><input id="platform-lb-download-all" type="checkbox" /><span><span data-i18n="msg.f84de4576f"></span></span></label>
+            <button class="secondary-btn" id="btn-platform-lb-download" type="button" disabled><span data-i18n="msg.488a8c208f"></span></button>
+            <progress id="platform-lb-progress" max="100" class="hidden" aria-label="" data-i18n-aria-label="msg.8991638982"></progress>
+            <p class="help-text" id="platform-lb-message" role="status"><span data-i18n="msg.343b265894"></span></p>
+          </section>
+          <p class="help-text"><span data-i18n="msg.873132cef4"></span></p>
+          <div class="game-image-list" id="platform-image-list"></div>
+        </section>
+        <section class="hidden" id="platform-edit-panel-variables" role="tabpanel" aria-labelledby="platform-edit-tab-variables">
+          <h3><span data-i18n="msg.4573839d82"></span></h3>
+          <p class="help-text"><span data-i18n="msg.5e1208a0e8"></span></p>
+          <div id="platform-variables-editor"></div>
+          <p class="help-text"><span data-i18n="msg.bf5e6d4066"></span></p>
+        </section>
+          </div>
+        </div>
+        <p id="platform-editor-error" role="status"></p>
+        <div class="form-actions"><button class="secondary-btn" id="btn-cancel-platform-details" type="button"><span data-i18n="msg.bb9dbb406d"></span></button><button class="primary-btn" id="btn-save-platform-details" type="submit"><span data-i18n="msg.14bdfaf2fa"></span></button></div>
+      </form>
+    </dialog>
+
+    <dialog class="fullscreen-box" id="fullscreen-box" aria-labelledby="fullscreen-box-title">
+      <header class="fullscreen-gallery-header">
+        <h2 id="fullscreen-box-title"><span data-i18n="msg.72af42e083"></span></h2>
+        <button class="secondary-btn" id="fullscreen-box-close" type="button" aria-label="" data-i18n-aria-label="msg.eec8fafeab" title="" data-i18n-title="msg.efe7186a1d">✕</button>
+      </header>
+      <div class="fullscreen-box-content" id="fullscreen-box-content"></div>
+    </dialog>
+
+    <dialog class="fullscreen-gallery" id="fullscreen-gallery" aria-labelledby="fullscreen-gallery-title">
+      <header class="fullscreen-gallery-header">
+        <h2 id="fullscreen-gallery-title"></h2>
+        <button class="secondary-btn" id="fullscreen-gallery-close" type="button" aria-label="" data-i18n-aria-label="msg.c14ac819cc" title="" data-i18n-title="msg.efe7186a1d">✕</button>
+      </header>
+      <div class="fullscreen-gallery-stage">
+        <button class="secondary-btn fullscreen-gallery-arrow" id="fullscreen-gallery-previous" type="button" aria-label="" data-i18n-aria-label="msg.928f791195" title="" data-i18n-title="msg.179cfc78c7">‹</button>
+        <div class="fullscreen-gallery-viewer" id="fullscreen-gallery-viewer"></div>
+        <button class="secondary-btn fullscreen-gallery-arrow" id="fullscreen-gallery-next" type="button" aria-label="" data-i18n-aria-label="msg.dd19d0e4c9" title="" data-i18n-title="msg.4d70e535e9">›</button>
+      </div>
+      <footer class="fullscreen-gallery-footer">
+        <p id="fullscreen-gallery-caption" aria-live="polite"></p>
+        <div class="gallery-thumbnails" id="fullscreen-gallery-thumbnails" aria-label="" data-i18n-aria-label="msg.027cd9116c"></div>
+        <p class="fullscreen-gallery-help"><span data-i18n="msg.3bd84f4606"></span></p>
+      </footer>
+    </dialog>
+
+    <!-- Edición de datos del juego seleccionado -->
+    <div id="game-edit-modal" class="modal-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="game-edit-title">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h2 id="game-edit-title"><span data-i18n="msg.ab5c261bc2"></span></h2>
+          <button class="close-btn" id="btn-close-game-edit" type="button" aria-label="" data-i18n-aria-label="msg.0003573e48">&times;</button>
+        </div>
+        <form class="modal-body" id="game-edit-form" autocomplete="off">
+          <div class="game-editor-layout">
+            <nav class="game-editor-nav" role="tablist" aria-label="" data-i18n-aria-label="msg.50c0f4d19d" aria-orientation="vertical">
+              <button type="button" id="game-edit-tab-details" role="tab" aria-controls="game-edit-panel-details" aria-selected="true"><span data-i18n="msg.c8a74ca68d"></span></button>
+              <button type="button" id="game-edit-tab-order" role="tab" aria-controls="game-edit-panel-order" aria-selected="false" tabindex="-1"><span data-i18n="order.title"></span></button>
+              <button type="button" id="game-edit-tab-execution" role="tab" aria-controls="game-edit-panel-execution" aria-selected="false" tabindex="-1"><span data-i18n="msg.cbec57c0ee"></span></button>
+              <button type="button" id="game-edit-tab-images" role="tab" aria-controls="game-edit-panel-images" aria-selected="false" tabindex="-1"><span data-i18n="msg.a7f0af4e37"></span></button>
+              <button type="button" id="game-edit-tab-manuals" role="tab" aria-controls="game-edit-panel-manuals" aria-selected="false" tabindex="-1"><span data-i18n="msg.58cb5b9cf5"></span></button>
+              <button type="button" id="game-edit-tab-discs" role="tab" aria-controls="game-discs-section" aria-selected="false" tabindex="-1"><span data-i18n="msg.2d2dca072e"></span></button>
+              <button type="button" id="game-edit-tab-regions" role="tab" aria-controls="game-edit-panel-regions" aria-selected="false" tabindex="-1"><span data-i18n="msg.d4a0db1956"></span></button>
+              <button type="button" id="game-edit-tab-box" role="tab" aria-controls="game-edit-panel-box" aria-selected="false" tabindex="-1"><span data-i18n="msg.72af42e083"></span></button>
+              <button type="button" id="game-edit-tab-variables" role="tab" aria-controls="game-edit-panel-variables" aria-selected="false" tabindex="-1"><span data-i18n="msg.02db55bac5"></span></button>
+            </nav>
+            <div class="game-editor-panels" id="game-editor-panels">
+          <section id="game-edit-panel-details" role="tabpanel" aria-labelledby="game-edit-tab-details">
+          <div class="form-grid">
+            <div class="form-group full-width">
+              <label for="game-edit-name"><span data-i18n="msg.4c08a5d5fe"></span></label>
+              <div class="metadata-search-row">
+                <input id="game-edit-name" type="text" required />
+                <button id="btn-editor-metadata-search" class="secondary-btn" type="button"><span data-i18n="msg.671f63fed3"></span></button>
+              </div>
+              <section id="editor-metadata-panel" class="editor-metadata-panel hidden" aria-label="" data-i18n-aria-label="msg.015904c961">
+                <p class="help-text"><span data-i18n="msg.f25d6d99b8"></span></p>
+                <label for="editor-metadata-result"><span data-i18n="msg.adf7c8924a"></span></label>
+                <select id="editor-metadata-result" form="game-artwork-form"></select>
+                <div id="editor-metadata-progress" class="hidden" role="status">
+                  <p id="editor-metadata-progress-label"><span data-i18n="msg.ad0266fefa"></span></p>
+                  <progress id="editor-metadata-progress-bar" max="100"></progress>
+                </div>
+                <p id="editor-metadata-message" role="status"></p>
+                <p id="editor-metadata-preview" class="metadata-details"></p>
+                <button id="btn-editor-metadata-apply" class="primary-btn" type="button" disabled><span data-i18n="msg.1e31349633"></span></button>
+              </section>
+            </div>
+            <div class="form-group">
+              <label for="game-edit-platform"><span data-i18n="msg.e0236ea3bc"></span></label>
+              <select id="game-edit-platform" required></select>
+            </div>
+            <div class="form-group">
+              <label for="game-edit-release-date"><span data-i18n="msg.31b614ced2"></span></label>
+              <input id="game-edit-release-date" type="date" min="0001-01-01" max="9999-12-31" />
+            </div>
+            <div class="form-group">
+              <label for="game-edit-developer"><span data-i18n="msg.38ba62181c"></span></label>
+              <input id="game-edit-developer" type="text" />
+            </div>
+            <div class="form-group">
+              <label for="game-edit-publisher"><span data-i18n="msg.936a161c39"></span></label>
+              <input id="game-edit-publisher" type="text" />
+            </div>
+            <div class="form-group">
+              <label for="game-edit-genre"><span data-i18n="msg.736f64cd6d"></span></label>
+              <input id="game-edit-genre" type="text" placeholder="" data-i18n-placeholder="msg.5c60b0e945" />
+            </div>
+            <div class="form-group">
+              <label for="game-edit-game-mode"><span data-i18n="msg.14a7cbd8af"></span></label>
+              <input id="game-edit-game-mode" type="text" placeholder="" data-i18n-placeholder="msg.26d3e9118f" />
+            </div>
+            <div class="form-group">
+              <label for="game-edit-max-players"><span data-i18n="msg.a3b719fa32"></span></label>
+              <input id="game-edit-max-players" type="number" min="1" max="2147483647" step="1" placeholder="" data-i18n-placeholder="msg.e545b02d8d" />
+            </div>
+            <div class="form-group full-width">
+              <label for="game-edit-description"><span data-i18n="msg.8c462ffc09"></span></label>
+              <textarea id="game-edit-description" rows="5" placeholder="" data-i18n-placeholder="msg.7cfcf72e90"></textarea>
+            </div>
+          </div>
+          </section>
+          <section id="game-edit-panel-order" class="hidden" role="tabpanel" aria-labelledby="game-edit-tab-order">
+            <h3 data-i18n="order.title"></h3>
+            <p class="help-text" data-i18n="order.help"></p>
+            <div class="form-group"><label for="game-order-add" data-i18n="order.add"></label><select id="game-order-add"></select></div>
+            <div class="form-group"><label for="game-order-titles" data-i18n="order.list"></label><textarea id="game-order-titles" rows="8" maxlength="100000" spellcheck="false" aria-describedby="game-order-status"></textarea></div>
+            <p class="help-text" id="game-order-status" role="status"></p>
+            <ol class="game-order-preview" id="game-order-preview" aria-label="" data-i18n-aria-label="order.preview"></ol>
+            <button class="secondary-btn" type="button" id="btn-clear-game-order" data-i18n="order.clear"></button>
+          </section>
+          <section id="game-edit-panel-execution" class="hidden" role="tabpanel" aria-labelledby="game-edit-tab-execution">
+            <h3><span data-i18n="msg.a5a290da84"></span></h3>
+            <div class="form-group"><label for="game-edit-rom-path"><span data-i18n="msg.b0b830b21a"></span></label><textarea id="game-edit-rom-path" rows="3" readonly></textarea></div>
+            <button class="secondary-btn" type="button" id="btn-game-edit-open-files"><span data-i18n="msg.339fbb2a97"></span></button>
+            <div class="form-group"><label for="game-edit-emulator"><span data-i18n="msg.4a812bbe2d"></span></label><select id="game-edit-emulator"></select></div>
+            <p class="help-text" id="game-edit-execution-help"></p>
+            <label class="preference-toggle"><input type="checkbox" id="game-edit-custom-arguments"><span><span data-i18n="msg.ab0d3e60a8"></span></span></label>
+            <div class="form-group"><label for="game-edit-arguments"><span data-i18n="msg.e7ee175f9c"></span></label><input id="game-edit-arguments" type="text" disabled placeholder='"%ROM%"'><p class="help-text"><span data-i18n="msg.2f8f9d89f9"></span></p></div>
+          </section>
+          <section class="game-image-editor hidden" id="game-discs-section" role="tabpanel" aria-labelledby="game-discs-title">
+            <h3 id="game-discs-title"><span data-i18n="msg.2d2dca072e"></span></h3>
+            <p class="help-text"><span data-i18n="msg.6e31000e5f"></span></p>
+            <div id="game-disc-list" class="disc-edit-list"></div>
+            <button type="button" class="browse-btn" id="btn-add-game-discs"><span data-i18n="msg.ad0393fcf5"></span></button>
+          </section>
+          <section class="game-image-editor hidden" id="game-edit-panel-images" role="tabpanel" aria-labelledby="game-edit-tab-images">
+            <h3 id="game-images-title"><span data-i18n="msg.a7f0af4e37"></span></h3>
+            <div class="image-add-controls">
+              <div class="form-group">
+                <label for="game-image-kind"><span data-i18n="msg.bff41f6d57"></span></label>
+                <select id="game-image-kind"></select>
+              </div>
+              <button class="browse-btn" id="btn-add-game-images" type="button"><span data-i18n="msg.5367e21bbc"></span></button>
+              <button class="browse-btn" id="btn-download-game-images" type="button"><span data-i18n="msg.429da598be"></span></button>
+            </div>
+            <p class="help-text"><span data-i18n="msg.e7ef1be3cc"></span></p>
+            <section id="editor-artwork-panel" class="editor-artwork-panel hidden" aria-label="" data-i18n-aria-label="msg.9a11051043">
+              <p class="help-text" id="editor-artwork-catalog"></p>
+              <div class="form-group">
+                <label for="editor-artwork-platform"><span data-i18n="msg.6c44f65078"></span></label>
+                <select id="editor-artwork-platform" form="game-artwork-form"></select>
+              </div>
+              <div class="form-group">
+                <label for="editor-artwork-query"><span data-i18n="msg.714e4551c4"></span></label>
+                <div class="metadata-search-row">
+                  <input id="editor-artwork-query" type="text" form="game-artwork-form" autocomplete="off" placeholder="" data-i18n-placeholder="msg.75d2f647c0" />
+                  <button id="btn-editor-artwork-search" class="secondary-btn" type="button"><span data-i18n="msg.5f55edf900"></span></button>
+                </div>
+              </div>
+              <div class="form-group">
+                <label for="editor-artwork-result"><span data-i18n="msg.07806a6d17"></span></label>
+                <select id="editor-artwork-result" form="game-artwork-form"></select>
+              </div>
+              <fieldset class="metadata-media-fieldset">
+                <legend><span data-i18n="msg.8e982793de"></span></legend>
+                <p class="help-text"><span data-i18n="msg.679f296e28"></span></p>
+                <label class="preference-toggle"><input id="editor-artwork-download-all" type="checkbox" form="game-artwork-form" /><span><span data-i18n="msg.f84de4576f"></span></span></label>
+                <div id="editor-artwork-options" class="metadata-media-options"></div>
+              </fieldset>
+              <p class="help-text"><span data-i18n="msg.043733e212"></span></p>
+              <div id="editor-artwork-progress" class="hidden" role="status">
+                <p id="editor-artwork-progress-label"></p>
+                <progress id="editor-artwork-progress-bar" max="100"></progress>
+              </div>
+              <p id="editor-artwork-message" role="status"></p>
+              <ul id="editor-artwork-failures"></ul>
+              <div class="form-actions">
+                <button id="btn-editor-artwork-retry" class="secondary-btn hidden" type="button"><span data-i18n="msg.f785641fd9"></span></button>
+                <button id="btn-editor-artwork-download" class="primary-btn" type="button" disabled><span data-i18n="msg.488a8c208f"></span></button>
+              </div>
+            </section>
+            <div class="game-image-list" id="game-image-list"></div>
+          </section>
+          <section class="game-image-editor hidden" id="game-edit-panel-manuals" role="tabpanel" aria-labelledby="game-edit-tab-manuals">
+            <h3 id="game-manuals-title"><span data-i18n="msg.8c12270c3c"></span></h3>
+            <div class="image-add-controls">
+              <button class="browse-btn" id="btn-add-game-manuals" type="button"><span data-i18n="msg.dd0eff6b0e"></span></button>
+              <button class="secondary-btn" id="btn-open-game-manuals" type="button"><span data-i18n="msg.e123765ce5"></span></button>
+              <button class="secondary-btn" id="btn-refresh-game-manuals" type="button"><span data-i18n="msg.b3af2e2f2f"></span></button>
+            </div>
+            <p class="help-text"><span data-i18n="msg.3ee7f9cfd6"></span></p>
+            <div class="game-manual-list" id="game-manual-list" aria-live="polite"></div>
+          </section>
+          <section class="hidden" id="game-edit-panel-regions" role="tabpanel" aria-labelledby="game-edit-tab-regions">
+            <h3><span data-i18n="msg.d4a0db1956"></span></h3>
+            <p id="game-edit-current-region" class="help-text"></p>
+            <div id="game-regions-editor" class="form-group"></div>
+          </section>
+          <section class="hidden" id="game-edit-panel-box" role="tabpanel" aria-labelledby="game-edit-tab-box">
+            <h3><span data-i18n="msg.72af42e083"></span></h3>
+            <label class="preference-toggle"><input id="game-box-use-platform" type="checkbox" checked /><span><span data-i18n="msg.74c1c8bdce"></span></span></label>
+            <div id="game-box-custom-options" class="hidden">
+        <details class="game-box-settings" id="game-box-settings">
+          <summary><span data-i18n="msg.6acc8b3735"></span></summary>
+          <p class="help-text"><span data-i18n="msg.7e45448e70"></span></p>
+          <div class="form-group"><label for="game-box-region"><span data-i18n="msg.76c0827159"></span></label><select id="game-box-region"><option value="base" data-i18n="msg.b5586c057e"></option><option value="europe" data-i18n="msg.c034296faf"></option><option value="north_america" data-i18n="msg.a7cf28d675"></option><option value="japan" data-i18n="msg.b69d7b129c"></option></select></div>
+          <label class="box-setting-check hidden" id="game-box-inherit-row"><input id="game-box-inherit" type="checkbox" checked /> <span data-i18n="msg.d63e2af5aa"></span></label>
+          <div id="game-box-fields" class="form-grid">
+            <div class="form-group full-width"><label for="game-box-model"><span data-i18n="msg.064fc75997"></span></label><select id="game-box-model"></select></div>
+            <div class="box-custom-dimensions full-width hidden" id="game-box-dimensions">
+              <div class="form-group"><label for="game-box-width"><span data-i18n="msg.9e7e200b2d"></span></label><input id="game-box-width" type="number" min="20" max="500" step="0.1" /></div>
+              <div class="form-group"><label for="game-box-height"><span data-i18n="msg.879e82d55d"></span></label><input id="game-box-height" type="number" min="20" max="500" step="0.1" /></div>
+              <div class="form-group"><label for="game-box-depth"><span data-i18n="msg.25d13e7840"></span></label><input id="game-box-depth" type="number" min="1" max="150" step="0.1" /></div>
+            </div>
+            <div class="form-group"><label for="game-box-spine"><span data-i18n="msg.6bd965138c"></span></label><select id="game-box-spine"><option value="" data-i18n="msg.b803f24d52"></option><option value="left" data-i18n="msg.4c3c1258fb"></option><option value="top" data-i18n="msg.60099afac8"></option></select></div>
+            <div class="form-group"><label for="game-box-color"><span data-i18n="msg.8131c9c883"></span></label><input id="game-box-color" type="color" value="#353b46" /><label class="box-setting-check"><input id="game-box-auto-color" type="checkbox" checked /> <span data-i18n="msg.b803f24d52"></span></label></div>
+          </div>
+          <div id="game-box-preview" class="game-box-stage" tabindex="0" role="group" aria-label="" data-i18n-aria-label="msg.b9dd7ab7d4"></div>
+          <p class="game-box-format" id="game-box-preview-label"></p>
+          <p class="help-text"><span data-i18n="msg.0da95291c4"></span></p>
+          <button class="secondary-btn" type="button" id="btn-reset-game-box"><span data-i18n="msg.95b39f2816"></span></button>
+        </details>
+            </div>
+          </section>
+          <section class="hidden" id="game-edit-panel-variables" role="tabpanel" aria-labelledby="game-edit-tab-variables">
+            <h3><span data-i18n="msg.683de6f0b8"></span></h3>
+            <p class="help-text"><span data-i18n="msg.7fb06d0c74"></span></p>
+            <div id="game-variables-editor"></div>
+            <p class="help-text"><span data-i18n="msg.2ce82ffdb0"></span></p>
+          </section>
+          </div></div>
+          <div class="form-actions">
+            <button class="secondary-btn" id="btn-cancel-game-edit" type="button"><span data-i18n="msg.bb9dbb406d"></span></button>
+            <button class="primary-btn" id="btn-save-game-edit" type="submit"><span data-i18n="msg.a212045475"></span></button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- Los controles de búsqueda no participan en la validación de Editar juego. -->
+    <form id="game-artwork-form" autocomplete="off"></form>
+
+    <!-- Modal 1: Gestor de Emuladores -->
+    <div id="emulator-modal" class="modal-overlay hidden">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h2><span data-i18n="msg.e5a14dce48"></span></h2>
+          <button class="close-btn" id="btn-close-modal">&times;</button>
+        </div>
+        <div class="modal-body">
+          <form id="emulator-form" class="emulator-form" autocomplete="off">
+            <input type="hidden" id="editing-emu-id" value="" />
+            <h3 id="emu-form-title"><span data-i18n="msg.87b0a93902"></span></h3>
+            <div class="form-grid">
+              <div class="form-group full-width">
+                <label for="emu-type"><span data-i18n="msg.b54c28c383"></span></label>
+                <select id="emu-type"><option value="standalone" data-i18n="msg.a04bbda4f8"></option><option value="retroarch" data-i18n="msg.6eda2a73f5"></option></select>
+              </div>
+              <div class="form-group">
+                <label for="emu-name"><span data-i18n="msg.84cf175813"></span></label>
+                <input
+                  type="text"
+                  id="emu-name"
+                  placeholder="" data-i18n-placeholder="msg.b9678d9dec"
+                  required
+                />
+              </div>
+              <div class="form-group">
+                <label for="emu-platform"><span data-i18n="msg.c79681c696"></span></label>
+                <select id="emu-platform" required aria-describedby="emu-platform-help">
+                  <option value="" disabled selected data-i18n="msg.d9de7e56bc"></option>
+                </select>
+                <p class="help-text" id="emu-platform-help"><span data-i18n="msg.c623225ecc"></span></p>
+              </div>
+              <div class="form-group full-width">
+                <label for="emu-path"><span data-i18n="msg.5faeee358d"></span></label>
+                <div class="folder-input-wrapper">
+                  <input
+                    type="text"
+                    id="emu-path"
+                    placeholder="" data-i18n-placeholder="msg.d645d98859"
+                    required
+                  />
+                  <button type="button" class="browse-btn" id="btn-browse-emu" aria-label="" data-i18n-aria-label="msg.10ff016ada"><span data-i18n="msg.3c798c6095"></span></button>
+                </div>
+              </div>
+              <div class="form-group full-width" id="emu-args-group">
+                <label for="emu-args">
+                  <span data-i18n="msg.1ef9782e90"></span>
+                  <span class="help-text"
+                    ><span data-i18n="msg.171d4cb2cc"></span></span
+                  >
+                </label>
+                <input
+                  type="text"
+                  id="emu-args"
+                  placeholder='Ej: -L genesis_plus_gx_libretro.dll "%ROM%"'
+                  value='"%ROM%"'
+                />
+                <button type="button" class="secondary-btn" id="btn-recommend-emu-args"><span data-i18n="msg.a26438c4a6"></span></button>
+              </div>
+              <section id="retroarch-options" class="form-group full-width retroarch-options hidden" aria-label="" data-i18n-aria-label="msg.b4d6d5f6cd">
+                <p class="help-text"><span data-i18n="msg.04ee2e8d00"></span></p>
+                <div class="retroarch-actions">
+                  <button type="button" class="secondary-btn" id="btn-install-retroarch"><span data-i18n="msg.1a479fdd86"></span></button>
+                  <button type="button" class="secondary-btn" id="btn-refresh-ra-cores"><span data-i18n="msg.97d314ba68"></span></button>
+                </div>
+                <label for="ra-system"><span data-i18n="msg.57b44a5d91"></span></label>
+                <select id="ra-system"><option value="" data-i18n="msg.724a09b130"></option></select>
+                <label for="ra-core"><span data-i18n="msg.424372288c"></span></label>
+                <select id="ra-core"><option value="" data-i18n="msg.df254c9602"></option></select>
+                <p id="ra-core-description" class="help-text"></p>
+                <p id="ra-firmware" class="help-text"></p>
+                <p class="help-text"><span data-i18n="msg.65528cd60e"></span></p>
+                <progress id="ra-progress" class="hidden" max="100" aria-label="" data-i18n-aria-label="msg.2e4466cb22"></progress>
+                <p id="ra-status" class="help-text" role="status"></p>
+                <button type="button" class="secondary-btn hidden" id="btn-cancel-ra"><span data-i18n="msg.bc3ae00362"></span></button>
+              </section>
+            </div>
+            <div class="form-actions">
+              <button
+                type="button"
+                class="secondary-btn hidden"
+                id="btn-cancel-edit-emu"
+              >
+                <span data-i18n="msg.5e4e6ccd15"></span>
+              </button>
+              <button type="submit" class="primary-btn" id="btn-save-emu">
+                <span data-i18n="msg.856129e2b9"></span>
+              </button>
+            </div>
+          </form>
+
+          <div class="emulator-list-container">
+            <h3><span data-i18n="msg.cd7d5c920f"></span></h3>
+            <table class="emulator-table">
+              <thead>
+                <tr>
+                  <th><span data-i18n="msg.562bb15757"></span></th>
+                  <th><span data-i18n="msg.5d7325dd00"></span></th>
+                  <th><span data-i18n="msg.f09ebcad00"></span></th>
+                  <th><span data-i18n="msg.085f844c9b"></span></th>
+                  <th><span data-i18n="msg.fb89a30ba7"></span></th>
+                </tr>
+              </thead>
+              <tbody id="emulator-table-body"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Gestor de plataformas -->
+    <div id="platform-modal" class="modal-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="platform-modal-title">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h2 id="platform-modal-title"><span data-i18n="msg.cf47a0afaa"></span></h2>
+          <button class="close-btn" id="btn-close-platform-modal" type="button" aria-label="" data-i18n-aria-label="msg.a66bf46540">&times;</button>
+        </div>
+        <div class="modal-body">
+          <form id="platform-form" class="platform-form" autocomplete="off">
+            <h3 id="platform-form-title"><span data-i18n="msg.345dfb6277"></span></h3>
+            <input type="hidden" id="editing-platform-id" value="" />
+            <div class="form-grid">
+              <div class="form-group full-width">
+                <label for="platform-name"><span data-i18n="msg.8103db15b3"></span></label>
+                <input id="platform-name" type="text" placeholder="" data-i18n-placeholder="msg.3a1b7441cf" required />
+              </div>
+              <div class="form-group full-width">
+                <label for="platform-extensions"><span data-i18n="msg.c232b63689"></span></label>
+                <input id="platform-extensions" type="text" placeholder="" data-i18n-placeholder="msg.40a37a2ec3" />
+                <p class="help-text"><span data-i18n="msg.231d17733e"></span></p>
+              </div>
+            </div>
+            <p class="help-text"><span data-i18n="msg.3ce610694d"></span></p>
+            <div class="form-actions">
+              <button type="button" class="secondary-btn hidden" id="btn-cancel-edit-platform"><span data-i18n="msg.e85a881789"></span></button>
+              <button type="submit" class="primary-btn" id="btn-save-platform"><span data-i18n="msg.f3730555ad"></span></button>
+            </div>
+          </form>
+          <div class="platform-table-container">
+            <h3><span data-i18n="msg.6bcfa318e1"></span></h3>
+            <table class="emulator-table">
+              <thead><tr><th><span data-i18n="msg.562bb15757"></span></th><th><span data-i18n="msg.4e1fada0ee"></span></th><th><span data-i18n="msg.fb89a30ba7"></span></th></tr></thead>
+              <tbody id="platform-table-body"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Modal 2: Escaneador e Importador de ROMs -->
+    <div id="scanner-modal" class="modal-overlay hidden">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h2><span data-i18n="msg.7350eaa7ad"></span></h2>
+          <button class="close-btn" id="btn-close-scanner-modal">
+            &times;
+          </button>
+        </div>
+        <div class="modal-body">
+          <form
+            id="scanner-form"
+            autocomplete="off"
+            style="display: flex; flex-direction: column; gap: 20px"
+          >
+            <section id="import-mode-step" class="scan-step-box">
+              <h3><span data-i18n="msg.96e0748ace"></span></h3>
+              <p class="help-text"><span data-i18n="msg.4e2c22a6f3"></span></p>
+              <div class="import-mode-options">
+                <button type="button" class="secondary-btn" id="btn-import-single"><span data-i18n="msg.b217e5f31b"></span><span><span data-i18n="msg.5af9fe9b5e"></span></span></button>
+                <button type="button" class="secondary-btn" id="btn-import-folder"><span data-i18n="msg.0c63ce9246"></span><span><span data-i18n="msg.1cf1baa5da"></span></span></button>
+                <button type="button" class="secondary-btn" id="btn-import-steam"><span data-i18n="msg.d7d6656c6b"></span><span><span data-i18n="msg.ae0c54a84c"></span></span></button>
+                <button type="button" class="secondary-btn" id="btn-import-epic"><span data-i18n="msg.19f160f0a5"></span><span><span data-i18n="msg.d533478185"></span></span></button>
+              </div>
+            </section>
+            <fieldset id="import-config-step" class="import-config-step hidden" disabled>
+            <p id="import-step-label" class="import-step-label" role="status"><span data-i18n="msg.132f00c3a5"></span></p>
+            <fieldset id="import-platform-step" class="import-config-step">
+            <!-- Paso 1: Elegir Plataforma -->
+            <div class="scan-step-box">
+              <div class="step-header">
+                <span class="step-number">1</span>
+                <h3><span data-i18n="msg.50499c4e4b"></span></h3>
+              </div>
+              <div class="form-grid">
+                <div class="form-group full-width">
+                  <label for="scan-platform-select"><span data-i18n="msg.f0956620c7"></span></label>
+                  <select id="scan-platform-select" required></select>
+                </div>
+                <div
+                  class="form-group full-width hidden"
+                  id="custom-platform-group"
+                >
+                  <label for="custom-platform-input"
+                    ><span data-i18n="msg.3f439cc30b"></span></label
+                  >
+                  <input
+                    type="text"
+                    id="custom-platform-input"
+                    placeholder="" data-i18n-placeholder="msg.f88b3023e6"
+                  />
+                </div>
+              </div>
+            </div>
+            <p id="scan-direct-help" class="help-text hidden"><span data-i18n="msg.3ba4c8d8b2"></span></p>
+            <p id="scan-pc-folder-help" class="help-text hidden"><span data-i18n="msg.a3404ecbc6"></span></p>
+            <!-- Paso 2: Emulador Asociado -->
+            <div class="scan-step-box" id="scan-emulator-step">
+              <div class="step-header">
+                <h3><span data-i18n="msg.b9c7d5ba02"></span></h3>
+              </div>
+              <div id="emu-select-group" class="form-group full-width">
+                <label for="scan-emu-select"><span data-i18n="msg.a2c16e6c78"></span></label>
+                <select id="scan-emu-select"></select>
+              </div>
+
+              <!-- Alerta e Inline Config Form si no existe emulador -->
+              <div id="no-emu-inline-box" class="inline-warning-box hidden">
+                <div class="inline-warning-header">
+                  <span data-i18n="msg.cbf0086b2d"></span>
+                  <span
+                    id="inline-target-platform"
+                    style="text-decoration: underline"
+                  ></span>
+                </div>
+                <p style="font-size: 0.82rem; color: var(--text-muted)">
+                  <span data-i18n="msg.bfc23a1ea0"></span>
+                </p>
+                <div class="form-grid" style="margin-top: 4px">
+                  <div class="form-group full-width">
+                    <label for="inline-emu-type"><span data-i18n="msg.b54c28c383"></span></label>
+                    <select id="inline-emu-type"><option value="standalone" data-i18n="msg.a04bbda4f8"></option><option value="retroarch" data-i18n="msg.6eda2a73f5"></option></select>
+                  </div>
+                  <div class="form-group">
+                    <label for="inline-emu-name"><span data-i18n="msg.84cf175813"></span></label>
+                    <input
+                      type="text"
+                      id="inline-emu-name"
+                      placeholder="" data-i18n-placeholder="msg.d2deb9127b"
+                    />
+                  </div>
+                  <div class="form-group">
+                    <label for="inline-emu-path"
+                      ><span data-i18n="msg.5faeee358d"></span></label
+                    >
+                    <div class="folder-input-wrapper">
+                      <input
+                        type="text"
+                        id="inline-emu-path"
+                        placeholder="" data-i18n-placeholder="msg.d645d98859"
+                      />
+                      <button type="button" class="browse-btn" id="btn-browse-inline-emu" aria-label="" data-i18n-aria-label="msg.10ff016ada"><span data-i18n="msg.3c798c6095"></span></button>
+                    </div>
+                  </div>
+                  <div class="form-group full-width">
+                    <label for="inline-emu-args"><span data-i18n="msg.b6f236a0b2"></span></label>
+                    <input
+                      type="text"
+                      id="inline-emu-args"
+                      value='"%ROM%"'
+                      placeholder='"%ROM%"'
+                    />
+                    <button type="button" class="secondary-btn" id="btn-recommend-inline-emu-args"><span data-i18n="msg.a26438c4a6"></span></button>
+                  </div>
+                  <section id="inline-retroarch-options" class="form-group full-width retroarch-options hidden" aria-label="" data-i18n-aria-label="msg.2a55aa1c65">
+                    <p class="help-text"><span data-i18n="msg.333d604841"></span></p>
+                    <div class="retroarch-actions">
+                      <button type="button" class="secondary-btn" id="btn-inline-install-retroarch"><span data-i18n="msg.1a479fdd86"></span></button>
+                      <button type="button" class="secondary-btn" id="btn-inline-refresh-ra-cores"><span data-i18n="msg.97d314ba68"></span></button>
+                    </div>
+                    <label for="inline-ra-system"><span data-i18n="msg.57b44a5d91"></span></label>
+                    <select id="inline-ra-system"><option value="" data-i18n="msg.724a09b130"></option></select>
+                    <label for="inline-ra-core"><span data-i18n="msg.424372288c"></span></label>
+                    <select id="inline-ra-core"><option value="" data-i18n="msg.df254c9602"></option></select>
+                    <p id="inline-ra-core-description" class="help-text"></p>
+                    <p id="inline-ra-firmware" class="help-text"></p>
+                    <p class="help-text"><span data-i18n="msg.b32fbf7dfd"></span></p>
+                    <progress id="inline-ra-progress" class="hidden" max="100" aria-label="" data-i18n-aria-label="msg.2e4466cb22"></progress>
+                    <p id="inline-ra-status" class="help-text" role="status"></p>
+                    <button type="button" class="secondary-btn hidden" id="btn-inline-cancel-ra"><span data-i18n="msg.bc3ae00362"></span></button>
+                  </section>
+                </div>
+                <div style="display: flex; justify-content: flex-end">
+                  <button
+                    type="button"
+                    class="secondary-btn"
+                    id="btn-inline-save-emu"
+                  >
+                    <span data-i18n="msg.38d2c6f6ad"></span>
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            </fieldset>
+            <fieldset id="import-files-step" class="import-config-step hidden" disabled>
+            <section class="scan-step-box hidden" id="scan-epic-step" aria-labelledby="scan-epic-title">
+              <h3 id="scan-epic-title"><span data-i18n="msg.d32bd164de"></span></h3>
+              <p class="help-text"><span data-i18n="msg.078767f868"></span></p>
+              <div class="form-group"><label for="scan-epic-path"><span data-i18n="msg.90690a21af"></span></label><div class="folder-input-wrapper"><input id="scan-epic-path" type="text" placeholder="" data-i18n-placeholder="msg.3ab7eebf15" /><button class="browse-btn" type="button" id="btn-browse-epic"><span data-i18n="msg.9ca8f9dee7"></span></button></div></div>
+              <p class="help-text" id="scan-epic-status" role="status"></p>
+              <details id="scan-epic-warnings" class="hidden"><summary><span data-i18n="msg.12ac5cf40a"></span></summary><ul id="scan-epic-warning-list"></ul></details>
+            </section>
+            <section class="scan-step-box hidden" id="scan-steam-step" aria-labelledby="scan-steam-title">
+              <h3 id="scan-steam-title"><span data-i18n="msg.2969be14b9"></span></h3>
+              <p class="help-text"><span data-i18n="msg.09d16fa330"></span></p>
+              <div class="form-group"><label for="scan-steam-path"><span data-i18n="msg.a4b0004d4a"></span></label><div class="folder-input-wrapper"><input id="scan-steam-path" type="text" placeholder="" data-i18n-placeholder="msg.39321f7c10" /><button class="browse-btn" type="button" id="btn-browse-steam"><span data-i18n="msg.9ca8f9dee7"></span></button></div></div>
+              <p class="help-text" id="scan-steam-status" role="status"></p>
+              <details id="scan-steam-warnings" class="hidden"><summary><span data-i18n="msg.d766efa30a"></span></summary><ul id="scan-steam-warning-list"></ul></details>
+            </section>
+
+            <!-- Paso 2: Archivos de los juegos -->
+            <div class="scan-step-box" id="scan-folder-step">
+              <div class="step-header">
+                <span class="step-number">2</span>
+                <h3><span data-i18n="msg.1719d04012"></span></h3>
+              </div>
+              <div class="form-grid">
+                <div class="form-group full-width">
+                  <label for="scan-folder-input"
+                    ><span data-i18n="msg.62c252b13f"></span></label
+                  >
+                  <div class="folder-input-wrapper">
+                    <input
+                      type="text"
+                      id="scan-folder-input"
+                      placeholder="" data-i18n-placeholder="msg.3f35d9d900"
+                      required
+                    />
+                    <button
+                      type="button"
+                      class="browse-btn"
+                      id="btn-browse-folder"
+                    >
+                      <span data-i18n="msg.3c798c6095"></span>
+                    </button>
+                  </div>
+                  <p id="scan-folder-console-help" class="help-text hidden"><span data-i18n="msg.36da842b5b"></span></p>
+                </div>
+                <div class="form-group full-width">
+                  <label for="scan-extensions-input">
+                    <span data-i18n="msg.0e78617f42"></span>
+                    <span class="help-text"><span data-i18n="msg.8d522833eb"></span></span>
+                  </label>
+                  <input
+                    type="text"
+                    id="scan-extensions-input"
+                    placeholder="" data-i18n-placeholder="msg.50580e373c"
+                    value=".iso, .zip, .7z, .bin, .chd, .md, .sfc"
+                  />
+                </div>
+              </div>
+            </div>
+
+            <section class="scan-step-box hidden" id="scan-single-step">
+              <div class="step-header"><h3><span data-i18n="msg.24772d158f"></span></h3></div>
+              <div class="form-group">
+                <label for="scan-file-input" id="scan-file-label"><span data-i18n="msg.eb78befb4c"></span></label>
+                <div class="folder-input-wrapper"><input id="scan-file-input" type="text" readonly placeholder="" data-i18n-placeholder="msg.4f0afdea4f" disabled /><button type="button" class="browse-btn" id="btn-browse-game-file"><span data-i18n="msg.9ca8f9dee7"></span></button></div>
+              </div>
+              <div class="form-group">
+                <label for="scan-single-title"><span data-i18n="msg.5d32ccf314"></span></label>
+                <input id="scan-single-title" type="text" placeholder="" data-i18n-placeholder="msg.20b0f87366" disabled />
+                <p class="help-text"><span data-i18n="msg.69b3f7b418"></span></p>
+              </div>
+            </section>
+
+            </fieldset>
+            <!-- Navegación del importador -->
+            <div class="form-actions">
+              <button type="button" class="secondary-btn" id="btn-import-back"><span data-i18n="msg.f9618693ab"></span></button>
+              <button type="button" class="primary-btn" id="btn-import-next"><span data-i18n="msg.63e2bbaf1c"></span></button>
+              <button
+                type="submit"
+                class="primary-btn"
+                style="padding: 12px 24px; font-size: 0.95rem"
+                id="btn-execute-scan"
+              >
+                <span data-i18n="msg.cd70ffa805"></span>
+              </button>
+            </div>
+            </fieldset>
+          </form>
+
+          <div id="scan-progress-slot">
+          <div id="scan-progress-container" class="scan-progress-card hidden">
+            <label for="scan-progress-bar" id="scan-progress-label"><span data-i18n="msg.dad83a9112"></span></label>
+            <progress id="scan-progress-bar" max="100"></progress>
+            <p id="scan-progress-counts"></p>
+            <p class="scan-current-file" id="scan-current-file"></p>
+          </div>
+
+          </div>
+
+          <section id="scan-review-container" class="scan-review hidden" aria-labelledby="scan-review-title">
+            <h3 id="scan-review-title" tabindex="-1"><span data-i18n="msg.1671c8200e"></span></h3>
+            <p id="scan-review-summary"></p>
+            <p class="help-text"><span data-i18n="msg.43b2d05db4"></span></p>
+            <ul id="scan-review-list" class="scan-review-list" aria-label="" data-i18n-aria-label="msg.d3b6d3dcb1"></ul>
+            <div class="form-actions">
+              <button type="button" class="secondary-btn" id="btn-cancel-scan-review"><span data-i18n="msg.588d672bcf"></span></button>
+              <button type="button" class="primary-btn" id="btn-confirm-scan-review"><span data-i18n="msg.63e2bbaf1c"></span></button>
+            </div>
+          </section>
+
+          <section id="scan-metadata-container" class="scan-metadata hidden" aria-labelledby="scan-metadata-title">
+            <h3 id="scan-metadata-title" tabindex="-1"><span data-i18n="msg.10106b78e4"></span></h3>
+            <p class="help-text"><span data-i18n="msg.3d93417178"></span></p>
+            <button type="button" class="secondary-btn" id="btn-toggle-import-recovery" aria-expanded="false" aria-controls="import-media-recovery"><span data-i18n="msg.3098b370ec"></span></button>
+            <fieldset class="metadata-media-fieldset hidden" id="import-media-recovery">
+              <legend><span data-i18n="msg.9051933b28"></span></legend>
+              <p id="import-media-recovery-status" class="help-text" role="status"><span data-i18n="msg.073eefe49f"></span></p>
+              <ul id="import-media-recovery-list" class="metadata-match-list"></ul>
+            </fieldset>
+            <div class="metadata-catalog-bar">
+              <p id="lb-catalog-status" class="help-text"><span data-i18n="msg.840085b1e9"></span></p>
+              <button type="button" class="secondary-btn" id="btn-lb-update" disabled><span data-i18n="msg.368a0125f2"></span></button>
+            </div>
+            <div id="lb-platform-group" class="form-group hidden">
+              <label for="lb-platform"><span data-i18n="msg.1558aa8d36"></span></label>
+              <select id="lb-platform" autocomplete="off"></select>
+              <p class="help-text"><span data-i18n="msg.ac2e4a961f"></span></p>
+            </div>
+            <button type="button" class="secondary-btn" id="btn-lb-search" disabled><span data-i18n="msg.304fd1a4a5"></span></button>
+            <div id="lb-search-progress-slot"></div>
+            <fieldset class="metadata-media-fieldset" id="lb-media-fieldset">
+              <legend><span data-i18n="msg.6ad9f27f6c"></span></legend>
+              <p class="help-text"><span data-i18n="msg.a46fe8827f"></span></p>
+              <p id="lb-media-status" class="help-text" role="status" aria-live="polite"></p>
+              <label class="preference-toggle"><input id="lb-download-all" type="checkbox" /><span><span data-i18n="msg.f84de4576f"></span></span></label>
+              <div id="lb-media-options" class="metadata-media-options"></div>
+            </fieldset>
+            <p id="lb-message" role="status" class="metadata-message"></p>
+            <ul id="lb-match-list" class="metadata-match-list" aria-label="" data-i18n-aria-label="msg.29f08cdf60"></ul>
+            <div id="lb-download-report" class="metadata-download-report hidden">
+              <p id="lb-download-summary"></p>
+              <ul id="lb-download-failures"></ul>
+              <button type="button" class="secondary-btn" id="btn-lb-retry"><span data-i18n="msg.918d57e47c"></span></button>
+            </div>
+            <div class="form-actions metadata-actions">
+              <button type="button" class="secondary-btn" id="btn-lb-cancel"><span data-i18n="msg.588d672bcf"></span></button>
+              <button type="button" class="secondary-btn" id="btn-lb-skip" disabled><span data-i18n="msg.82d4661c5c"></span></button>
+              <button type="button" class="primary-btn" id="btn-lb-import" disabled><span data-i18n="msg.719b5d3b75"></span></button>
+            </div>
+          </section>
+
+          <!-- Resultados del Escaneo -->
+          <div
+            id="scan-result-container"
+            role="status"
+            class="hidden"
+            style="margin-top: 10px"
+          ></div>
+        </div>
+      </div>
+    </div>
+
+    <dialog class="confirmation-dialog" id="game-data-retention-dialog" aria-labelledby="game-data-retention-title">
+      <form method="dialog">
+        <div class="modal-header"><h2 id="game-data-retention-title"><span data-i18n="msg.cce7b43043"></span></h2></div>
+        <div class="modal-body"><p><span data-i18n="msg.2f55c59a1c"></span></p>
+          <p class="help-text"><span data-i18n="msg.ffbecd375e"></span></p></div>
+        <div class="form-actions">
+          <button class="secondary-btn" value="cancel"><span data-i18n="msg.bb9dbb406d"></span></button>
+          <button class="secondary-btn" value="discard"><span data-i18n="msg.7de9b8f473"></span></button>
+          <button class="primary-btn" value="keep" autofocus><span data-i18n="msg.6746b42f6b"></span></button>
+        </div>
+      </form>
+    </dialog>
+
+    <dialog class="confirmation-dialog" id="confirmation-dialog" aria-labelledby="confirmation-title" aria-describedby="confirmation-message">
+      <form method="dialog">
+        <div class="modal-header">
+          <h2 id="confirmation-title"><span data-i18n="msg.b4bb6c6db5"></span></h2>
+          <button class="close-btn" type="submit" value="cancel" aria-label="" data-i18n-aria-label="msg.c5a8f91a67">&times;</button>
+        </div>
+        <div class="modal-body">
+          <p id="confirmation-message"></p>
+          <div class="form-actions">
+            <button class="secondary-btn" type="submit" value="cancel" autofocus><span data-i18n="msg.bb9dbb406d"></span></button>
+            <button class="primary-btn danger-btn" type="submit" value="delete"><span data-i18n="msg.79ee14b77a"></span></button>
+          </div>
+        </div>
+      </form>
+    </dialog>
+
+    <div class="game-context-menu hidden" id="game-context-menu" role="menu" aria-label="" data-i18n-aria-label="msg.ab4a89881d">
+      <button class="dropdown-item" id="context-play-game" type="button" role="menuitem" tabindex="-1"><span data-i18n="msg.67fa9628c4"></span></button>
+      <button class="dropdown-item" id="context-edit-game" type="button" role="menuitem" tabindex="-1"><span data-i18n="msg.02f344eb6e"></span></button>
+      <button class="dropdown-item" id="context-open-emulator" type="button" role="menuitem" tabindex="-1"><span data-i18n="msg.b3a8ed7ae3"></span></button>
+      <button class="dropdown-item" id="context-open-game-files" type="button" role="menuitem" tabindex="-1"><span data-i18n="msg.339fbb2a97"></span></button>
+      <button class="dropdown-item" id="context-open-images" type="button" role="menuitem" tabindex="-1"><span data-i18n="msg.4fe8c2a22f"></span></button>
+      <button class="dropdown-item" id="context-open-manuals" type="button" role="menuitem" tabindex="-1"><span data-i18n="msg.5bedcd421f"></span></button>
+      <button class="dropdown-item hidden" id="context-delete-games" type="button" role="menuitem" tabindex="-1"><span data-i18n="msg.79ee14b77a"></span></button>
+      <button class="dropdown-item hidden" id="context-merge-discs" type="button" role="menuitem" tabindex="-1"><span data-i18n="msg.e4998f3861"></span></button>
+      <button class="dropdown-item hidden" id="context-merge-regions" type="button" role="menuitem" tabindex="-1"><span data-i18n="msg.e7f0211399"></span></button>
+      <button class="dropdown-item hidden" id="context-download-images" type="button" role="menuitem" tabindex="-1"><span data-i18n="msg.6b39d242e1"></span></button>
+    </div>
+
+    <div class="game-context-menu hidden" id="platform-context-menu" role="menu" aria-label="" data-i18n-aria-label="msg.26f36f6d6e">
+      <button class="dropdown-item" id="context-edit-platform" type="button" role="menuitem" tabindex="-1"><span data-i18n="msg.dcdcf57086"></span></button>
+    </div>
+
+    <dialog id="bulk-images-dialog" class="confirmation-dialog bulk-images-dialog" aria-labelledby="bulk-images-title">
+      <div class="modal-header">
+        <h2 id="bulk-images-title"><span data-i18n="msg.488a8c208f"></span></h2>
+        <div class="bulk-images-window-actions">
+          <button class="close-btn hidden" id="btn-minimize-bulk-images" type="button" aria-label="" data-i18n-aria-label="msg.3774c3166c" title="" data-i18n-title="msg.2ce6eaaece">−</button>
+          <button class="close-btn" id="btn-close-bulk-images" type="button" aria-label="" data-i18n-aria-label="msg.1f5163086d">&times;</button>
+        </div>
+      </div>
+      <form class="modal-body" id="bulk-images-form" autocomplete="off">
+        <p id="bulk-images-selection"></p>
+        <p class="preference-help"><span data-i18n="msg.30e3be471b"></span></p>
+        <label class="preference-toggle"><input id="bulk-images-download-all" type="checkbox" /><span><span data-i18n="msg.f84de4576f"></span></span></label>
+        <div class="metadata-media-options" id="bulk-images-options"></div>
+        <p class="preference-help"><span data-i18n="msg.c76fbbd771"></span></p>
+        <div id="bulk-images-progress" class="hidden" role="status">
+          <p id="bulk-images-progress-label"></p>
+          <progress id="bulk-images-progress-bar" max="100"></progress>
+        </div>
+        <p id="bulk-images-message" role="status"></p>
+        <ul id="bulk-images-results" class="bulk-images-results" aria-label="" data-i18n-aria-label="msg.a77c243a87"></ul>
+        <div class="form-actions">
+          <button class="secondary-btn" id="btn-cancel-bulk-images" type="button"><span data-i18n="msg.aeccae342e"></span></button>
+          <button class="primary-btn" id="btn-download-bulk-images" type="submit"><span data-i18n="msg.488a8c208f"></span></button>
+        </div>
+      </form>
+    </dialog>
+
+    <dialog id="preferences-dialog" class="confirmation-dialog preferences-dialog" aria-labelledby="preferences-title">
+      <div class="modal-header">
+        <h2 id="preferences-title"><span data-i18n="msg.5678a7dd3f"></span></h2>
+        <button class="close-btn" id="btn-close-preferences" type="button" aria-label="" data-i18n-aria-label="msg.02308736f4">&times;</button>
+      </div>
+      <form class="modal-body" id="preferences-form" autocomplete="off" novalidate>
+        <div class="game-editor-layout">
+          <nav class="game-editor-nav" role="tablist" aria-label="" data-i18n-aria-label="msg.745e968437" aria-orientation="vertical">
+            <button id="preferences-tab-startup" type="button" role="tab" aria-controls="preferences-panel-startup" aria-selected="true"><span data-i18n="msg.58fcc9468f"></span></button>
+            <button id="preferences-tab-library" type="button" role="tab" aria-controls="preferences-panel-library" aria-selected="false" tabindex="-1"><span data-i18n="msg.c9169c12cb"></span></button>
+            <button id="preferences-tab-metadata" type="button" role="tab" aria-controls="preferences-panel-metadata" aria-selected="false" tabindex="-1"><span data-i18n="source.title"></span></button>
+            <button id="preferences-tab-data" type="button" role="tab" aria-controls="preferences-panel-data" aria-selected="false" tabindex="-1"><span data-i18n="msg.cf6371762e"></span></button>
+          </nav>
+          <div class="game-editor-panels" id="preferences-panels">
+        <section id="preferences-panel-startup" class="preferences-section" role="tabpanel" aria-labelledby="preferences-tab-startup">
+          <h3 id="preferences-startup-title"><span data-i18n="msg.58fcc9468f"></span></h3>
+          <div class="form-group"><label for="preference-language" data-i18n="language.label"></label><select id="preference-language"></select><p class="preference-help" data-i18n="language.help"></p></div>
+          <label class="preference-toggle">
+            <input id="preference-start-maximized" type="checkbox" aria-describedby="preference-startup-help" />
+            <span><span data-i18n="msg.1dfd984682"></span></span>
+          </label>
+          <p class="preference-help" id="preference-startup-help"><span data-i18n="msg.ea23eae3da"></span></p>
+        </section>
+        <section id="preferences-panel-library" class="preferences-section hidden" role="tabpanel" aria-labelledby="preferences-tab-library">
+          <h3 id="preferences-library-title"><span data-i18n="msg.c9169c12cb"></span></h3>
+          <label class="preference-toggle">
+            <input id="preference-combine-region-statistics" type="checkbox" aria-describedby="preference-region-statistics-help" />
+            <span><span data-i18n="msg.9dcd044563"></span></span>
+          </label>
+          <p class="preference-help" id="preference-region-statistics-help"><span data-i18n="msg.3747a0f63a"></span></p>
+          <div class="form-group">
+            <label for="preference-time-format"><span data-i18n="msg.5e69279e42"></span></label>
+            <select id="preference-time-format">
+              <option value="24h" data-i18n="msg.201c1dae9c"></option>
+              <option value="12h" data-i18n="msg.7811f362fb"></option>
+            </select>
+          </div>
+          <label class="preference-toggle">
+            <input id="preference-covers-only" type="checkbox" aria-describedby="preference-covers-only-help" />
+            <span><span data-i18n="msg.88cf1841f9"></span></span>
+          </label>
+          <p class="preference-help" id="preference-covers-only-help"><span data-i18n="msg.89db0e1704"></span></p>
+        </section>
+        <section id="preferences-panel-metadata" class="preferences-section hidden" role="tabpanel" aria-labelledby="preferences-tab-metadata">
+          <h3 data-i18n="source.title"></h3>
+          <p class="preference-help" data-i18n="source.help"></p>
+          <div class="form-group">
+            <label for="preference-metadata-catalog" data-i18n="source.catalog"></label>
+            <input id="preference-metadata-catalog" type="text" readonly>
+          </div>
+          <div class="form-actions">
+            <button id="btn-import-metadata-catalog" class="secondary-btn" type="button" data-i18n="source.browse"></button>
+            <button id="btn-reset-metadata-catalog" class="secondary-btn" type="button" data-i18n="source.reset"></button>
+          </div>
+          <p id="metadata-import-status" class="preference-help hidden" role="status" aria-live="polite"></p>
+          <progress id="metadata-import-progress" class="hidden" aria-label="" data-i18n-aria-label="source.import.processing"></progress>
+        </section>
+        <section id="preferences-panel-data" class="preferences-section hidden" role="tabpanel" aria-labelledby="preferences-tab-data">
+          <h3 id="preferences-data-title"><span data-i18n="msg.cf6371762e"></span></h3>
+          <div class="form-group">
+            <label for="preference-data-directory"><span data-i18n="msg.86d32a06c1"></span></label>
+            <div class="path-input-group">
+              <input id="preference-data-directory" type="text" readonly aria-describedby="preferences-current-directory preferences-data-help" />
+              <button class="secondary-btn" id="btn-browse-data-directory" type="button"><span data-i18n="msg.520b3fcab6"></span></button>
+            </div>
+            <p class="preference-help" id="preferences-current-directory"></p>
+            <p class="preference-help" id="preferences-data-help"><span data-i18n="msg.841711b24d"></span></p>
+            <p class="preference-help hidden" id="preferences-data-preview" role="status"></p>
+          </div>
+          <div class="form-actions">
+            <button class="secondary-btn" id="btn-reset-data-directory" type="button"><span data-i18n="msg.fdb0d7183f"></span></button>
+            <button class="secondary-btn" id="btn-undo-data-directory" type="button"><span data-i18n="msg.8945e5be3e"></span></button>
+          </div>
+          <p class="preference-help hidden" id="preferences-data-status" role="status"></p>
+          <button class="primary-btn hidden" id="btn-restart-data-move" type="button"><span data-i18n="msg.2f1d9c765d"></span></button>
+          <div class="form-group">
+            <label for="preference-cache-mode"><span data-i18n="msg.761682310e"></span></label>
+            <select id="preference-cache-mode">
+              <option value="disk" data-i18n="msg.603eebd28a"></option>
+              <option value="ram" data-i18n="msg.585c3f3473"></option>
+            </select>
+            <p class="preference-help"><span data-i18n="msg.e21adef9fe"></span></p>
+          </div>
+          <div id="preference-cache-disk-options" class="form-group">
+            <label for="preference-cache-directory"><span data-i18n="msg.2bfb5cdf0f"></span></label>
+            <div class="path-input-group">
+              <input id="preference-cache-directory" type="text" readonly />
+              <button id="btn-browse-cache-directory" class="secondary-btn" type="button"><span data-i18n="msg.4ebca1adca"></span></button>
+            </div>
+            <button id="btn-reset-cache-directory" class="secondary-btn" type="button"><span data-i18n="msg.fdb0d7183f"></span></button>
+            <p class="preference-help"><span data-i18n="msg.ad6d2313a2"></span></p>
+          </div>
+          <div id="preference-cache-ram-options" class="form-group">
+            <label for="preference-cover-limit"><span data-i18n="msg.51193702c7"></span></label>
+            <input id="preference-cover-limit" type="number" min="1" max="2000" step="1" required aria-describedby="preference-cover-help" />
+            <p id="preference-cover-help" class="preference-help"><span data-i18n="msg.e2de227f73"></span></p>
+          </div>
+        </section>
+          </div>
+        </div>
+        <p id="preferences-error" class="preferences-error hidden" role="alert"></p>
+        <div class="form-actions">
+          <button class="secondary-btn" id="btn-cancel-preferences" type="button"><span data-i18n="msg.bb9dbb406d"></span></button>
+          <button class="primary-btn" id="btn-save-preferences" type="submit"><span data-i18n="msg.13e51a210f"></span></button>
+        </div>
+      </form>
+    </dialog>
+
+    <dialog id="about-dialog" class="confirmation-dialog" aria-labelledby="about-title">
+      <div class="modal-header">
+        <h2 id="about-title"><span data-i18n="msg.a3a1e5759d"></span></h2>
+        <button class="close-btn" id="btn-close-about" type="button" aria-label="" data-i18n-aria-label="msg.35e73d626f">&times;</button>
+      </div>
+      <div class="modal-body">
+        <p class="about-app-name">OpenCabinet</p>
+        <p id="about-version" class="preference-help" role="status"></p>
+        <p><span data-i18n="msg.5ce017e5a7"></span></p>
+        <p class="preference-help"><span data-i18n="msg.1a1c4ecdb7"></span></p>
+        <section class="app-updates" aria-labelledby="updates-title">
+          <h3 id="updates-title" data-i18n="update.title"></h3>
+          <p id="updates-status" class="preference-help" role="status" aria-live="polite"></p>
+          <progress id="updates-progress" hidden max="100"></progress>
+          <p id="updates-error" class="error-message" role="alert" hidden></p>
+          <details id="updates-notes" hidden><summary data-i18n="update.notes"></summary><p></p></details>
+          <button id="btn-check-update" class="secondary-btn" type="button" data-i18n="update.check"></button>
+          <button id="btn-install-update" class="primary-btn" type="button" data-i18n="update.install" hidden></button>
+        </section>
+        <div class="form-actions">
+          <button class="primary-btn" id="btn-accept-about" type="button"><span data-i18n="msg.aeccae342e"></span></button>
+        </div>
+      </div>
+    </dialog>
+
+    <dialog id="library-categories-dialog" class="library-categories-dialog" aria-labelledby="library-categories-title">
+      <div class="modal-header">
+        <h2 id="library-categories-title"><span data-i18n="msg.cbfbfc7239"></span></h2>
+        <button id="btn-close-library-categories" class="close-btn" type="button" aria-label="" data-i18n-aria-label="msg.92fb7e0a4e">&times;</button>
+      </div>
+      <form id="library-categories-form" autocomplete="off">
+        <div class="library-categories-layout">
+          <aside class="library-categories-navigation">
+            <button id="btn-new-library-category" class="secondary-btn" type="button"><span data-i18n="msg.f65a8d5b3a"></span></button>
+            <nav id="library-category-list" aria-label="" data-i18n-aria-label="msg.00c429cae6"></nav>
+          </aside>
+          <div class="library-category-editor">
+            <p id="library-category-empty" class="preference-help"><span data-i18n="msg.74e4bb1541"></span></p>
+            <fieldset id="library-category-fields">
+              <label for="library-category-name"><span data-i18n="msg.562bb15757"></span></label>
+              <input id="library-category-name" type="text" maxlength="80" autocomplete="off" />
+              <label for="library-category-parent"><span data-i18n="msg.d31674a717"></span></label>
+              <select id="library-category-parent"></select>
+              <label for="library-category-rule"><span data-i18n="msg.c891328ae0"></span></label>
+              <select id="library-category-rule"></select>
+              <div id="library-category-platforms" aria-label="" data-i18n-aria-label="msg.b443139ec9"></div>
+              <div id="library-category-conditions" class="hidden">
+                <label for="library-condition-mode"><span data-i18n="msg.103463e2f0"></span></label>
+                <select id="library-condition-mode"><option value="all" data-i18n="msg.84738e62ed"></option><option value="any" data-i18n="msg.143a8b8df4"></option></select>
+                <div id="library-condition-list"></div>
+                <datalist id="library-variable-names"></datalist>
+                <button class="secondary-btn" id="btn-add-library-condition" type="button"><span data-i18n="msg.a912c192d3"></span></button>
+              </div>
+              <p class="preference-help"><span data-i18n="msg.ef6be04bba"></span></p>
+              <button id="btn-delete-library-category" class="secondary-btn" type="button"><span data-i18n="msg.4930f416ee"></span></button>
+              <p class="preference-help"><span data-i18n="msg.3cd3bece46"></span></p>
+            </fieldset>
+          </div>
+        </div>
+        <p id="library-categories-error" class="preferences-error" role="alert"></p>
+        <div class="form-actions">
+          <button id="btn-cancel-library-categories" class="secondary-btn" type="button"><span data-i18n="msg.bb9dbb406d"></span></button>
+          <button class="primary-btn" type="submit"><span data-i18n="msg.2642b0438c"></span></button>
+        </div>
+      </form>
+    </dialog>
+
+    <script src="branding.js"></script>
+    <script src="app-updates.js"></script>
+    <script src="locales/catalogs.js"></script>
+    <script src="i18n.js"></script>
+    <script src="image-fallbacks.js"></script>
+    <script src="entity-variables.js"></script>
+    <script src="library-navigation.js"></script>
+    <script src="window-fullscreen.js"></script>
+    <script src="cover-cache.js"></script>
+    <script src="dvd-case.js"></script>
+    <script src="pdf-manual.js"></script>
+    <script src="manual-reader.js"></script>
+    <script src="game-box.js"></script>
+    <script src="box-settings.js"></script>
+    <script src="platform-stats.js"></script>
+    <script src="retroarch.js"></script>
+    <script src="emulator-defaults.js"></script>
+    <script src="task-window.js"></script>
+    <script src="game-discs.js"></script>
+    <script src="game-regions.js"></script>
+    <script src="game-order.js"></script>
+    <script type="module" src="main.js"></script>
+  </body>
+</html>

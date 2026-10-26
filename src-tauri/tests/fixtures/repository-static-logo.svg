@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 80 30">
+  <defs><linearGradient id="fill"><stop stop-color="#123456"/><stop offset="1" stop-color="#abcdef"/></linearGradient>
+    <style>.shape { fill: url(#fill); }</style></defs>
+  <g class="shape"><path d="M5 5h20v20H5z"/><circle cx="55" cy="15" r="10"/></g>
+</svg>
