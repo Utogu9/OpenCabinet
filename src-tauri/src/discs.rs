@@ -609,7 +609,7 @@ mod tests {
         c
     }
     fn candidate(path: &str) -> RomCandidate {
-        RomCandidate {
+        RomCandidate { launch_directly: false,
             title: crate::clean_rom_title(Path::new(path).file_stem().unwrap().to_str().unwrap()),
             rom_path: path.into(),
             steam: None,

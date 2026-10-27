@@ -150,6 +150,8 @@ pub struct ScanResult {
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 pub struct RomCandidate {
     #[serde(default)]
+    launch_directly: bool,
+    #[serde(default)]
     discs: Vec<discs::Disc>,
     #[serde(default)]
     existing_game_id: Option<i32>,
@@ -162,7 +164,13 @@ pub struct RomCandidate {
 }
 
 fn candidate_launch_mode(candidate: &RomCandidate, platform: &str) -> Result<bool, String> {
-    let direct = if candidate.epic.is_some() {
+    let direct = if candidate.launch_directly {
+        if candidate.steam.is_some() || candidate.epic.is_some() || candidate.existing_game_id.is_some() {
+            return Err(crate::i18n::text("msg.035e4bce3e").into());
+        }
+        manual_import::validate_pc_executable(&candidate.rom_path)?;
+        true
+    } else if candidate.epic.is_some() {
         if candidate.steam.is_some() || !manual_import::is_pc_platform(platform) {
             return Err(crate::i18n::text("msg.f864230dbe").into());
         }
@@ -1163,7 +1171,7 @@ fn discover_roms_for_platform(
                 skipped_count += 1;
             } else {
                 let file_stem = entry_path.file_stem().and_then(|name| name.to_str()).unwrap_or(crate::i18n::text("msg.4d1a7c9832"));
-                candidates.push(RomCandidate { discs: Vec::new(), existing_game_id: None, title: clean_rom_title(file_stem), rom_path, steam: None, epic: None });
+                candidates.push(RomCandidate { launch_directly: false, discs: Vec::new(), existing_game_id: None, title: clean_rom_title(file_stem), rom_path, steam: None, epic: None });
             }
         }
         if last_update.elapsed() >= Duration::from_millis(100) {
@@ -1185,7 +1193,7 @@ fn discover_roms_for_platform(
             let rom_path = file.to_string_lossy().into_owned();
             total_found += 1;
             if existing.contains(&discs::key(&rom_path)) { skipped_count += 1; }
-            else { candidates.push(RomCandidate { discs: Vec::new(), existing_game_id: None, title, rom_path, steam: None, epic: None }); }
+            else { candidates.push(RomCandidate { launch_directly: false, discs: Vec::new(), existing_game_id: None, title, rom_path, steam: None, epic: None }); }
         }
     }
     let mut candidates = discs::group(candidates);

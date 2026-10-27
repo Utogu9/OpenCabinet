@@ -3711,6 +3711,10 @@ function isPcPlatform(platform) {
   return ["pc", "pcgames", "pcwindows", "windows", "windowsgames", "microsoftwindows"].includes(String(platform).toLowerCase().replace(/[^a-z0-9]/g, ""));
 }
 
+function singleImportRunsDirectly() {
+  return importMode === "single" && !!document.getElementById("scan-launch-directly")?.checked;
+}
+
 function updateImportSourceUI() {
   const single = importMode === "single", steam = importMode === "steam", epic = importMode === "epic", store = steam || epic, pc = isPcPlatform(getSelectedPlatformName());
   const visible = (id, show) => { const item = document.getElementById(id); if (show) item?.classList.remove("hidden"); else item?.classList.add("hidden"); };
@@ -3726,11 +3730,12 @@ function updateImportSourceUI() {
   if (heading) heading.textContent = files ? globalThis.OpenCabinetI18n.t("msg.3d51f6a56c") : globalThis.OpenCabinetI18n.t("msg.132f00c3a5");
   visible("scan-folder-step", !single && !store); visible("scan-single-step", single); visible("scan-steam-step", steam); visible("scan-epic-step", epic);
   visible("scan-folder-console-help", !single && !store && /^(?:sony)?(?:playstation|ps)[34]$/.test(getSelectedPlatformName().toLowerCase().replace(/[^a-z0-9]/g,'')));
+  visible("scan-direct-choice", single && !pc);
   visible("scan-emulator-step", !pc && !store); visible("scan-direct-help", single && pc); visible("scan-pc-folder-help", !single && !store && pc);
   for (const id of ["scan-folder-input", "scan-extensions-input"]) { const input = document.getElementById(id); if (input) input.disabled = single || store; }
   const folder = document.getElementById("scan-folder-input"); if (folder) folder.required = !single && !store;
   for (const id of ["scan-file-input", "scan-single-title"]) { const input = document.getElementById(id); if (input) { input.disabled = !single; input.required = single; } }
-  const label = document.getElementById("scan-file-label"); if (label) label.textContent = pc ? globalThis.OpenCabinetI18n.t("msg.215b9a8198") : globalThis.OpenCabinetI18n.t("msg.8aafd7c83d");
+  const label = document.getElementById("scan-file-label"); if (label) label.textContent = (pc || singleImportRunsDirectly()) ? globalThis.OpenCabinetI18n.t("msg.215b9a8198") : globalThis.OpenCabinetI18n.t("msg.8aafd7c83d");
   const submit = document.getElementById("btn-execute-scan");
   if (submit && !scanInProgress) { submit.textContent = store ? globalThis.OpenCabinetI18n.t("msg.649475b2ef", epic ? "Epic Games" : "Steam") : single ? globalThis.OpenCabinetI18n.t("msg.36f227205d") : globalThis.OpenCabinetI18n.t("msg.cd70ffa805"); submit.disabled = (!single && !store && pc) || !!inlineRetroarchSetup?.busy || savingInlineEmulator; }
 }
@@ -3744,6 +3749,7 @@ function warmImportCatalog() {
 function chooseImportMode(mode) {
   if (scanInProgress || inlineRetroarchSetup?.busy || savingInlineEmulator) return;
   ++singleFileRequest; importMode = mode;
+  const directChoice = document.getElementById("scan-launch-directly"); if (directChoice) directChoice.checked = false;
   if (mode) warmImportCatalog();
   importConfigPage = "platform";
   if (mode === "steam" || mode === "epic") document.getElementById("scan-platform-select").value = allPlatforms.find(platform => isPcPlatform(platform.name))?.name || "PC";
@@ -3759,6 +3765,12 @@ function chooseImportMode(mode) {
 }
 
 function setupScannerModal() {
+  document.getElementById("scan-launch-directly")?.addEventListener("change", () => {
+    ++singleFileRequest;
+    document.getElementById("scan-file-input").value = "";
+    document.getElementById("scan-single-title").value = "";
+    updateScannerEmulatorCheck();
+  });
   const modal = document.getElementById("scanner-modal");
   const btnOpenScanner = document.getElementById("btn-scan-roms");
   const btnCloseModal = document.getElementById("btn-close-scanner-modal");
@@ -3798,7 +3810,7 @@ function setupScannerModal() {
     if (!platform) { showToast(globalThis.OpenCabinetI18n.t("msg.325a998f3b"), true); platformSelect.focus(); return; }
     if (store && !pc) { showToast(globalThis.OpenCabinetI18n.t("msg.c564b74c55"), true); return; }
     if (importMode === "folder" && pc) { showToast(globalThis.OpenCabinetI18n.t("msg.04dbcccb3c"), true); return; }
-    if (!pc && (!allEmulators.some(emu => emu.platform.toLowerCase() === platform.toLowerCase()) || emuSelect.value === "__add_new__")) {
+    if (!pc && !singleImportRunsDirectly() && (!allEmulators.some(emu => emu.platform.toLowerCase() === platform.toLowerCase()) || emuSelect.value === "__add_new__")) {
       showToast(globalThis.OpenCabinetI18n.t("msg.6bf33b4ff0", platform), true); return;
     }
     importConfigPage = "files"; updateImportSourceUI();
@@ -3811,7 +3823,7 @@ function setupScannerModal() {
     if (!platform) { showToast(globalThis.OpenCabinetI18n.t("msg.fa691ddc0a"), true); return; }
     const token = ++singleFileRequest, button = document.getElementById("btn-browse-game-file"); button.disabled = true;
     try {
-      const selected = await invoke("select_game_file", { platform, extensions: document.getElementById("scan-extensions-input").value.split(",").map(value => value.trim()).filter(Boolean) });
+      const selected = await invoke("select_game_file", { platform, launchDirectly: singleImportRunsDirectly(), extensions: document.getElementById("scan-extensions-input").value.split(",").map(value => value.trim()).filter(Boolean) });
       if (token !== singleFileRequest || importMode !== "single" || !selected) return;
       document.getElementById("scan-file-input").value = selected.rom_path;
       document.getElementById("scan-single-title").value = selected.title;
@@ -4053,7 +4065,7 @@ function populatePlatformDropdown() {
 function updateScannerEmulatorCheck() {
   const platform = getSelectedPlatformName();
   updateImportSourceUI();
-  if (importMode === "steam" || importMode === "epic" || isPcPlatform(platform)) {
+  if (importMode === "steam" || importMode === "epic" || isPcPlatform(platform) || singleImportRunsDirectly()) {
     document.getElementById("emu-select-group")?.classList.add("hidden");
     document.getElementById("no-emu-inline-box")?.classList.add("hidden");
     return;
@@ -4960,7 +4972,7 @@ async function handleExecuteScan() {
     (e) => e.platform.toLowerCase() === platform.toLowerCase(),
   );
 
-  if (!pc && (
+  if (!pc && !singleImportRunsDirectly() && (
     matchingEmulators.length === 0 ||
     (emuSelect && emuSelect.value === "__add_new__")
   )) {
@@ -5027,7 +5039,7 @@ async function handleExecuteScan() {
       const warnings = document.getElementById(`scan-${source}-warning-list`); warnings.replaceChildren();
       (report.warnings || []).forEach(warning => { const item = document.createElement("li"); item.textContent = warning; warnings.appendChild(item); });
       document.getElementById(`scan-${source}-warnings`).classList.toggle("hidden", !report.warnings?.length);
-    } else preview = single ? await invoke("preview_single_game", { filePath, platform, title }) : await invoke("scan_roms_folder", {
+    } else preview = single ? await invoke("preview_single_game", { filePath, platform, title, launchDirectly: singleImportRunsDirectly() }) : await invoke("scan_roms_folder", {
       folderPath,
       customExtensions,
       platform,

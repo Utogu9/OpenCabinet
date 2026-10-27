@@ -349,6 +349,25 @@ test('Single PC import uses the selected file and reviewed title, creates PC onc
  assert.equal(app.evaluate('metadataPlatformSuggestion("PC",["Windows","Sony Playstation"])'),'Windows');
 });
 
+test('Single-console executable skips emulator setup and preserves platform through import',async()=>{
+ const app=scanner({select_game_file:()=>({rom_path:'C:/Games/Recomp.exe',title:'Recomp'}),preview_single_game:({filePath,title,launchDirectly})=>({games:[{rom_path:filePath,title,launch_directly:launchDirectly}],total_found:1,skipped_count:0})});
+ await app.get('btn-import-single').fire('click');await app.selectPlatform('PS2');
+ assert.equal(app.get('scan-direct-choice').classList.contains('hidden'),false);
+ app.get('scan-launch-directly').checked=true;await app.get('scan-launch-directly').fire('change');
+ assert.equal(app.get('no-emu-inline-box').classList.contains('hidden'),true);
+ await app.get('btn-import-next').fire('click');
+ assert.equal(app.get('import-files-step').classList.contains('hidden'),false);
+ assert.match(app.get('scan-file-label').textContent,/\.exe/);
+ await app.get('btn-browse-game-file').fire('click');await app.evaluate('handleExecuteScan()');
+ assert.equal(app.calls.find(c=>c.command==='select_game_file').args.launchDirectly,true);
+ const saved=app.calls.find(c=>c.command==='import_scanned_roms');
+ assert.equal(saved.args.platform,'PS2');assert.equal(saved.args.preview.games[0].launch_directly,true);
+ assert.equal(app.calls.some(c=>c.command==='add_emulator'),false);
+ await app.get('btn-import-folder').fire('click');
+ assert.equal(app.get('scan-launch-directly').checked,false);
+ assert.equal(app.get('scan-direct-choice').classList.contains('hidden'),true);
+});
+
 test('Single-console ROM import keeps emulator requirements, extension filtering and the confirmed file',async()=>{
  const app=scanner({select_game_file:()=>({rom_path:'C:/ROMs/One.sfc',title:'One'}),preview_single_game:({filePath,title})=>({games:[{rom_path:filePath,title}],total_found:1,skipped_count:0})});
  await app.get('btn-import-single').fire('click');await app.selectPlatform('SNES');await app.get('btn-browse-game-file').fire('click');

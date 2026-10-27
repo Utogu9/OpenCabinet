@@ -1,5 +1,11 @@
 # Importar juegos
 
+Al importar **Un juego**, la opción **No usar emulador para este juego**, debajo
+del título del emulador, permite elegir un `.exe` y ejecutarlo directamente.
+Esto permite guardar recompilaciones en la biblioteca de su consola original.
+La plataforma y su emulador predeterminado se conservan; la elección se aplica
+únicamente al juego importado y también funciona al importar datos e imágenes.
+
 El importador avanza por pantallas: origen, plataforma y emulador, archivos, revisión de títulos cuando corresponde, y datos e imágenes. **Continuar** valida la configuración antes de pedir los archivos. **Atrás** permite volver conservando la carpeta o el archivo elegido, salvo que se cambie la plataforma o el origen.
 
 Al abrir el importador se precarga el resumen del catálogo local de metadatos en segundo plano, sin descargarlo ni abrir una sesión de importación. El resumen se reutiliza y se invalida cuando se reemplaza el catálogo.

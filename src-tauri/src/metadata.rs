@@ -1883,7 +1883,7 @@ fn prepare_editor_images(
             done: false,
         })
         .collect();
-    let candidate = RomCandidate { discs: Vec::new(), existing_game_id: None, title, rom_path, steam: None, epic: None };
+    let candidate = RomCandidate { launch_directly: false, discs: Vec::new(), existing_game_id: None, title, rom_path, steam: None, epic: None };
     Ok(StagedBatch {
         preview: ScanPreview {
             games: vec![candidate.clone()],
@@ -2347,7 +2347,7 @@ mod tests {
                 .map(|index| {
                     let path = self.root.join(format!("Sonic {index} (Europe).rom"));
                     fs::write(&path, b"original ROM").unwrap();
-                    RomCandidate { discs: Vec::new(), existing_game_id: None,
+                    RomCandidate { launch_directly: false, discs: Vec::new(), existing_game_id: None,
                         steam: None, epic: None,
                         title: format!("My reviewed title {index}"),
                         rom_path: path.to_string_lossy().into_owned(),
@@ -3055,7 +3055,7 @@ mod tests {
             let catalog = sandbox.catalog();
             let file = sandbox.root.join("Game with spaces.exe");
             fs::write(&file, b"original executable").unwrap();
-            let preview = ScanPreview { games: vec![RomCandidate { discs: Vec::new(), existing_game_id: None, title: "Reviewed PC title".into(), rom_path: file.to_string_lossy().into_owned(), steam: None, epic: None }], total_found: 1, skipped_count: 0 };
+            let preview = ScanPreview { games: vec![RomCandidate { launch_directly: false, discs: Vec::new(), existing_game_id: None, title: "Reviewed PC title".into(), rom_path: file.to_string_lossy().into_owned(), steam: None, epic: None }], total_found: 1, skipped_count: 0 };
             let selected = vec![MatchSelection { rom_path: preview.games[0].rom_path.clone(), id: Some(1) }];
             // The small mock catalog supplies the metadata; its source platform
             // must never replace the local PC platform or its launch behavior.
@@ -3084,7 +3084,7 @@ mod tests {
             conn.execute("INSERT INTO platforms(name,default_extensions) VALUES ('PC','.exe')",[]).unwrap();
             let client=sandbox.root.join("Steam");fs::create_dir_all(client.join("steamapps/common/Test Game")).unwrap();fs::write(client.join("steam.exe"),b"mock client").unwrap();
             let manifest=client.join("steamapps/appmanifest_730.acf");fs::write(&manifest,b"\"AppState\"{\"appid\"\"730\"\"name\"\"Steam title\"\"installdir\"\"Test Game\"\"StateFlags\"\"4\"}").unwrap();
-            let preview=ScanPreview {games:vec![RomCandidate { discs: Vec::new(), existing_game_id: None,title:"Reviewed Steam title".into(),rom_path:crate::steam::uri(730),epic:None,steam:Some(crate::steam::SteamSource {app_id:730,client_path:client.join("steam.exe").to_string_lossy().into_owned(),manifest_path:manifest.to_string_lossy().into_owned()})}],total_found:1,skipped_count:0};
+            let preview=ScanPreview {games:vec![RomCandidate { launch_directly: false, discs: Vec::new(), existing_game_id: None,title:"Reviewed Steam title".into(),rom_path:crate::steam::uri(730),epic:None,steam:Some(crate::steam::SteamSource {app_id:730,client_path:client.join("steam.exe").to_string_lossy().into_owned(),manifest_path:manifest.to_string_lossy().into_owned()})}],total_found:1,skipped_count:0};
             let selected=vec![MatchSelection {rom_path:preview.games[0].rom_path.clone(),id:Some(1)}];
             let mut batch=prepare_batch(&conn,&catalog,&sandbox.job,preview.clone(),"PC".into(),"Sega Genesis",selected,&options()).unwrap();
             for task in &mut batch.tasks {fs::write(&task.path,PNG).unwrap();task.done=true;batch.games[task.game_index].images.push(GameImage {path:task.path.to_string_lossy().into_owned(),kind:task.image.kind.clone()});}

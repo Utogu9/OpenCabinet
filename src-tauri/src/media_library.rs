@@ -1133,7 +1133,7 @@ mod tests {
     }
     fn preview(path: &str) -> ScanPreview {
         ScanPreview {
-            games: vec![crate::RomCandidate { discs: Vec::new(), existing_game_id: None,
+            games: vec![crate::RomCandidate { launch_directly: false, discs: Vec::new(), existing_game_id: None,
                 title: "Reviewed title".into(),
                 rom_path: path.into(),
                 steam: None,
@@ -1716,7 +1716,7 @@ mod tests {
         };
         assert!(validate_selections(&p, &[wrong]).is_err());
         let mut p = p;
-        p.games.push(crate::RomCandidate { discs: Vec::new(), existing_game_id: None,
+        p.games.push(crate::RomCandidate { launch_directly: false, discs: Vec::new(), existing_game_id: None,
             title: "Two".into(),
             rom_path: "two.iso".into(),
             steam: None,

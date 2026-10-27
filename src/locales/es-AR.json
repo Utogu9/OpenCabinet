@@ -1353,6 +1353,7 @@
     "update.busy": "Ya hay una operación de actualización en curso.",
     "update.finishTasks": "Terminá las partidas, importaciones y descargas antes de actualizar. Si cambiaste la carpeta de datos, reiniciá primero la app.",
     "update.releaseOnly": "La instalación automática requiere una versión de distribución de Windows x64.",
-    "update.checkAgain": "Volvé a buscar actualizaciones antes de instalar."
+    "update.checkAgain": "Volvé a buscar actualizaciones antes de instalar.",
+    "import.direct-executable": "No usar emulador para este juego"
   }
 }

@@ -44,10 +44,11 @@ pub(super) fn import_launch_mode(platform: &str, path: &str) -> Result<bool, Str
 pub async fn select_game_file(
     platform: String,
     extensions: Option<Vec<String>>,
+    launch_directly: Option<bool>,
 ) -> Result<Option<RomCandidate>, String> {
     // A native dialog yields while it is open; no executable is run by importing.
     let mut dialog = rfd::AsyncFileDialog::new().set_title(crate::i18n::text("msg.24772d158f"));
-    if is_pc_platform(&platform) {
+    if launch_directly.unwrap_or(false) || is_pc_platform(&platform) {
         dialog = dialog.add_filter(crate::i18n::text("msg.d446c9cf66"), &["exe"]);
     } else {
         let mut extensions: Vec<String> = extensions
@@ -62,7 +63,7 @@ pub async fn select_game_file(
         }
         dialog = dialog.add_filter(crate::i18n::text("msg.a4a04914f5"), &["*"]);
     }
-    Ok(dialog.pick_file().await.map(|file| RomCandidate { discs: Vec::new(), existing_game_id: None,
+    Ok(dialog.pick_file().await.map(|file| RomCandidate { launch_directly: false, discs: Vec::new(), existing_game_id: None,
         steam: None, epic: None,
         title: if crate::folder_games::supported(&platform) && file.path().file_name().is_some_and(|s| s.eq_ignore_ascii_case("eboot.bin")) {
             crate::folder_games::title(file.path().parent().unwrap_or(file.path()), file.path())
@@ -81,10 +82,19 @@ pub async fn preview_single_game(
     file_path: String,
     platform: String,
     title: String,
+    launch_directly: Option<bool>,
 ) -> Result<ScanPreview, String> {
     tauri::async_runtime::spawn_blocking(move || {
         let conn = super::get_db_connection().map_err(|e| e.to_string())?;
-        preview_file(&conn, &file_path, &platform, &title)
+        let mut preview = preview_file(&conn, &file_path, &platform, &title)?;
+        if launch_directly.unwrap_or(false) {
+            validate_pc_executable(&file_path)?;
+            for candidate in &mut preview.games {
+                candidate.launch_directly = true;
+                candidate.discs.clear();
+            }
+        }
+        Ok(preview)
     })
     .await
     .map_err(|e| e.to_string())?
@@ -113,7 +123,7 @@ fn preview_file(
         games: if exists {
             vec![]
         } else {
-            vec![RomCandidate { discs: if !is_pc_platform(platform) && crate::discs::identify(file_path).is_some() { vec![crate::discs::source(file_path)] } else { Vec::new() }, existing_game_id: None,
+            vec![RomCandidate { launch_directly: false, discs: if !is_pc_platform(platform) && crate::discs::identify(file_path).is_some() { vec![crate::discs::source(file_path)] } else { Vec::new() }, existing_game_id: None,
                 steam: None, epic: None,
                 title: title.into(),
                 rom_path: file_path.into(),
@@ -163,6 +173,30 @@ mod tests {
             assert!(self.0.is_absolute() && self.0.starts_with(std::env::temp_dir()));
             let _ = fs::remove_dir_all(&self.0);
         }
+    }
+
+    #[test]
+    fn console_executable_preserves_platform_and_launches_without_emulator() {
+        let files = Files::new();
+        let path = files.file("Recompiled game.exe");
+        let mut conn = files.database();
+        let mut preview = preview_file(&conn, &path, "Sony PlayStation 2", "Reviewed title").unwrap();
+        preview.games[0].launch_directly = true;
+        // The flag must survive the frontend/native JSON round trip and both import paths.
+        let preview: ScanPreview = serde_json::from_str(&serde_json::to_string(&preview).unwrap()).unwrap();
+        assert!(crate::candidate_launch_mode(&preview.games[0], "Sony PlayStation 2").unwrap());
+        crate::import_roms(&mut conn, preview, "Sony PlayStation 2", |_| {}).unwrap();
+        let row: (String, bool) = conn.query_row("SELECT platform,launch_directly FROM games", [], |r| Ok((r.get(0)?,r.get(1)?))).unwrap();
+        assert_eq!(row, ("Sony PlayStation 2".into(), true));
+        crate::launch_game_record(&conn, 1, |executable, args, directory| {
+            assert_eq!(executable, path);
+            assert!(args.is_empty());
+            assert_eq!(directory, Path::new(&path).parent());
+            Ok(())
+        }).unwrap();
+        let mut invalid = preview_file(&conn, &files.file("Disc.iso"), "PS2", "ROM").unwrap().games.remove(0);
+        invalid.launch_directly = true;
+        assert!(crate::candidate_launch_mode(&invalid, "PS2").is_err());
     }
 
     #[test]

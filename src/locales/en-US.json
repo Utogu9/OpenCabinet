@@ -1353,6 +1353,7 @@
     "update.busy": "An update operation is already in progress.",
     "update.finishTasks": "Finish games, imports and downloads before updating. If you changed the data folder, restart the app first.",
     "update.releaseOnly": "Automatic installation requires a Windows x64 release build.",
-    "update.checkAgain": "Check for updates again before installing."
+    "update.checkAgain": "Check for updates again before installing.",
+    "import.direct-executable": "Do not use an emulator for this game"
   }
 }

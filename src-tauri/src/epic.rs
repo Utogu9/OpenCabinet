@@ -287,7 +287,7 @@ fn scan(
                 if exists {
                     skipped += 1;
                 } else {
-                    games.push(RomCandidate { discs: Vec::new(), existing_game_id: None,
+                    games.push(RomCandidate { launch_directly: false, discs: Vec::new(), existing_game_id: None,
                         title: manifest.display_name.trim().to_owned(),
                         rom_path,
                         steam: None,
