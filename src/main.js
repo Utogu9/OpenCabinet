@@ -6,6 +6,7 @@ let allEmulators = [];
 let allPlatforms = [];
 let toastTimeout = null;
 let selectedGameId = null;
+let focusedGameId = null;
 let fileAvailabilityRequest = 0;
 let selectedFileAvailability = null;
 let selectedGameIds = new Set();
@@ -1112,6 +1113,7 @@ async function loadGames() {
 function renderGames(gamesToRender) {
   const gridContainer = document.getElementById("games-grid");
   if (!gridContainer) return;
+  const restoreGridFocus = gridContainer.contains?.(document.activeElement);
   gridContainer.setAttribute("aria-busy", String(libraryLoading));
   if (!allGames.length && (libraryLoading || libraryLoadError)) {
     const state = libraryLoading ? "loading" : "error";
@@ -1137,6 +1139,7 @@ function renderGames(gamesToRender) {
   gridContainer.innerHTML = "";
   visibleGameIds = (gamesToRender || []).map((game) => game.id);
   const visibleIds = new Set(visibleGameIds);
+  if (!visibleIds.has(focusedGameId)) focusedGameId = visibleIds.has(selectedGameId) ? selectedGameId : visibleGameIds[0] ?? null;
   selectedGameIds = new Set([...selectedGameIds].filter((id) => visibleIds.has(id)));
   if (!visibleIds.has(selectionAnchorId)) selectionAnchorId = null;
   document.getElementById("game-context-menu").classList.add("hidden");
@@ -1151,7 +1154,7 @@ function renderGames(gamesToRender) {
     const card = document.createElement("div");
     card.className = "game-card";
     card.dataset.gameId = String(game.id);
-    card.tabIndex = 0;
+    card.tabIndex = game.id === focusedGameId ? 0 : -1;
     card.setAttribute("role", "button");
     card.setAttribute("aria-label", `${game.title} — ${game.platform}`);
     card.title = `${game.title} — ${game.platform}`;
@@ -1170,11 +1173,21 @@ function renderGames(gamesToRender) {
     card.querySelector(".game-platform").textContent = game.platform;
 
     card.addEventListener("click", (event) => selectGame(game.id, event));
+    card.addEventListener("focus", () => {
+      focusedGameId = game.id;
+      if (selectionAnchorId === null) selectionAnchorId = game.id;
+      document.querySelectorAll(".game-card").forEach(item => { item.tabIndex = Number(item.dataset.gameId) === focusedGameId ? 0 : -1; });
+    });
     card.addEventListener("dblclick", (event) => {
       if (event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
       return launchGame(game.id, game.title);
     });
     card.addEventListener("keydown", (event) => {
+      if (window.OpenCabinetKeyboard?.handleGameKey(event, { card, cards: document.querySelectorAll(".game-card"), window,
+        select: selectGame, launch: id => { const game = allGames.find(game => game.id === id); if (game) void launchGame(id, game.title); },
+        edit: () => document.getElementById("btn-edit-game").click(), remove: () => { void deleteLibraryGames([...selectedGameIds]); },
+        selectAll: () => { selectedGameIds = new Set(visibleGameIds); updateGameSelection(); },
+      })) return;
       if (event.key === "Enter" || event.key === " ") {
         event.preventDefault();
         selectGame(game.id, event);
@@ -1186,11 +1199,13 @@ function renderGames(gamesToRender) {
 
   catalogCoverLoader?.start();
   updateGameSelection();
+  if (restoreGridFocus) [...gridContainer.children].find(card => Number(card.dataset.gameId) === focusedGameId)?.focus({ preventScroll: true });
 }
 
 function selectGame(id, modifiers = {}) {
   const index = visibleGameIds.indexOf(id);
   if (index === -1) return;
+  focusedGameId = id;
   const anchorIndex = visibleGameIds.indexOf(selectionAnchorId);
   const additive = modifiers.ctrlKey || modifiers.metaKey;
   if (modifiers.shiftKey && anchorIndex !== -1) {
@@ -1216,6 +1231,7 @@ function updateGameSelection() {
     const selected = selectedGameIds.has(Number(card.dataset.gameId));
     card.classList.toggle("selected", selected);
     card.setAttribute("aria-pressed", String(selected));
+    card.tabIndex = Number(card.dataset.gameId) === focusedGameId ? 0 : -1;
   });
   const status = document.getElementById("game-selection-status");
   status.textContent = globalThis.OpenCabinetI18n.t("msg.e054c492bc", selectedGameIds.size);
@@ -1323,7 +1339,7 @@ function setupGameContextMenu() {
     const y = keyboard ? bounds.top : event.clientY;
     menu.style.left = `${Math.max(8, Math.min(x, window.innerWidth - menu.offsetWidth - 8))}px`;
     menu.style.top = `${Math.max(8, Math.min(y, window.innerHeight - menu.offsetHeight - 8))}px`;
-    items[0].focus({ preventScroll: true });
+    (items.find(item => !item.disabled) || items[0]).focus({ preventScroll: true });
   }, { capture: true });
 
   play.addEventListener("click", () => {
@@ -1412,10 +1428,11 @@ function setupGameContextMenu() {
       close(true);
     } else if (["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) {
       event.preventDefault();
-      const current = items.indexOf(document.activeElement);
-      const next = event.key === "Home" ? 0 : event.key === "End" ? items.length - 1
-        : (current + (event.key === "ArrowUp" ? -1 : 1) + items.length) % items.length;
-      items[next].focus();
+      const enabled = items.filter(item => !item.disabled);
+      const current = enabled.indexOf(document.activeElement);
+      const next = event.key === "Home" ? 0 : event.key === "End" ? enabled.length - 1
+        : (current + (event.key === "ArrowUp" ? -1 : 1) + enabled.length) % enabled.length;
+      enabled[next]?.focus();
     }
   });
   document.addEventListener("scroll", (event) => {
@@ -5508,6 +5525,7 @@ window.addEventListener("DOMContentLoaded", async () => {
   setupSearch();
   // Wire import and menus before any database or recovery work can delay them.
   setupScannerModal();
+  window.OpenCabinetKeyboard?.setup({ document, window });
   await languageReady;
   const loading = loadInitialLibrary();
   await setupTitlebar();

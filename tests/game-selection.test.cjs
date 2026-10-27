@@ -43,7 +43,8 @@ function library(options = {}) {
     querySelector(selector) { return this.parts[selector] ||= new Element(); }
     addEventListener(name, handler) { this.handlers[name] = handler; }
     getBoundingClientRect() { return { left: 100, top: 100 }; }
-    focus() { document.activeElement = this; }
+    focus() { document.activeElement = this; this.handlers.focus?.(); }
+    scrollIntoView() {}
     contains(target) { return target === this; }
   }
   const get = (id) => {
@@ -87,6 +88,10 @@ function library(options = {}) {
     console,
   });
   const source = fs.readFileSync(path.join(__dirname, "../src/main.js"), "utf8");
+  if (options.keyboard) {
+    vm.runInContext(fs.readFileSync(path.join(__dirname,"../src/keyboard-navigation.js"),"utf8"),context);
+    context.window.OpenCabinetKeyboard=context.OpenCabinetKeyboard;
+  }
   if (options.order) vm.runInContext(fs.readFileSync(path.join(__dirname,"../src/game-order.js"),"utf8"),context);
   vm.runInContext(source + `
     allGames = Array.from({ length: 6 }, (_, index) => ({ id: index + 1, title: 'Game ' + (index + 1), platform: 'SNES' }));
@@ -120,6 +125,22 @@ function library(options = {}) {
   return { get, click, doubleClick, rightClick, selected, evaluate, calls, confirmations,
     confirm: (value) => { confirmed = value; }, reject: () => { rejectDelete = true; } };
 }
+
+test("Keyboard navigation has one grid tab stop, supports ranges, focus-only movement and Enter launch", async () => {
+  const app=library({keyboard:true});
+  const cards=app.get('games-grid').children;
+  assert.deepEqual(cards.map(card=>card.tabIndex),[0,-1,-1,-1,-1,-1]);
+  cards[0].focus();
+  const key=(index,key,modifiers={})=>cards[index].handlers.keydown({key,preventDefault(){},stopPropagation(){},...modifiers});
+  key(0,'ArrowRight',{shiftKey:true}); assert.deepEqual(app.selected(),[1,2]);
+  key(1,'ArrowRight',{ctrlKey:true}); assert.deepEqual(app.selected(),[1,2]);
+  assert.equal(cards[2].tabIndex,0);assert.equal(cards[1].tabIndex,-1);
+  key(2,'a',{ctrlKey:true});assert.deepEqual(app.selected(),[1,2,3,4,5,6]);
+  key(2,'Enter');await new Promise(resolve=>setImmediate(resolve));
+  assert.equal(app.calls.find(call=>call.command==='launch_game').args.gameId,3);
+  app.evaluate('renderGames(allGames)');
+  assert.equal(app.get('games-grid').children.filter(card=>card.tabIndex===0).length,1);
+});
 
 test("Ctrl toggles selection and ordinary clicks select one game", () => {
   const app = library();

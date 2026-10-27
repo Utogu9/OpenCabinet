@@ -565,11 +565,11 @@
     <form id="game-artwork-form" autocomplete="off"></form>
 
     <!-- Modal 1: Gestor de Emuladores -->
-    <div id="emulator-modal" class="modal-overlay hidden">
+    <div id="emulator-modal" class="modal-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="emulator-modal-title">
       <div class="modal-content">
         <div class="modal-header">
-          <h2><span data-i18n="msg.e5a14dce48"></span></h2>
-          <button class="close-btn" id="btn-close-modal">&times;</button>
+          <h2 id="emulator-modal-title"><span data-i18n="msg.e5a14dce48"></span></h2>
+          <button class="close-btn" id="btn-close-modal" aria-label="" data-i18n-aria-label="msg.02308736f4">&times;</button>
         </div>
         <div class="modal-body">
           <form id="emulator-form" class="emulator-form" autocomplete="off">
@@ -714,11 +714,11 @@
     </div>
 
     <!-- Modal 2: Escaneador e Importador de ROMs -->
-    <div id="scanner-modal" class="modal-overlay hidden">
+    <div id="scanner-modal" class="modal-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="scanner-modal-title">
       <div class="modal-content">
         <div class="modal-header">
-          <h2><span data-i18n="msg.7350eaa7ad"></span></h2>
-          <button class="close-btn" id="btn-close-scanner-modal">
+          <h2 id="scanner-modal-title"><span data-i18n="msg.7350eaa7ad"></span></h2>
+          <button class="close-btn" id="btn-close-scanner-modal" aria-label="" data-i18n-aria-label="msg.02308736f4">
             &times;
           </button>
         </div>
@@ -1261,6 +1261,7 @@
           <button id="btn-install-update" class="primary-btn" type="button" data-i18n="update.install" hidden></button>
         </section>
         <div class="form-actions">
+          <button class="secondary-btn" id="btn-keyboard-shortcuts" type="button" data-i18n="keyboard.title"></button>
           <button class="primary-btn" id="btn-accept-about" type="button"><span data-i18n="msg.aeccae342e"></span></button>
         </div>
       </div>
@@ -1315,6 +1316,31 @@
         <div class="form-actions"><button class="secondary-btn" value="cancel" data-i18n="backup.cancel"></button><button class="primary-btn" value="restore" data-i18n="backup.restore"></button></div>
       </form>
     </dialog>
+    <dialog id="keyboard-shortcuts-dialog" class="confirmation-dialog keyboard-shortcuts-dialog" aria-labelledby="keyboard-shortcuts-title">
+      <form method="dialog">
+        <h2 id="keyboard-shortcuts-title" data-i18n="keyboard.title"></h2>
+        <dl class="keyboard-shortcuts-list">
+          <dt><kbd>Tab / Shift+Tab</kbd></dt><dd data-i18n="keyboard.tab"></dd>
+          <dt><kbd data-i18n="keyboard.arrows_key"></kbd></dt><dd data-i18n="keyboard.arrows"></dd>
+          <dt><kbd data-i18n="keyboard.shift_arrows_key"></kbd></dt><dd data-i18n="keyboard.range"></dd>
+          <dt><kbd data-i18n="keyboard.ctrl_arrows_key"></kbd></dt><dd data-i18n="keyboard.focus_only"></dd>
+          <dt><kbd data-i18n="keyboard.space_key"></kbd></dt><dd data-i18n="keyboard.select"></dd>
+          <dt><kbd>Home / End</kbd></dt><dd data-i18n="keyboard.ends"></dd>
+          <dt><kbd>Enter</kbd></dt><dd data-i18n="keyboard.play"></dd>
+          <dt><kbd>F2</kbd></dt><dd data-i18n="keyboard.edit"></dd>
+          <dt><kbd data-i18n="keyboard.delete_key"></kbd></dt><dd data-i18n="keyboard.delete"></dd>
+          <dt><kbd>Ctrl+A</kbd></dt><dd data-i18n="keyboard.select_all"></dd>
+          <dt><kbd>Shift+F10</kbd></dt><dd data-i18n="keyboard.context"></dd>
+          <dt><kbd>Ctrl+F</kbd></dt><dd data-i18n="keyboard.search"></dd>
+          <dt><kbd>Ctrl+I</kbd></dt><dd data-i18n="keyboard.import"></dd>
+          <dt><kbd>Ctrl+,</kbd></dt><dd data-i18n="keyboard.preferences"></dd>
+          <dt><kbd>F6 / Shift+F6</kbd></dt><dd data-i18n="keyboard.regions"></dd>
+          <dt><kbd>F10</kbd></dt><dd data-i18n="keyboard.menu"></dd>
+          <dt><kbd>Esc</kbd></dt><dd data-i18n="keyboard.escape"></dd>
+        </dl>
+        <div class="form-actions"><button class="primary-btn" value="close" data-i18n="backup.close"></button></div>
+      </form>
+    </dialog>
     <script src="branding.js"></script>
     <script src="backups.js"></script>
     <script src="app-updates.js"></script>
@@ -1337,6 +1363,7 @@
     <script src="game-discs.js"></script>
     <script src="game-regions.js"></script>
     <script src="game-order.js"></script>
+    <script src="keyboard-navigation.js"></script>
     <script type="module" src="main.js"></script>
   </body>
 </html>

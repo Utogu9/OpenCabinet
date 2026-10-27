@@ -38,6 +38,10 @@ body {
 }
 
 /* Custom Webkit Scrollbars con la paleta de OpenCabinet */
+:is(button, a[href], input, select, textarea, [tabindex]):focus-visible {
+  outline: 2px solid var(--accent-color);
+  outline-offset: 3px;
+}
 ::-webkit-scrollbar {
   width: 8px;
   height: 8px;
@@ -1927,6 +1931,11 @@ button:disabled {
 #preferences-form .form-actions { flex-wrap: wrap; }
 #about-dialog { padding: 0; }
 .about-app-name { font-size: 1.8rem; font-weight: 700; }
+.keyboard-shortcuts-dialog { width: min(720px, calc(100vw - 32px)); max-height: 85vh; overflow-y: auto; }
+.keyboard-shortcuts-dialog form { display: flex; flex-direction: column; gap: 20px; }
+.keyboard-shortcuts-list { display: grid; grid-template-columns: minmax(140px, auto) 1fr; gap: 12px 20px; align-items: baseline; }
+.keyboard-shortcuts-list dt, .keyboard-shortcuts-list dd { margin: 0; }
+.keyboard-shortcuts-list kbd { font-family: monospace; padding: 3px 6px; border: 1px solid var(--border-color); border-radius: 4px; }
 
 .retroarch-options {
   padding: 16px;
