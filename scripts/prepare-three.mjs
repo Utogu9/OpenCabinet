@@ -110,9 +110,8 @@ export function convertDreamcast(directory) {
       mesh.geometry.dispose();
     });
   }
-  // The original inside insert has the Dreamcast strip at its left edge. Keep
-  // only that UV window on a fixed insert behind the clear column; never use
-  // the example game's interior artwork for another game.
+  // A fallback branding strip sits behind the fixed clear column. Its narrow
+  // standalone textures use the complete UV window, independent of game scans.
   const mark={name:'dreamcast-insert',part:'base',material:'insert',vertices:[],indices:[0,1,2,0,2,3]};
   for(const [x,z,u,v] of [[-4.79,-3.0679,0,0],[-4.125,-3.0679,1,0],[-4.125,5.28286,1,1],[-4.79,5.28286,0,1]]) {
     mark.vertices.push(...positionInCase(x,-3.1905,z),0,0,1,u,v);
@@ -138,12 +137,12 @@ export function prepare() {
   fs.mkdirSync(destination,{recursive:true});
   const fingerprint=crypto.createHash('sha256').update(fs.readFileSync(fileURLToPath(import.meta.url)));
   for (const id of sourceIds) fingerprint.update(fs.readFileSync(path.join(source,`model_${id}.obj`)));
-  const insert=fs.readFileSync(path.join(source,'insidecase.png'));fingerprint.update(insert);
   const ribs=fs.readFileSync(path.join(root,'src/assets/textures/cd-case-ribs.svg'));fingerprint.update(ribs);
   const hash=fingerprint.digest('hex'),stamp=path.join(destination,'.source-hash');
-  if (fs.existsSync(stamp) && fs.readFileSync(stamp,'utf8')===hash && ['case.json','case.bin','insert.png','ribs-height.svg'].every(file=>fs.existsSync(path.join(destination,file)))) return;
+  if (fs.existsSync(stamp) && fs.readFileSync(stamp,'utf8')===hash && ['case.json','case.bin','ribs-height.svg'].every(file=>fs.existsSync(path.join(destination,file)))) return;
   const {manifest,binary}=convertDreamcast(source);
-  writeChanged(path.join(destination,'case.bin'),binary);writeChanged(path.join(destination,'case.json'),JSON.stringify(manifest));writeChanged(path.join(destination,'insert.png'),insert);writeChanged(path.join(destination,'ribs-height.svg'),ribs);writeChanged(stamp,hash);
+  // insert.webp and insert2.webp are supplied assets: never regenerate or overwrite them.
+  writeChanged(path.join(destination,'case.bin'),binary);writeChanged(path.join(destination,'case.json'),JSON.stringify(manifest));writeChanged(path.join(destination,'ribs-height.svg'),ribs);writeChanged(stamp,hash);
   console.log(`Dreamcast: ${manifest.meshes.length} parts, ${(binary.length/1024/1024).toFixed(2)} MiB; repeated shell OBJ files omitted.`);
 }
 if (process.argv[1] && path.resolve(process.argv[1])===fileURLToPath(import.meta.url)) prepare();

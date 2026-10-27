@@ -25,7 +25,7 @@
     return { width, height, sheets, thickness: Math.min(3.4, 0.26 + sheets * 0.075),
       x: profile.width / 2 - 8 - width / 2, y: 0 };
   }
-  async function render(path, { imageSource = value => value, signal, loadLibrary = pdfLibrary, coverMode = 'auto' } = {}) {
+  async function render(path, { imageSource = value => value, signal, loadLibrary = pdfLibrary, coverMode = 'auto', maxSide = 2048 } = {}) {
     const abort = () => { if (signal?.aborted) throw new DOMException(globalThis.OpenCabinetI18n.t("msg.92a2872d72"), 'AbortError'); };
     abort(); const pdf = await loadLibrary(); abort();
     const resource = folder => new URL(`vendor/pdfjs/${folder}/`, document.baseURI).href;
@@ -52,7 +52,8 @@
       const aspectRatio = sourceAspectRatio / (splitCover ? 2 : 1);
       async function draw(page) {
         abort(); const box = page.getViewport({ scale: 1 });
-        const view = page.getViewport({ scale: Math.min(3, 2048 / Math.max(box.width / (splitCover ? 2 : 1), box.height)) });
+        const side=Number.isFinite(maxSide)?Math.max(128,Math.min(2048,maxSide)):2048;
+        const view = page.getViewport({ scale: Math.min(3, side / Math.max(box.width / (splitCover ? 2 : 1), box.height)) });
         const canvas = document.createElement('canvas'); canvases.push(canvas);
         canvas.width = Math.max(1, Math.ceil(view.width / (splitCover ? 2 : 1))); canvas.height = Math.max(1, Math.ceil(view.height));
         // Clip directly into the final cover canvas: never allocate a full

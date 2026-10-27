@@ -151,10 +151,12 @@
     const pending = new Map();
     let disposed = false;
     let protectedPaths = new Set();
-    function trim() {
+    function trim(keep = null) {
       for (const [path, task] of pending) if (task.signal.aborted) pending.delete(path);
       while (ready.size && ready.size + pending.size > limit) {
-        const path = [...ready.keys()].find((key) => !protectedPaths.has(key)) ?? ready.keys().next().value;
+        const keys=[...ready.keys()];
+        const path=keys.find(key=>key!==keep&&!protectedPaths.has(key)) ?? keys.find(key=>key!==keep);
+        if(path===undefined)break;
         ready.get(path).close();
         ready.delete(path);
       }
@@ -169,22 +171,27 @@
         return bitmap;
       },
       setLimit(value) { limit = value; trim(); },
+      put(path, bitmap) {
+        if (disposed) { bitmap.close(); return; }
+        const previous=ready.get(path);
+        if(previous && previous!==bitmap)previous.close();
+        ready.delete(path);ready.set(path,bitmap);trim(path);
+      },
       invalidate(path) {
         ready.get(path)?.close();
         ready.delete(path);
       },
-      load(path, signal) {
+      load(path, signal, decoder = decode) {
         if (signal.aborted || disposed) return Promise.reject(abortError());
         const cached = cache.get(path);
         if (cached) return Promise.resolve(cached);
         const previous = pending.get(path);
         if (previous && !previous.signal.aborted) return previous.promise;
         const task = { signal };
-        task.promise = Promise.resolve().then(() => decode(path, signal)).then((bitmap) => {
+        task.promise = Promise.resolve().then(() => decoder(path, signal)).then((bitmap) => {
           if (signal.aborted || disposed) { bitmap.close(); throw abortError(); }
           if (pending.get(path) === task) pending.delete(path);
-          ready.set(path, bitmap);
-          trim();
+          cache.put(path, bitmap);
           return bitmap;
         }).finally(() => {
           if (pending.get(path) === task) pending.delete(path);

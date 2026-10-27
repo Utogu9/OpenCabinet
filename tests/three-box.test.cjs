@@ -83,6 +83,25 @@ test('Dreamcast recognizes unfolded rear scans and maps distinct left and right 
   assert.equal(chooseArtwork([{kind:'inlay',path:'inside.jpg'}]).inlay,'inside.jpg');
 });
 
+test('Dreamcast selects white inserts only for a distinct white front-cover band, with black as the conservative fallback',async()=>{
+  const {dreamcastInsertTheme}=await import('../src/three-box-artwork.js');
+  const block=(rgb,alpha=255)=>new Uint8ClampedArray(Array.from({length:4},()=>[...rgb,alpha]).flat());
+  function cover(band,background=[80,120,170],alpha=255) {
+    return Array.from({length:4},()=>({edge:block(band,alpha),inside:block(background,alpha)}));
+  }
+  const white=cover([238,235,225]);
+  // A logo or damaged patch at one height must not determine the whole cover.
+  white[1].edge=block([35,35,35]);white[0].edge.set([170,169,168,255],0);
+  assert.equal(dreamcastInsertTheme(white),'white');
+  assert.equal(dreamcastInsertTheme(cover([255,255,255],[25,44,53])),'white','NHL 2K: four native 2x2 edge samples are white despite the curved narrow band');
+  assert.equal(dreamcastInsertTheme(cover([13,13,13])),'black','NHL 2K2: the same positions are black');
+  assert.equal(dreamcastInsertTheme(cover([15,17,22])),'black');
+  assert.equal(dreamcastInsertTheme(cover([30,95,230])),'black');
+  assert.equal(dreamcastInsertTheme(cover([255,255,255],[255,255,255])),'black','uniform white artwork does not establish a branding band');
+  assert.equal(dreamcastInsertTheme(cover([255,255,255],[80,120,170],0)),'black');
+  assert.equal(dreamcastInsertTheme([]),'black');
+});
+
 test('The molded acrylic rails retain their original texture coordinates and stay attached to the lid',async t=>{
   const directory=path.join(__dirname,'../_modelos/Dreamcast');if(!fs.existsSync(directory)){t.skip('Local experimental model is not distributed.');return;}
   const {convertDreamcast}=await import('../scripts/prepare-three.mjs');
@@ -111,6 +130,20 @@ test('The original OpenCabinet ridge texture has identical line spacing across t
   assert.equal(new Set(spacing).size,1,'the last stripe and first stripe have exactly the same separation as every other pair');
   assert.equal(new Set(widths).size,1,'there is no doubled stripe at the repeated boundary');
   for(const y of [0,image.height-1])assert.deepEqual(ctx.getImageData(0,y,image.width,1).data,row);
+});
+
+test('Contact shadows include raised walls rather than turning transparent sheets into opaque casters',async()=>{
+  const THREE=await import('../src/vendor/three/three.module.js');
+  const {wallShadowGeometry}=await import('../src/three-box-relief.js');
+  const geometry=new THREE.BufferGeometry();geometry.setAttribute('position',new THREE.Float32BufferAttribute([
+    0,0,2, 5,0,2, 0,5,2, // Flat clear panel: exclude.
+    0,0,.5, 5,0,.5, 0,0,3, // Raised wall: include.
+    0,0,-.5, 5,0,-.5, 0,0,-3, // Wall on the opposite side of the paper.
+  ],3));
+  const outside=wallShadowGeometry(geometry,0),inside=wallShadowGeometry(geometry,0,true);
+  assert.equal(outside.attributes.position.count,3);assert.equal(inside.attributes.position.count,3);
+  assert.ok(outside.boundingBox.min.z>0);assert.ok(inside.boundingBox.max.z<0);
+  outside.dispose();inside.dispose();geometry.dispose();
 });
 
 test('Pointer movement follows the mouse in Three.js world space and the lid opens toward the front',async()=>{

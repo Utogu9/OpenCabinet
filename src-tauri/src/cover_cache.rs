@@ -1,5 +1,5 @@
 //! Disposable thumbnails. Originals and library records are never modified.
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use std::{
     fs,
     hash::{Hash, Hasher},
@@ -61,6 +61,28 @@ pub struct Entry {
     key: String,
     path: String,
     cached: bool,
+}
+
+#[derive(Clone, Copy, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum PreviewKind {
+    Inlay,
+    ManualAuto,
+    ManualFull,
+    ManualLeft,
+    ManualRight,
+}
+
+fn preview_directory(root: PathBuf, full_cover: bool, kind: Option<PreviewKind>) -> PathBuf {
+    match kind {
+        Some(PreviewKind::Inlay) => root.join("inlay"),
+        Some(PreviewKind::ManualAuto) => root.join("manual-v1/auto"),
+        Some(PreviewKind::ManualFull) => root.join("manual-v1/full"),
+        Some(PreviewKind::ManualLeft) => root.join("manual-v1/left"),
+        Some(PreviewKind::ManualRight) => root.join("manual-v1/right"),
+        None if full_cover => root.join("full"),
+        None => root,
+    }
 }
 
 fn entry(source: &Path, root: &Path) -> Result<Entry, String> {
@@ -180,16 +202,13 @@ pub async fn cover_cache_entry(
     source: String,
     cache_directory: Option<String>,
     full_cover: Option<bool>,
+    preview_kind: Option<PreviewKind>,
 ) -> Result<Entry, String> {
     let result = tauri::async_runtime::spawn_blocking(move || {
         let root = directory(cache_directory.as_deref())?;
         entry(
             Path::new(&source),
-            &if full_cover.unwrap_or(false) {
-                root.join("full")
-            } else {
-                root
-            },
+            &preview_directory(root, full_cover.unwrap_or(false), preview_kind),
         )
     })
     .await
@@ -207,16 +226,13 @@ pub async fn store_cover_thumbnail(
     key: String,
     thumbnail_bytes: Vec<u8>,
     full_cover: Option<bool>,
+    preview_kind: Option<PreviewKind>,
 ) -> Result<(), String> {
     tauri::async_runtime::spawn_blocking(move || {
         let root = directory(cache_directory.as_deref())?;
         store(
             Path::new(&source),
-            &if full_cover.unwrap_or(false) {
-                root.join("full")
-            } else {
-                root
-            },
+            &preview_directory(root, full_cover.unwrap_or(false), preview_kind),
             &key,
             &thumbnail_bytes,
         )
@@ -434,5 +450,32 @@ mod tests {
         assert!(
             validate_thumbnail(&riff(b"VP8 ", &[0, 0, 0, 0x9d, 1, 0x2a, 0, 5, 0x21, 3])).is_err()
         );
+    }
+
+    #[test]
+    fn inlays_and_pdf_cover_modes_are_versioned_in_independent_cache_folders() {
+        let files = Files::new();
+        let source = files.source();
+        let root = files.0.join("cache");
+        let inlay_root = preview_directory(root.clone(), false, Some(PreviewKind::Inlay));
+        let full_root = preview_directory(root.clone(), true, None);
+        assert_ne!(
+            entry(&source, &inlay_root).unwrap().path,
+            entry(&source, &full_root).unwrap().path
+        );
+        let pdf = files.0.join("manual.pdf");
+        fs::write(&pdf, b"%PDF-test").unwrap();
+        let auto_root = preview_directory(root.clone(), false, Some(PreviewKind::ManualAuto));
+        let right_root = preview_directory(root.clone(), false, Some(PreviewKind::ManualRight));
+        let first = entry(&pdf, &auto_root).unwrap();
+        store(&pdf, &auto_root, &first.key, WEBP).unwrap();
+        assert!(entry(&pdf, &auto_root).unwrap().cached);
+        assert!(!entry(&pdf, &right_root).unwrap().cached);
+        assert!(!entry(&source, &inlay_root).unwrap().cached);
+        fs::write(&pdf, b"%PDF-a different edition").unwrap();
+        let changed = entry(&pdf, &auto_root).unwrap();
+        assert_ne!(first.key, changed.key);
+        assert!(!changed.cached);
+        assert!(store(&pdf, &auto_root, &first.key, WEBP).is_err());
     }
 }

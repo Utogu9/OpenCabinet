@@ -25,3 +25,25 @@ export function dreamcastInsertWindows(width,height,{inside=false}={}) {
   // Looking at the outside of the back reverses left/right in world space.
   return {folded:true,center:{offset:[fold,0],repeat:[1-2*fold,1]},left:inside?left:right,right:inside?right:left};
 }
+
+// Narrow curved Dreamcast bands can shrink below 4% of the cover width. Read
+// native 2x2 blocks at 1.5%, rather than averaging the band together with art.
+export const dreamcastInsertProbes=[.2,.4,.6,.8].map(y=>({edge:[.015,y],inside:[.35,y]}));
+export function dreamcastInsertTheme(samples) {
+  if(!Array.isArray(samples)||samples.length!==dreamcastInsertProbes.length)return 'black';
+  function white(block) {
+    if(!block||block.length!==16)return false;
+    let count=0;
+    for(let i=0;i<16;i+=4) {
+      const r=block[i],g=block[i+1],b=block[i+2];
+      if(block[i+3]>=220&&Math.min(r,g,b)>=185&&Math.max(r,g,b)-Math.min(r,g,b)<=45)count++;
+    }
+    return count>=3;
+  }
+  let whiteEdges=0,distinctEdges=0;
+  for(const sample of samples)if(white(sample.edge)) {
+    whiteEdges++;if(!white(sample.inside))distinctEdges++;
+  }
+  // One damaged sample is harmless. Entirely white art remains inconclusive.
+  return whiteEdges>=3&&distinctEdges>=1?'white':'black';
+}

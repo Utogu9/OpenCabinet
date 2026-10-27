@@ -245,3 +245,22 @@ test("The library prewarms full covers and routes their disk lookups and decoder
   assert.equal(calls[0].source,'full.jpg');assert.equal(calls[0].fullCover,true);
   assert.equal(decodes[0].fullCover,true);
 });
+
+test('Dreamcast inlays and manual discovery prewarm across regions while sharing the configured RAM cache',async()=>{
+  const {api}=library(),calls=[],decodes=[],warm=[];let preload,manualOptions;
+  const context=vm.createContext({AbortController,window:{addEventListener(){},IntersectionObserver:class{},
+    __TAURI__:{core:{invoke:async(command,args)=>{calls.push({command,...args});return {cached:true,path:'inlay.webp'};}}},
+    OpenCabinetManualCovers:{create:options=>{manualOptions=options;return {warm:ids=>warm.push(Array.from(ids))};}},
+    OpenCabinetCovers:{...api,createDecoder:()=>async(url,signal,persist,options)=>{decodes.push(options);return {width:1000,height:800,close(){}};},
+      createLoader:(root,cache,options)=>{preload=options;return {};}}}});
+  vm.runInContext(fs.readFileSync(path.join(__dirname,'../src/main.js'),'utf8'),context);
+  vm.runInContext(`allGames=[{id:1,title:'A',platform:'Sega Dreamcast',images:[{kind:'cover',path:'front.jpg'},{kind:'inlay',path:'inside.jpg'}],
+      regions:[{game:{id:2,platform:'Dreamcast',images:[{kind:'inlay',path:'region.jpg'}]}}]},
+    {id:3,title:'B',platform:'Sony Playstation 2',images:[{kind:'inlay',path:'other.jpg'}]}];
+    imageSource=path=>path;createCatalogCoverLoader({});`,context);
+  assert.deepEqual(Array.from(preload.paths),['front.jpg','inside.jpg','region.jpg']);assert.deepEqual(warm,[[1,2]]);
+  assert.equal(manualOptions.cache,vm.runInContext('catalogCoverCache',context));assert.equal(manualOptions.disk,true);
+  await vm.runInContext(`catalogCoverCache.load('inside.jpg',new AbortController().signal)`,context);
+  assert.equal(calls[0].previewKind,'inlay');assert.equal(decodes[0].fullCover,true);
+  await manualOptions.lookup('manual.pdf','left');assert.equal(calls.at(-1).previewKind,'manual_left');
+});

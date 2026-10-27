@@ -9,8 +9,14 @@ disponibles, se utiliza el visor anterior.
 los OBJ de `_modelos/Dreamcast` a `src/models/dreamcast/case.json` y `case.bin`.
 También se ejecuta antes de iniciar o compilar Tauri. Los archivos originales y
 los generados están ignorados por Git: esta prueba utiliza el modelo local, sin
-publicarlo. Se conserva `insidecase.png` como textura local del inserto fijo;
-sus UV sólo muestran la franja Dreamcast, no el dibujo interior del juego de ejemplo.
+publicarlo. Los insertos de reemplazo `insert.webp` (negro) e `insert2.webp`
+(blanco) se colocan en `src/models/dreamcast/`. Son imágenes estrechas completas:
+se usan todas sus UV, sin el recorte del antiguo `insert.png`. El preparador
+no las genera ni las sobrescribe, y ya no copia `insidecase.png`.
+El inserto conserva la altura del papel y la proporción original de la imagen.
+Su borde izquierdo queda fijo; el ancho que supere la columna acrílica se
+extiende hacia el interior de la caja. El ajuste también respeta dimensiones
+personalizadas y no modifica la geometría compartida entre visores.
 
 Los OBJ 7, 9, 10 y 12 contienen la misma geometría; sólo se utiliza una copia.
 La conversión conserva los conjuntos de base y tapa del OBJ, reconstruye los
@@ -42,7 +48,17 @@ Si es un escaneo desplegado, se pliegan también sus franjas laterales. Sus UV
 crecen de izquierda a derecha mirando el interior, al contrario de la imagen
 exterior. El inserto Dreamcast fijo de ejemplo se oculta sólo después de cargar
 correctamente el inlay del juego. Sin inlay, o con un archivo ilegible, se
-mantienen el papel blanco y el inserto anterior. Los JPG de `_modelos` sirven
+mantiene el fondo de papel blanco y se elige un inserto según la banda izquierda
+de la portada: blanco únicamente si se reconoce una franja blanca continua y
+distinta del dibujo; negro si es negra, de otro color, ambigua o no hay portada.
+Ambos lomos interiores sin inlay toman también ese color. La detección lee
+cuatro bloques de 2 × 2 píxeles al 1,5 % del ancho, a distintas alturas, sin
+reducir la portada ni mezclar la franja curva con el dibujo. Tolera un bloque
+ilegible y compara puntos interiores para descartar una imagen totalmente
+blanca. Analiza primero la miniatura y luego la portada final;
+en cubiertas completas sólo analiza la zona frontal. Si el manual sustituye la
+portada, analiza su primera página. Un inlay válido siempre tiene prioridad y
+conserva sus imágenes originales en el interior. Los JPG de `_modelos` sirven
 únicamente como referencias de prueba, no se asignan a la biblioteca.
 
 Se mantienen apertura, giro libre, bloqueos de ejes, rueda, teclado, zoom,
@@ -54,6 +70,13 @@ se prepara una única imagen adicional para la contraportada del manual: la
 escaneo por pliegos. Se conserva para las aperturas siguientes y se libera al
 cambiar de juego. El resto de las páginas sigue perteneciendo al lector bajo demanda.
 
+El inlay y la primera página del manual también pueden aparecer desde la
+[caché de vistas previas](cover-cache.md) antes de sus originales. Las imágenes
+prestadas por la caché se copian antes de usarse como textura, para que una
+expulsión del LRU no vacíe la caja. Las respuestas atrasadas respetan tanto la
+selección actual como la prioridad de una original ya cargada. La miniatura
+del PDF nunca sustituye el objeto del manual que necesita el lector.
+
 El conjunto del manual (portada, contraportada y páginas) se desplaza hacia la
 izquierda hasta alinear su centro con el del disco, unos 2 mm en este modelo.
 Es una corrección del modelo, independiente del tamaño del visor y del zoom.
@@ -64,11 +87,69 @@ tonemapping. El acrílico conserva iluminación y reflejos, con opacidad base de
 material anterior. La comparación en navegador con un PDF de color uniforme
 dio RGB original `(153, 26, 51)` y RGB visible `(147, 30, 53)` bajo el acrílico.
 
+## Lectura del relieve interior
+
+La luz ambiente se reduce y una luz lateral de apoyo recorta los cantos. El
+acrílico combina reflexión de Fresnel con refracción del dibujo que tiene
+detrás, usando un índice de refracción de 1,49. Las paredes y los desniveles
+moldeados desvían la imagen más que las láminas planas: su recorrido óptico
+varía entre 0,65 y 1,95 mm según la normal local. No es un contorno luminoso.
+La reflexión cambia con el ángulo de observación y toma el color del entorno.
+Las láminas planas mezclan muy poca imagen refractada, conservando la nitidez
+y los colores de la impresión original. Los colores de caja personalizados
+se aplican como absorción del material. El cálculo se hace en el shader de la
+GPU, sin recorrer caras en JavaScript ni modificar el modelo.
+
+Algunas caras interiores del OBJ tienen normales opuestas a su orientación
+geométrica. Orientar la normal de la interfaz óptica hacia la cámara antes de
+calcular Fresnel y refracción; de lo contrario se vuelven completamente
+reflectantes y ocultan la impresión con una superficie gris. Las franjas
+estriadas conservan su material y su mapa de relieve independientes.
+
+Al abrir la caja, paredes y trabas proyectan sombras de contacto suaves sobre
+el inlay y el reverso del manual, mediante
+[ShadowMaterial](https://threejs.org/docs/pages/ShadowMaterial.html). Sólo se
+usan sus caras elevadas y laterales como emisores de sombra: el papel y las
+láminas transparentes completas no se convierten en obstáculos opacos.
+Las superficies receptoras respetan la profundidad del disco, y la sombra del
+manual se oculta al retirarlo. No se cambia la geometría visible del modelo.
+
+El mapa de sombras es de 2048 × 2048 y se actualiza al girar, abrir o cambiar
+las dimensiones de la caja. Se reutiliza al hacer zoom, redimensionar el visor
+o terminar de cargar una imagen. Las sombras interiores se ocultan con la caja
+cerrada y sus recursos se liberan al destruir el visor. No hay bucle en reposo.
+
+Usar `PCFShadowMap` desde el primer cuadro; Three.js 0.186.1 ya no admite
+`PCFSoftShadowMap`. Inicializar también el mapa de profundidad en ese cuadro,
+aunque la caja esté cerrada y los emisores ocultos. Si se posterga hasta abrir,
+los materiales pueden recibir una textura de reemplazo incompatible con el
+muestreador PCF, provocando `GL_INVALID_OPERATION` y la desaparición del
+acrílico. Repetir esa inicialización al restaurar el contexto WebGL. Al revisar
+sombras, comprobar la transición animada de cerrada a abierta, además de la
+pose abierta inicial, y revisar también las advertencias WebGL de la consola.
+
 El visor dibuja cuando cambian la vista, las imágenes o el tamaño, y durante
 la animación de apertura. No mantiene un bucle de renderizado en reposo. El
-acrílico usa transparencia y reflejos de entorno sin pasadas de refracción.
+acrílico reutiliza el búfer de transmisión que ya necesitaba el centro del
+disco, a media resolución. Sólo consulta una muestra por fragmento para la
+refracción; las superficies planas conservan la impresión a resolución original.
 Al cambiar a otra plataforma se libera el contexto WebGL; las respuestas
 atrasadas no pueden reemplazar el juego seleccionado.
+
+`tests/three-optics.test.cjs` comprueba en WebGL real que los relieves desvíen
+un patrón sin sombras, que no se decolore la impresión y que las normales
+invertidas no provoquen errores. Es opcional: requiere `playwright-core`, los
+archivos preparados de Three.js y Chromium (ruta configurable mediante
+`OPENCABINET_CHROMIUM`). No necesita los modelos privados ni imágenes de juegos.
+
+Los pliegues incorporan también una dispersión suave blanquecina, limitada a
+las paredes moldeadas. Crece con el recorrido óptico del material y se acumula
+al verse varias interfaces superpuestas. Usa iluminación indirecta con un
+suelo ambiental tenue, sin depender de que un reflejo especular o una luz
+directa coincida con el borde. No se aplica a las láminas planas sobre la
+carátula. Es una aproximación local a las capas del plástico, no un trazado de
+rayos entre todos los sólidos. La prueba WebGL verifica por separado este
+efecto con reflejos y luces directas desactivados, incluyendo dos capas cercanas.
 
 ## Estriado del acrílico
 

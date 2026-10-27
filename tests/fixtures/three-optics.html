@@ -1,0 +1,47 @@
+<!doctype html><meta charset="utf-8"><title>Acrylic optics rendering test</title>
+<script type="module">
+import * as THREE from '/src/vendor/three/three.module.js';
+import {RoomEnvironment} from '/src/vendor/three/RoomEnvironment.js';
+import {configureAcrylicOptics} from '/src/three-box-relief.js';
+
+const renderer=new THREE.WebGLRenderer({antialias:true,preserveDrawingBuffer:true});
+renderer.setSize(640,512);renderer.setClearColor(0,0);renderer.outputColorSpace=THREE.SRGBColorSpace;
+renderer.transmissionResolutionScale=1;document.body.append(renderer.domElement);
+const scene=new THREE.Scene(),camera=new THREE.PerspectiveCamera(35,640/512,1,500);
+camera.position.set(0,0,180);camera.lookAt(0,0,0);
+const room=new RoomEnvironment(),pmrem=new THREE.PMREMGenerator(renderer);
+const environment=pmrem.fromScene(room,.04,1,100);scene.environment=environment.texture;room.dispose();pmrem.dispose();
+const scan=document.createElement('canvas');scan.width=400;scan.height=336;
+const ctx=scan.getContext('2d');ctx.fillStyle='rgb(153,26,51)';ctx.fillRect(0,0,400,336);
+for(let y=0;y<336;y+=12)for(let x=180;x<400;x+=12){ctx.fillStyle=((x/12+y/12)%2)?'#184eb3':'#f5dfb0';ctx.fillRect(x,y,12,12);}
+const texture=new THREE.CanvasTexture(scan);texture.colorSpace=THREE.SRGBColorSpace;
+const paper=new THREE.Mesh(new THREE.PlaneGeometry(100,84),new THREE.MeshBasicMaterial({map:texture,toneMapped:false}));scene.add(paper);
+const material=new THREE.MeshPhysicalMaterial({transparent:true,depthWrite:false,side:THREE.DoubleSide});
+configureAcrylicOptics(material);material.envMap=environment.texture;material.envMapIntensity=0;
+const glass=new THREE.Group();scene.add(glass);
+const sheet=new THREE.Mesh(new THREE.BoxGeometry(100,84,.6),material);sheet.position.z=1;glass.add(sheet);
+const rimGeometry=new THREE.TorusGeometry(25,1.4,16,96);
+// The real source OBJ has inside faces whose normals oppose their winding.
+const normals=rimGeometry.attributes.normal;
+for(let i=0;i<normals.count;i++)normals.setXYZ(i,-normals.getX(i),-normals.getY(i),-normals.getZ(i));
+const rim=new THREE.Mesh(rimGeometry,material);rim.position.set(15,0,2.1);glass.add(rim);
+const gl=renderer.getContext(),glErrors=[];
+function pixels(){renderer.render(scene,camera);glErrors.push(gl.getError());const data=new Uint8Array(640*512*4);gl.readPixels(0,0,640,512,gl.RGBA,gl.UNSIGNED_BYTE,data);return data;}
+const scattered=pixels(),scatterUniform=renderer.properties.get(material).uniforms.acrylicScatterDensity;
+const defaultScatter=scatterUniform.value;
+scatterUniform.value=0;const refracted=pixels();material.thickness=0;const straight=pixels();
+let displacedPixels=0;
+for(let i=0;i<straight.length;i+=4)if(Math.abs(straight[i]-refracted[i])+Math.abs(straight[i+1]-refracted[i+1])+Math.abs(straight[i+2]-refracted[i+2])>9)displacedPixels++;
+let indirectEdgePixels=0;
+for(let i=0;i<refracted.length;i+=4)if(scattered[i]+scattered[i+1]+scattered[i+2]-refracted[i]-refracted[i+1]-refracted[i+2]>12)indirectEdgePixels++;
+material.thickness=.65;scatterUniform.value=defaultScatter;
+const secondRim=new THREE.Mesh(rimGeometry,material);secondRim.position.copy(rim.position);secondRim.position.z+=.25;glass.add(secondRim);
+const layered=pixels();let layeredEdgePixels=0;
+for(let i=0;i<scattered.length;i+=4)if(layered[i]+layered[i+1]+layered[i+2]-scattered[i]-scattered[i+1]-scattered[i+2]>12)layeredEdgePixels++;
+const probe=new THREE.Vector3(-30,-24,1).project(camera),x=Math.floor((probe.x+1)*320),y=Math.floor((probe.y+1)*256);
+const print=Array.from(refracted.slice((y*640+x)*4,(y*640+x)*4+3));
+glass.rotation.y=.5;pixels();
+window.opticsResult={displacedPixels,indirectEdgePixels,layeredEdgePixels,print,glErrors};
+new Set(glass.children.map(mesh=>mesh.geometry)).forEach(geometry=>geometry.dispose());paper.geometry.dispose();paper.material.dispose();
+material.dispose();texture.dispose();environment.dispose();renderer.dispose();renderer.forceContextLoss();
+</script>

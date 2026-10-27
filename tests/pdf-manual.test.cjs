@@ -94,6 +94,14 @@ test('Box previews request only page 1 even for long PDFs, and release PDF resou
   data.dispose(); assert.ok(app.canvases.every(canvas => !canvas.width && !canvas.height));
 });
 
+test('Background manual previews rasterize only the cropped first page at the cache resolution',async()=>{
+  const app=fixture({pages:200,width:1200,height:900});
+  const preview=await app.render({coverMode:'right',maxSide:800});
+  assert.deepEqual(app.requested,[1]);assert.equal(preview.front.height,800);assert.equal(preview.front.width,534);
+  assert.equal(preview.pageCount,200);assert.equal(preview.splitCover,true);assert.equal(app.destroyed(),1);
+  preview.dispose();assert.equal(preview.front.width,0);
+});
+
 test('A one-page PDF is rendered once and unreadable PDFs release their resources', async () => {
   const app = fixture({ pages: 1 }); const data = await app.render();
   assert.deepEqual(app.requested, [1]); assert.equal(app.canvases.length, 1); assert.equal(data.back, undefined); data.dispose();

@@ -1,7 +1,8 @@
 import * as THREE from './vendor/three/three.module.js';
 import { RoomEnvironment } from './vendor/three/RoomEnvironment.js';
-import { artworkWindow, chooseArtwork, dreamcastInsertWindows } from './three-box-artwork.js';
+import { artworkWindow, chooseArtwork, dreamcastInsertWindows, dreamcastInsertTheme, dreamcastInsertProbes } from './three-box-artwork.js';
 import { arcballPoint, lidAngle } from './three-box-motion.js';
+import { createContactShadows, configureAcrylicOptics } from './three-box-relief.js';
 
 let caseTask;
 async function caseData() {
@@ -29,8 +30,9 @@ export async function createViewer(host, options={}) {
   const environment=new RoomEnvironment(),pmrem=new THREE.PMREMGenerator(renderer);
   const environmentTarget=pmrem.fromScene(environment,.04,1,100);
   scene.environment=environmentTarget.texture;environment.dispose();pmrem.dispose();
-  scene.add(new THREE.HemisphereLight(0xeaf2ff,0x768090,2));
-  const keyLight=new THREE.DirectionalLight(0xffffff,2.2);keyLight.position.set(-150,220,300);scene.add(keyLight);
+  scene.add(new THREE.HemisphereLight(0xeaf2ff,0x566377,.65));
+  const keyLight=new THREE.DirectionalLight(0xfff7ed,3.2);keyLight.position.set(-180,100,200);scene.add(keyLight);
+  const rimLight=new THREE.DirectionalLight(0xdceaff,1.6);rimLight.position.set(180,-60,-80);scene.add(rimLight);
   const root=new THREE.Group(),contents=new THREE.Group(),lid=new THREE.Group(),base=new THREE.Group();
   root.add(contents);contents.add(base,lid);scene.add(root);
   const pivot=new THREE.Vector3(...manifest.hinge);lid.position.copy(pivot);
@@ -40,6 +42,7 @@ export async function createViewer(host, options={}) {
     side:THREE.DoubleSide,envMapIntensity:.8});
   const ribs=acrylic.clone();
   ribs.opacity=.22;ribs.roughness=.22;ribs.clearcoat=.35;ribs.bumpScale=.18;
+  configureAcrylicOptics(acrylic);acrylic.envMap=scene.environment;acrylic.envMapIntensity=.45;
   // Printed paper retains the scan's sRGB colors. The clear shell supplies the
   // view-dependent highlights; it must not bleach the print with diffuse light.
   const print=(color=0xe7e4db)=>new THREE.MeshBasicMaterial({color,side:THREE.FrontSide,toneMapped:false});
@@ -72,6 +75,8 @@ export async function createViewer(host, options={}) {
     (spec.part==='lid'?lid:base).add(mesh);meshes.push(mesh);
     if(['cover','manualBack','pages'].includes(spec.material))manualMeshes.push(mesh);
   }
+  const insertMesh=meshes.find(mesh=>mesh.name==='dreamcast-insert');
+  const insertBounds=insertMesh.geometry.boundingBox;
   const coverMesh=manualMeshes.find(mesh=>mesh.material===materials.cover);
   const discMesh=meshes.find(mesh=>mesh.material===materials.disc);
   // Align the booklet with the disc beneath it, moving it left in millimetres
@@ -79,15 +84,24 @@ export async function createViewer(host, options={}) {
   const bookletOffset=discMesh.geometry.boundingBox.getCenter(new THREE.Vector3()).x
     -(coverMesh.geometry.boundingBox.getCenter(new THREE.Vector3()).x+pivot.x);
   manualMeshes.forEach(mesh=>mesh.position.x=bookletOffset);
-  let disposed=false,game=null,profile=null,key=null,revision=0,artController=null,manualController=null,manual=null,manualExtracted=false,manualBackTask=null;
+  const relief=createContactShadows(renderer,keyLight,{
+    rear:meshes.find(mesh=>mesh.name==='7:base:acrylic'),lidShell:meshes.find(mesh=>mesh.name==='7:lid:acrylic'),
+    paper:meshes.find(mesh=>mesh.material===materials.paper),manualBack:meshes.find(mesh=>mesh.material===materials.manualBack),
+  });relief.reset();
+  let disposed=false,game=null,profile=null,key=null,revision=0,artController=null,manualController=null,manual=null,manualExtracted=false,manualBackTask=null,manualPreviewReady=false;
   let frame=null,opened=0,openTarget=false,animation=null,zoom=1,side='front',rotationLock='free',rotation=initialRotation(),drag=null;
   let distance=400,viewportWidth=0,viewportHeight=0,layoutDirty=true,menu=null;
   const textures=new Set(),manualTextures=new Set(),listeners=[];
-  const insertTexture=new THREE.TextureLoader().load(new URL('./models/dreamcast/insert.png',import.meta.url).href,texture=>{
-    if(disposed){texture.dispose();return;}
-    texture.colorSpace=THREE.SRGBColorSpace;texture.repeat.set(146/1024,1);
-    assign('insert',texture);
-  });
+  let insertTheme='black';
+  const insertTextures={};
+  for(const [theme,file] of [['black','insert.webp'],['white','insert2.webp']]) {
+    insertTextures[theme]=new THREE.TextureLoader().load(new URL(`./models/dreamcast/${file}`,import.meta.url).href,texture=>{
+      if(disposed){texture.dispose();return;}
+      // These assets are already the complete narrow strip, not a crop of an inlay.
+      texture.colorSpace=THREE.SRGBColorSpace;
+      if(theme===insertTheme)assign('insert',texture);
+    },undefined,()=>{if(!disposed&&theme===insertTheme)selectInsert();});
+  }
   const ribsTexture=new THREE.TextureLoader().load(new URL('./models/dreamcast/ribs-height.svg',import.meta.url).href,texture=>{
     if(disposed){texture.dispose();return;}
     // Height data, not ink: alter the surface normal under the lights. Repeat
@@ -125,6 +139,7 @@ export async function createViewer(host, options={}) {
       layoutDirty=false;
     }
     root.quaternion.fromArray(rotation);camera.position.set(0,0,distance/zoom);camera.lookAt(0,0,0);
+    relief.update(opened,`${rotation.join(',')};${opened};${root.scale.toArray().join(',')}`,manualExtracted);
     renderer.render(scene,camera);
     host.dataset.triangles=String(renderer.info.render.triangles);host.dataset.drawCalls=String(renderer.info.render.calls);
   }
@@ -150,7 +165,42 @@ export async function createViewer(host, options={}) {
     const material=materials[kind],previous=material.map;
     if(previous!==texture && textures.delete(previous))previous.dispose();
     material.map=texture;material.color.set(texture?0xffffff:0xe7e4db);
+    if(kind==='insert')fitInsert(texture);
     if(!!previous!==!!texture)material.needsUpdate=true;schedule();
+  }
+  function fitInsert(texture) {
+    const image=texture?.image,width=image?.naturalWidth||image?.width,height=image?.naturalHeight||image?.height;
+    const size=insertBounds.getSize(new THREE.Vector3());
+    // Keep full height and the image's physical aspect ratio. Anchor the outer
+    // left edge, allowing extra paper width to continue inward under the tray.
+    const profileAspect=(profile?.height||125)/125/((profile?.width||142)/142);
+    const scale=width&&height?size.y*width/height*profileAspect/size.x:1;
+    if(insertMesh.scale.x!==scale){insertMesh.scale.x=scale;layoutDirty=true;}
+    insertMesh.position.x=insertBounds.min.x*(1-scale);
+  }
+  function selectInsert(theme='black') {
+    insertTheme=theme;
+    const texture=insertTextures[theme]?.image?insertTextures[theme]:insertTextures.black?.image?insertTextures.black:null;
+    assign('insert',texture);if(!texture)materials.insert.color.set(0x151515);
+    if(!materials.paper.map)for(const kind of ['paper_spine_left','paper_spine_right']) {
+      if(!materials[kind].map)materials[kind].color.set(theme==='white'?0xe7e4db:0x151515);
+    }
+  }
+  function selectInsertForCover(image,full=false) {
+    try {
+      const width=image.naturalWidth||image.width,height=image.naturalHeight||image.height;
+      if(!width||!height)return;
+      const window=artworkWindow('cover',{full,width:profile.width,depth:profile.depth});
+      const canvas=document.createElement('canvas');canvas.width=2;canvas.height=2;
+      const context=canvas.getContext('2d',{willReadFrequently:true});
+      const left=width*window.offset[0],coverWidth=width*window.repeat[0];
+      function sample([x,y]) {
+        context.clearRect(0,0,2,2);
+        context.drawImage(image,Math.min(width-2,Math.floor(left+coverWidth*x)),Math.min(height-2,Math.floor(height*y)),2,2,0,0,2,2);
+        return context.getImageData(0,0,2,2).data;
+      }
+      selectInsert(dreamcastInsertTheme(dreamcastInsertProbes.map(probe=>({edge:sample(probe.edge),inside:sample(probe.inside)}))));
+    }catch{selectInsert();}
   }
   function titleInsert() {
     const canvas=document.createElement('canvas');canvas.width=512;canvas.height=512;
@@ -161,9 +211,9 @@ export async function createViewer(host, options={}) {
     if(line)lines.push(line);lines.slice(0,9).forEach((text,index)=>context.fillText(text,256,256+(index-(Math.min(lines.length,9)-1)/2)*38,440));
     const texture=textureFor(canvas,'cover');textures.add(texture);assign('cover',texture);
   }
-  function imageAt(path,signal) {
+  function imageAt(path,signal,priority='auto') {
     return new Promise((resolve,reject)=>{
-      const image=new Image();image.crossOrigin='anonymous';image.decoding='async';
+      const image=new Image();image.crossOrigin='anonymous';image.decoding='async';image.fetchPriority=priority;
       const abort=()=>{image.src='';reject(new DOMException('Aborted','AbortError'));};
       const cleanup=()=>signal.removeEventListener('abort',abort);
       image.onload=()=>{cleanup();resolve(image);};image.onerror=()=>{cleanup();reject(Error(`Image unavailable: ${path}`));};
@@ -173,10 +223,11 @@ export async function createViewer(host, options={}) {
   async function loadArtwork(images,token) {
     const signal=artController.signal,art=chooseArtwork(images),imageTasks=new Map();
     let originalCoverReady=false;
-    function source(path){if(!imageTasks.has(path))imageTasks.set(path,imageAt(path,signal));return imageTasks.get(path);}
+    function source(path){if(!imageTasks.has(path))imageTasks.set(path,imageAt(path,signal,path===art.cover?'high':'low'));return imageTasks.get(path);}
     const current=()=>!disposed&&token===revision&&!signal.aborted;
     function showPreview(preview) {
-      if(!preview||!current()||originalCoverReady||manual)return;
+      if(!preview||!current()||originalCoverReady||manual||manualPreviewReady)return;
+      selectInsertForCover(preview,!!art.full);
       const texture=textureFor(preview,'cover',!!art.full);textures.add(texture);assign('cover',texture);
     }
     if(art.cover) {
@@ -190,13 +241,14 @@ export async function createViewer(host, options={}) {
     async function applyCover() {
       if(!art.cover)return;
       try {
-        const image=await source(art.cover);if(!current()||manual)return;
+        const image=await source(art.cover);if(!current()||manual||manualPreviewReady)return;
+        selectInsertForCover(image,!!art.full);
         originalCoverReady=true;put('cover',image,'cover',!!art.full);
       }catch(error){
         if(!current()||error.name==='AbortError')return;
         const individual=chooseArtwork(images.filter(image=>image.kind!=='box_full')).cover;
         if(art.full&&individual&&individual!==art.cover) {
-          try{const image=await source(individual);if(!current()||manual)return;originalCoverReady=true;put('cover',image,'cover');}
+          try{const image=await source(individual);if(!current()||manual||manualPreviewReady)return;selectInsertForCover(image);originalCoverReady=true;put('cover',image,'cover');}
           catch{/* Keep the preview or untextured insert. */}
         }
       }
@@ -228,26 +280,41 @@ export async function createViewer(host, options={}) {
     }
     async function applyInlay() {
       if(!art.inlay)return;
-      try {
-        const image=await source(art.inlay);if(!current())return;
+      let originalReady=false;
+      function apply(image) {
         const windows=dreamcastInsertWindows(image.naturalWidth||image.width,image.naturalHeight||image.height,{inside:true});
         put('paper',image,'inlay',false,windows.center);
+        for(const kind of ['paper_spine_left','paper_spine_right'])if(!materials[kind].map)materials[kind].color.set(0xe7e4db);
         if(windows.folded) {
           put('paper_spine_left',image,'inlay',false,windows.left);put('paper_spine_right',image,'inlay',false,windows.right);
         }
-        // The inlay itself supplies the logo under the fixed clear column.
-        meshes.find(mesh=>mesh.name==='dreamcast-insert').visible=false;schedule();
+        insertMesh.visible=false;schedule();
+      }
+      function showPreview(image) {
+        if(!image||!current()||originalReady)return;
+        // The RAM cache can evict its bitmap before the next WebGL frame.
+        const copy=document.createElement('canvas');copy.width=image.width;copy.height=image.height;
+        copy.getContext('2d').drawImage(image,0,0);apply(copy);
+      }
+      const preview=options.getCoverPreview?.(art.inlay);
+      if(preview)showPreview(preview);
+      else if(options.loadCoverPreview)Promise.resolve(options.loadCoverPreview(art.inlay,signal)).then(showPreview).catch(()=>{});
+      try {
+        const image=await source(art.inlay);if(!current())return;
+        originalReady=true;apply(image);
       }catch{/* An absent or broken inlay retains the white paper and fixed label. */}
     }
     async function applyDisc() {
       if(!art.disc)return;
       try{const image=await source(art.disc);if(current())put('disc',image,'disc');}catch{/* Keep the silver disc. */}
     }
-    // Start the full-resolution front first; smaller side images cannot starve it.
-    await applyCover();if(!current())return;
-    await Promise.all([applyRear(),applyInlay(),applyDisc()]);
+    // Prioritize the full front, while the cached inlay can already fill the tray.
+    const coverTask=applyCover(),inlayTask=applyInlay();
+    await coverTask;if(!current())return;
+    await Promise.all([applyRear(),inlayTask,applyDisc()]);
   }
   function clearManual() {
+    manualPreviewReady=false;
     manualBackTask=null;
     manualController?.abort();manualController=null;onManualDeactivate();manualExtracted=false;
     manual?.dispose();manual=null;manualTextures.forEach(texture=>texture.dispose());manualTextures.clear();
@@ -270,10 +337,17 @@ export async function createViewer(host, options={}) {
     const controller=new AbortController();manualController=controller;onManualState({status:'loading'});
     const current=()=>!disposed&&token===revision&&!controller.signal.aborted;
     try {
-      const result=await loadManual(game,controller.signal);
+      const result=await loadManual(game,controller.signal,image=>{
+        if(!image||!current()||manual)return;
+        const copy=document.createElement('canvas');copy.width=image.width;copy.height=image.height;
+        copy.getContext('2d').drawImage(image,0,0);
+        const texture=textureFor(copy,'cover');manualTextures.add(texture);assign('cover',texture);
+        manualPreviewReady=true;selectInsertForCover(copy);
+      });
       if(!current()){result?.dispose();return;}
       manual=result;
       if(result) {
+        selectInsertForCover(result.front);
         const texture=textureFor(result.front,'cover');manualTextures.add(texture);assign('cover',texture);
         // Closed cases keep page 1 only. The reverse is prepared on opening.
         onManualState({status:'ready',path:result.path,pageCount:result.pageCount,coverMode:result.coverMode});
@@ -358,20 +432,21 @@ export async function createViewer(host, options={}) {
     }else return;event.preventDefault();event.stopPropagation();
   });
   listen(canvas,'webglcontextlost',event=>{event.preventDefault();});
-  listen(canvas,'webglcontextrestored',schedule);
+  listen(canvas,'webglcontextrestored',()=>{relief.reset();schedule();});
   const resize=new ResizeObserver(()=>{layoutDirty=true;closeMenu();schedule();});resize.observe(host);
   const api={
     update(nextGame,images,settings=null) {
       const nextProfile=globalThis.OpenCabinet3D.profileFor(nextGame.platform,null,nextGame.rom_path,globalThis.OpenCabinet3D.resolveSettings(settings,nextGame.box_3d));
       const nextKey=JSON.stringify([nextGame.id,nextGame.title,images,nextProfile]);if(disposed||nextKey===key)return;
       const changed=game?.id!==nextGame.id;api.clear();key=nextKey;game=nextGame;profile=nextProfile;
+      fitInsert(materials.insert.map);
       if(changed){rotation=initialRotation();side='front';zoom=1;opened=0;openTarget=false;animation=null;}
       host.dataset.format=profile.id;host.dataset.variant='dreamcast';host.dataset.rotationLock=rotationLock;
       host.setAttribute('aria-label',globalThis.OpenCabinetI18n.t('msg.c8c86a39c7',game.title));
       const resolved=globalThis.OpenCabinet3D.resolveSettings(settings,game.box_3d);
       const style=resolved?.regions?.[globalThis.OpenCabinet3D.regionFor(game.rom_path)]||resolved?.base;
-      acrylic.color.set(style?.color||0xcddde5);acrylic.opacity=style?.color?.length===7 ? .11 : .035;
-      ribs.color.copy(acrylic.color);ribs.opacity=style?.color?.length===7 ? .30 : .22;
+      acrylic.attenuationColor.set(style?.color||0xe4eff6);acrylic.attenuationDistance=style?.color?.length===7 ? 3 : 120;
+      ribs.color.set(style?.color||0xcddde5);ribs.opacity=style?.color?.length===7 ? .30 : .22;
       if(!chooseArtwork(images).cover)titleInsert();
       onProfile(profile);artController=new AbortController();void loadArtwork(images,revision);void preloadManual(revision);
       layoutDirty=true;notify();schedule();
@@ -398,14 +473,14 @@ export async function createViewer(host, options={}) {
     refreshManual(){if(!game)return;revision++;artController?.abort();artController=new AbortController();clearManual();const imageList=JSON.parse(key)[2];void loadArtwork(imageList,revision);void preloadManual(revision);},
     clear(){revision++;stopDrag();closeMenu();artController?.abort();artController=null;clearManual();
       for(const kind of ['cover','back_cover','spine_left','spine_right','disc','paper','paper_spine_left','paper_spine_right'])assign(kind,null);
-      meshes.find(mesh=>mesh.name==='dreamcast-insert').visible=true;
+      meshes.find(mesh=>mesh.name==='dreamcast-insert').visible=true;selectInsert();
       textures.forEach(texture=>texture.dispose());textures.clear();game=null;key=null;
-      if(frame!==null){cancelAnimationFrame(frame);frame=null;}renderer.clear();notify();},
+      if(frame!==null){cancelAnimationFrame(frame);frame=null;}relief.reset();renderer.clear();notify();},
     dispose(){api.clear();disposed=true;resize.disconnect();listeners.forEach(([target,name,callback,config])=>target.removeEventListener(name,callback,config));
-      meshes.forEach(mesh=>mesh.geometry.dispose());new Set(Object.values(materials)).forEach(material=>material.dispose());
-      insertTexture.dispose();ribsTexture.dispose();environmentTarget.dispose();renderer.dispose();renderer.forceContextLoss();canvas.remove();host.classList.remove('game-box-webgl');
+      relief.dispose();meshes.forEach(mesh=>mesh.geometry.dispose());new Set(Object.values(materials)).forEach(material=>material.dispose());
+      Object.values(insertTextures).forEach(texture=>texture.dispose());ribsTexture.dispose();environmentTarget.dispose();renderer.dispose();renderer.forceContextLoss();canvas.remove();host.classList.remove('game-box-webgl');
       delete host.dataset.renderer;delete host.dataset.triangles;delete host.dataset.drawCalls;},
   };
-  options.debug?.({scene,renderer,camera,materials,meshes,root,lid,render:()=>schedule()});
+  options.debug?.({scene,renderer,camera,materials,meshes,root,lid,relief,render:()=>schedule()});
   return api;
 }

@@ -85,6 +85,10 @@ let logoPanelKey = null;
 let catalogCoverLoader = null;
 let catalogCoverCache = null;
 let catalogFullCoverPaths = new Set();
+let catalogInlayPaths = new Set();
+let manualCoverCache = null;
+const isDreamcastGame = game => /^(sega)?dreamcast$/.test(String(game?.platform||'').toLowerCase().replace(/[^a-z0-9]/g,''));
+const pauseManualPrefetchForScroll=()=>manualCoverCache?.pauseForScroll();
 const PREFERENCES_KEY = "opencabinet.preferences";
 const DEFAULT_PREFERENCES = { language: globalThis.OpenCabinetI18n.defaultLocale, maxCachedCovers: 400, cacheMode: "disk", cacheDirectory: "", startMaximized: true, coversOnly: false, timeFormat: "24h", combineRegionStatistics: true };
 let preferences = readPreferences();
@@ -391,6 +395,7 @@ function setupPreferences() {
       catalogCoverLoader?.dispose();
       catalogCoverLoader = null;
       if (cacheChanged) {
+        manualCoverCache?.dispose();manualCoverCache=null;
         catalogCoverCache?.dispose(); catalogCoverCache = null;
       } else catalogCoverCache?.setLimit(value);
       applyLibraryFilters();
@@ -436,6 +441,7 @@ function setupPreferences() {
   }).catch(() => {});
   window.addEventListener("beforeunload", () => {
     catalogCoverLoader?.dispose();
+    manualCoverCache?.dispose();
     catalogCoverCache?.dispose();
   });
 }
@@ -605,25 +611,40 @@ function mediaImage(path, alt, className = "", onError = null) {
 function createCatalogCoverLoader(root) {
   if (!root || !window.IntersectionObserver || !window.OpenCabinetCovers) return null;
   catalogFullCoverPaths = new Set(allGames.flatMap(game => [game, ...(game.regions || []).map(region => region.game)]).flatMap(game => gameImages(game).filter(image => image.kind === "box_full").map(image => image.path)));
+  const dreamcastGames=allGames.flatMap(game=>[game,...(game.regions||[]).map(region=>region.game)]).filter(isDreamcastGame);
+  catalogInlayPaths=new Set(dreamcastGames.flatMap(game=>gameImages(game).filter(image=>image.kind==='inlay').map(image=>image.path)));
   if (!catalogCoverCache) {
     const decode = window.OpenCabinetCovers.createDecoder();
     const cacheDirectory = preferences.cacheDirectory || null;
     let warned = false;
     const decodePath = preferences.cacheMode === "disk" ? window.OpenCabinetCovers.createPersistentDecoder({
       decode, toUrl: imageSource,
-      optionsFor: source => ({ fullCover: catalogFullCoverPaths.has(source) }),
-      lookup: source => invoke("cover_cache_entry", { source, cacheDirectory, fullCover: catalogFullCoverPaths.has(source) }),
-      store: (source, key, thumbnailBytes) => invoke("store_cover_thumbnail", { source, key, cacheDirectory, fullCover: catalogFullCoverPaths.has(source), thumbnailBytes: Array.from(thumbnailBytes) }),
+      optionsFor: source => ({ fullCover: catalogFullCoverPaths.has(source)||catalogInlayPaths.has(source) }),
+      lookup: source => invoke("cover_cache_entry", { source, cacheDirectory, fullCover: catalogFullCoverPaths.has(source), ...(catalogInlayPaths.has(source)?{previewKind:'inlay'}:{}) }),
+      store: (source, key, thumbnailBytes) => invoke("store_cover_thumbnail", { source, key, cacheDirectory, fullCover: catalogFullCoverPaths.has(source), ...(catalogInlayPaths.has(source)?{previewKind:'inlay'}:{}), thumbnailBytes: Array.from(thumbnailBytes) }),
       onError: error => {
         if (!warned) { warned = true; console.warn("Caché de portadas:", error); showToast(globalThis.OpenCabinetI18n.t("msg.44b28132ce"), true); }
       },
-    }) : Object.assign((path, signal) => decode(imageSource(path), signal, null, { fullCover: catalogFullCoverPaths.has(path) }), { dispose: () => decode.dispose() });
+    }) : Object.assign((path, signal) => decode(imageSource(path), signal, null, { fullCover: catalogFullCoverPaths.has(path)||catalogInlayPaths.has(path) }), { dispose: () => decode.dispose() });
     catalogCoverCache = window.OpenCabinetCovers.createCache(preferences.maxCachedCovers, decodePath);
+    if(window.OpenCabinetManualCovers) {
+      manualCoverCache=window.OpenCabinetManualCovers.create({cache:catalogCoverCache,decode,toUrl:imageSource,disk:preferences.cacheMode==='disk',
+        render:(path,options)=>window.OpenCabinetManualPDF.render(path,{imageSource,...options}),
+        lookup:(source,mode)=>invoke('cover_cache_entry',{source,cacheDirectory,previewKind:`manual_${mode}`}),
+        store:(source,mode,key,bytes)=>invoke('store_cover_thumbnail',{source,cacheDirectory,previewKind:`manual_${mode}`,key,thumbnailBytes:Array.from(bytes)}),
+        getManuals:id=>invoke('get_game_manuals',{id}),
+        getCoverMode:path=>{try{return JSON.parse(window.localStorage.getItem('opencabinet.manualCoverModes')||'{}')[path]||'auto';}catch{return 'auto';}},
+        onError:error=>console.warn('Manual preview cache:',error),
+      });
+    }
   }
+  manualCoverCache?.warm(dreamcastGames.map(game=>game.id));
+  root.addEventListener?.('scroll',pauseManualPrefetchForScroll,{passive:true});
   const paths = preferences.cacheMode === "disk" ? [...allGames].sort((a, b) => a.title.localeCompare(b.title)).flatMap(game => {
     return [game, ...(game.regions || []).map(region => region.game)].flatMap(source => {
       const images = gameImages(source);
-      return [images.find(image => image.kind === "cover")?.path, images.find(image => image.kind === "box_full")?.path].filter(Boolean);
+      return [images.find(image => image.kind === "cover")?.path, images.find(image => image.kind === "box_full")?.path,
+        ...(isDreamcastGame(source)?images.filter(image=>image.kind==='inlay').map(image=>image.path):[])].filter(Boolean);
     });
   }) : [];
   return window.OpenCabinetCovers.createLoader(root, catalogCoverCache, { prefetchAll: preferences.cacheMode === "disk", paths });
@@ -921,7 +942,7 @@ function createDetailsGameBox() {
       catch { /* Keep the choice for this session if storage is unavailable. */ }
       viewer.refreshManual();
     },
-    async loadManual(game, signal) {
+    async loadManual(game, signal, onPreview) {
       const paths = await invoke("get_game_manuals", { id: game.id });
       if (signal.aborted || game.id !== gameId) throw new DOMException(globalThis.OpenCabinetI18n.t("msg.92a2872d72"), "AbortError");
       manualPaths = paths; manualSelect.replaceChildren();
@@ -932,6 +953,7 @@ function createDetailsGameBox() {
       if (!paths.includes(manualPath)) manualPath = paths[0] || null;
       manualSelect.value = manualPath || ""; manualUI();
       if (!manualPath) return null;
+      if(isDreamcastGame(game)&&manualCoverCache)return manualCoverCache.render(manualPath,{imageSource,signal,coverMode:manualCoverModes[manualPath]||'auto',onPreview});
       return window.OpenCabinetManualPDF.render(manualPath, { imageSource, signal, coverMode: manualCoverModes[manualPath] || "auto" });
     },
     onManualState(state) { manualState = state; manualUI(); },
@@ -990,7 +1012,7 @@ function createDetailsGameBox() {
         viewer.update(game, images, boxSettings);
       }).catch(error => console.error("No se pudo cargar la configuración de la caja 3D:", error));
     },
-    refreshManuals() { viewer.refreshManual?.(); },
+    refreshManuals() { if(gameId!==null)manualCoverCache?.refresh(gameId);viewer.refreshManual?.(); },
     clear() { ++request; fullscreen.close(); gameId = null; manualPath = null; manualPaths = []; manualEligible = false; manualState = { status: "none" }; settingsPlatform = null; boxSettings = null; viewer.clear(); manualUI(); },
   };
 }
@@ -3177,7 +3199,7 @@ function setupGameEditor() {
       // An image can be replaced in place. Recheck its disk signature after editing.
       const editedCover = displayGameImages(updated).find(image => image.kind === "cover")?.path;
       if (editedCover) catalogCoverCache?.invalidate(editedCover);
-      gameImages(updated).filter(image => image.kind === "box_full").forEach(image => catalogCoverCache?.invalidate(image.path));
+      gameImages(updated).filter(image => ['box_full','inlay'].includes(image.kind)).forEach(image => catalogCoverCache?.invalidate(image.path));
       updated.regions?.forEach(region => gameImages(region.game).forEach(image => catalogCoverCache?.invalidate(image.path)));
       if (variables !== null) libraryGameVariables[details.id] = variables;
       allGames.sort((a, b) => a.title.localeCompare(b.title, globalThis.OpenCabinetI18n.locale));
