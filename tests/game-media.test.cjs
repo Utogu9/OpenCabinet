@@ -626,6 +626,7 @@ test("Additional metadata catalog types download, retain their category on Save 
     { kind: "cart_back", path: "C:/temp/cart.png" },
     { kind: "game_select", path: "C:/temp/menu.png" },
     { kind: "fanart_background", path: "C:/temp/background.png" },
+    { kind: "inlay", path: "C:/temp/inlay.jpg" },
     { kind: "arcade_marquee", path: "C:/temp/marquee.png" },
   ];
   const app = mediaApp({ handlers: {

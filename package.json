@@ -12,15 +12,17 @@
   "scripts": {
     "prepare:pdf": "node scripts/prepare-pdfjs.cjs",
     "prepare:icons": "node scripts/prepare-icons.cjs",
-    "postinstall": "npm run prepare:locales && npm run prepare:pdf",
+    "postinstall": "npm run prepare:locales && npm run prepare:pdf && npm run prepare:three",
     "test": "node --test",
     "dev": "tauri dev",
     "build": "tauri build",
-    "prepare:locales": "node scripts/prepare-locales.cjs"
+    "prepare:locales": "node scripts/prepare-locales.cjs",
+    "prepare:three": "node scripts/prepare-three.mjs"
   },
   "dependencies": {
     "@tauri-apps/api": "^2.12.4",
-    "pdfjs-dist": "6.4.299"
+    "pdfjs-dist": "6.4.299",
+    "three": "0.186.1"
   },
   "devDependencies": {
     "@tauri-apps/cli": "^2.0.0"

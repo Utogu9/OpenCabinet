@@ -1,4 +1,4 @@
-// Booklet previews keep only page 1. Reading sessions render pages on demand.
+// Previews keep page 1; the back cover is optional and rendered only on demand.
 (() => {
   const isPS2 = game => /^(sony)?playstation2$|^ps2$/.test(String(game?.platform || '').toLowerCase().replace(/[^a-z0-9]/g, ''));
   const isJewelBooklet = game => /^(sony)?playstation(1)?$|^ps1?$|^(sega)?dreamcast$/.test(String(game?.platform || '').toLowerCase().replace(/[^a-z0-9]/g, ''));
@@ -32,11 +32,11 @@
     const task = pdf.getDocument({ url: imageSource(path), isEvalSupported: false, enableXfa: false,
       cMapUrl: resource('cmaps'), cMapPacked: true, standardFontDataUrl: resource('standard_fonts'),
       wasmUrl: resource('wasm'), iccUrl: resource('iccs') });
-    const canvases = []; let rendering = null, destroyed = false;
+    const canvases = []; let rendering = null, destroyed = false, disposed = false, backTask = null, backController = null, back;
     const destroy = () => { if (!destroyed) { destroyed = true; return task.destroy(); } };
     const onAbort = () => { rendering?.cancel(); Promise.resolve(destroy()).catch(() => {}); };
     signal?.addEventListener('abort', onAbort, { once: true });
-    function release() { canvases.forEach(canvas => { canvas.width = canvas.height = 0; }); }
+    function release() { disposed=true;backController?.abort();canvases.forEach(canvas => { canvas.width = canvas.height = 0; }); }
     try {
       abort(); const doc = await task.promise; abort();
       const first = await doc.getPage(1); abort();
@@ -62,7 +62,31 @@
         await rendering.promise; rendering = null; page.cleanup(); abort(); return canvas;
       }
       const front = await draw(first);
-      return { path, pageCount: doc.numPages, aspectRatio, sourceAspectRatio, splitCover, coverMode, front, dispose: release };
+      const pageCount=doc.numPages;
+      return { path, pageCount, aspectRatio, sourceAspectRatio, splitCover, coverMode, front,
+        get back() { return back; },
+        async loadBack() {
+          abort();if(disposed)throw new DOMException(globalThis.OpenCabinetI18n.t("msg.92a2872d72"),'AbortError');
+          if(back)return back;
+          if(backTask)return backTask;
+          if(pageCount===1&&!splitCover)return back=front;
+          const controller=new AbortController();backController=controller;
+          const cancel=()=>controller.abort();signal?.addEventListener('abort',cancel,{once:true});
+          backTask=(async()=>{
+            let reader;
+            try {
+              reader=await open(path,{imageSource,loadLibrary,signal:controller.signal,
+                layout:splitCover?'booklet':'original',coverSide:coverSide==='left'?'left':'right'});
+              const canvas=await reader.renderPage(reader.pageCount,{maxSide:2048});
+              abort();if(disposed||controller.signal.aborted)throw new DOMException(globalThis.OpenCabinetI18n.t("msg.92a2872d72"),'AbortError');
+              // Transfer only this canvas out of the short-lived reading session.
+              // Folded scans use the opposite half of page 1, not the last scan.
+              reader.detach(canvas);canvases.push(canvas);back=canvas;return canvas;
+            } finally {reader?.dispose();signal?.removeEventListener('abort',cancel);}
+          })().catch(error=>{backTask=null;throw error;});
+          return backTask;
+        },
+        dispose: release };
     } catch (error) {
       release(); if (signal?.aborted) throw new DOMException(globalThis.OpenCabinetI18n.t("msg.92a2872d72"), 'AbortError'); throw error;
     } finally {
@@ -95,6 +119,7 @@
       const booklet = layout === 'booklet' || layout === 'nested';
       const pageCount = doc.numPages * (booklet ? 2 : 1);
       return { path, pageCount, sourcePageCount: doc.numPages, release, dispose,
+        detach(canvas) { if(!canvases.delete(canvas))throw new Error('Canvas does not belong to this PDF session.'); },
         async renderPage(number, { signal: pageSignal, maxSide = 3072 } = {}) {
           const current = () => { check(); if (disposed || pageSignal?.aborted) throw cancelled(); };
           current();

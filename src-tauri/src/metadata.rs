@@ -32,6 +32,7 @@ const GAME_IMAGE_TYPES: &[(&str, &str)] = &[
     ("Screenshot - Gameplay", "screenshot"),
     ("Screenshot - Game Title", "title_screen"),
     ("Box - Back", "back_cover"),
+    ("Box - Inlay", "inlay"),
     ("Box - Spine", "spine"),
     ("Box - 3D", "box_3d"),
     ("Box - Full", "box_full"),
@@ -2850,6 +2851,15 @@ mod tests {
         assert_eq!(image_kind("Cart - Front"), "cart_front");
         assert!(!GAME_IMAGE_TYPES.iter().any(|(_, kind)| *kind == "cart_label"));
         let selected: MediaOptions = serde_json::from_value(serde_json::json!({"selected_types": ["cart_label"]})).unwrap();
+        assert!(selected.validate().is_ok());
+    }
+
+    #[test]
+    fn inlay_images_are_classified_and_can_be_selected_for_download() {
+        assert!(valid_image_kind("inlay"));
+        assert!(valid_download_image_kind("inlay"));
+        assert_eq!(image_kind("Box - Inlay"), "inlay");
+        let selected: MediaOptions = serde_json::from_value(serde_json::json!({"selected_types": ["inlay"]})).unwrap();
         assert!(selected.validate().is_ok());
     }
 

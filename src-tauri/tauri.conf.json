@@ -5,10 +5,10 @@
   "identifier": "opencabinet",
   "build": {
     "beforeDevCommand": {
-      "script": "npm run prepare:locales && npm run prepare:pdf",
+      "script": "npm run prepare:locales && npm run prepare:pdf && npm run prepare:three",
       "wait": true
     },
-    "beforeBuildCommand": "npm run prepare:locales && npm run prepare:pdf",
+    "beforeBuildCommand": "npm run prepare:locales && npm run prepare:pdf && npm run prepare:three",
     "frontendDist": "../src"
   },
   "app": {

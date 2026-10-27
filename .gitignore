@@ -29,6 +29,11 @@ target/*
 # Generated locally from the pinned PDF.js dependency.
 src/vendor/pdfjs/
 
+# Generated WebGL runtime and local experimental models.
+src/vendor/three/
+src/models/dreamcast/
+/_modelos/
+
 # Generated from the editable language catalogs.
 src/locales/catalogs.js
 

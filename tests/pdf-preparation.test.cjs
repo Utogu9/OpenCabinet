@@ -7,7 +7,9 @@ const vm = require('./helpers/localized-vm.cjs');
 
 test('Development waits for PDF preparation before starting the live-reload server', () => {
   const config = JSON.parse(fs.readFileSync('src-tauri/tauri.conf.json','utf8'));
-  assert.equal(config.build.beforeDevCommand.script, 'npm run prepare:locales && npm run prepare:pdf');
+  const preparations=config.build.beforeDevCommand.script.split(' && ');
+  assert.ok(preparations.includes('npm run prepare:pdf'));
+  assert.ok(preparations.every(command=>command.startsWith('npm run prepare:')));
   assert.equal(config.build.beforeDevCommand.wait, true);
 });
 

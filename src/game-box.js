@@ -1055,7 +1055,7 @@
         const fallbacks = globalThis.OpenCabinetImages || globalThis.window?.OpenCabinetImages;
         if (fallbacks) nextImages = fallbacks.resolve(nextImages);
         const nextKey = JSON.stringify([nextGame.id, nextGame.title, nextGame.platform, nextGame.rom_path,
-          nextImages.filter((image) => ["box_full", "cover", "back_cover", "spine", "disc", "cart_front", "cart_back", "cart_label"].includes(image.kind)), nextSettings]);
+          nextImages.filter((image) => ["box_full", "cover", "back_cover", "inlay", "spine", "disc", "cart_front", "cart_back", "cart_label"].includes(image.kind)), nextSettings]);
         if (nextKey === key || disposed) return;
         closeMenu();
         if (game?.id !== nextGame.id) { rotation = initialRotation(); viewSide = "front"; zoom = 1; opened = 0; openTarget = false; opening = null; }
@@ -1102,7 +1102,10 @@
     };
     return api;
   }
-  globalThis.OpenCabinet3D = { resolveSettings, createViewer, profileFor, regionFor,
+  globalThis.OpenCabinet3D = { resolveSettings,
+    createViewer: (host, options = {}) => globalThis.OpenCabinetThreeBoxes
+      ? globalThis.OpenCabinetThreeBoxes.createRouter(host, options, createViewer, profileFor, resolveSettings)
+      : createViewer(host, options), profileFor, regionFor,
     formats: Object.entries(formats).map(([id, [width, height, depth, label]]) => ({ id, width, height, depth, label })),
     math: { multiply, axisAngle, between, matrix, rotate } };
 })();

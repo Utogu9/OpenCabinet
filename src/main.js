@@ -44,6 +44,7 @@ const GAME_IMAGE_TYPES = [
   ["screenshot", globalThis.OpenCabinetI18n.t("msg.4bcfbfa89f")],
   ["title_screen", globalThis.OpenCabinetI18n.t("msg.35923bef63")],
   ["back_cover", globalThis.OpenCabinetI18n.t("msg.2848e11aaf")],
+  ["inlay", globalThis.OpenCabinetI18n.t("image.kind.inlay")],
   ["spine", globalThis.OpenCabinetI18n.t("msg.11ac6da5f0")],
   ["box_3d", globalThis.OpenCabinetI18n.t("msg.4c03aa2d90")],
   ["box_full", globalThis.OpenCabinetI18n.t("msg.768eb3ad45")],

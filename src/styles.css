@@ -671,6 +671,9 @@ body.resizing-details * {
 }
 
 .game-box-stage.dragging { cursor: grabbing; }
+.game-box-stage.game-box-webgl { perspective: none; }
+.game-box-webgl > canvas { position: absolute; inset: 0; width: 100%; height: 100%; z-index: 1; display: block; }
+.game-box-webgl::after { display: none; }
 #game-box-slot .game-box-stage { height: clamp(220px, 30vh, 280px); }
 .game-box-context-menu { position: absolute; z-index: 10; width: 210px; max-width: calc(100% - 16px);
   max-height: calc(100% - 16px); overflow-y: auto; overscroll-behavior: contain;

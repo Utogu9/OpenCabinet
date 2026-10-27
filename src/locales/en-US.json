@@ -112,6 +112,7 @@
     "msg.11ac6da5f0": "Spine",
     "msg.4c03aa2d90": "3D box (image)",
     "msg.768eb3ad45": "Full cover",
+    "image.kind.inlay": "Inlay (inside cover)",
     "msg.310ed124f1": "Reconstructed front cover",
     "msg.577185c50b": "Reconstructed back cover",
     "msg.36b12eff47": "Cartridge: front",

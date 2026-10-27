@@ -6,7 +6,7 @@ const vm = require('./helpers/localized-vm.cjs');
 
 function fixture({ pages = 37, width = 400, height = 600, failure, wait, draw } = {}) {
   const canvases = [], requested = [], argumentsList = []; let destroyed = 0, cleaned = 0;
-  const context = vm.createContext({ URL, DOMException, document: {
+  const context = vm.createContext({ URL, DOMException, AbortController, document: {
     baseURI: 'http://tauri.localhost/index.html',
     createElement(tag) {
       assert.equal(tag, 'canvas'); const canvas = { width: 0, height: 0, getContext() { return { canvas }; } };
@@ -30,6 +30,38 @@ function fixture({ pages = 37, width = 400, height = 600, failure, wait, draw } 
     open: (options = {}) => context.OpenCabinetManualPDF.open('C:/manual.pdf', { imageSource: value => 'asset:' + value, loadLibrary: async () => library, ...options }),
     render: (options = {}) => context.OpenCabinetManualPDF.render('C:/manual.pdf', { imageSource: value => 'asset:' + value, loadLibrary: async () => library, ...options }) };
 }
+
+test('The back preview loads only the final page on demand and owns its canvas until disposal',async()=>{
+  const app=fixture({pages:37}),data=await app.render();
+  assert.deepEqual(app.requested,[1]);assert.equal(data.back,undefined);
+  const [a,b]=await Promise.all([data.loadBack(),data.loadBack()]);
+  assert.equal(a,b);assert.equal(data.back,a);assert.deepEqual(app.requested,[1,37]);
+  assert.equal(app.destroyed(),2);assert.ok(a.width>0);assert.ok(data.front.width>0);
+  assert.equal(await data.loadBack(),a);assert.deepEqual(app.requested,[1,37]);
+  data.dispose();assert.equal(a.width,0);assert.equal(data.front.width,0);
+  await assert.rejects(data.loadBack(),error=>error.name==='AbortError');
+});
+
+test('A folded back preview uses the opposite half of the first scan, not the last physical scan',async()=>{
+  for(const coverMode of ['right','left']) {
+    const draws=[],app=fixture({pages:12,width:800,height:600,draw:(page,options)=>{draws.push(options);return Promise.resolve();}});
+    const data=await app.render({coverMode});await data.loadBack();
+    assert.deepEqual(app.requested,[1,1]);assert.equal(draws.length,2);
+    assert.equal(Boolean(draws[0].transform),coverMode==='right');
+    assert.equal(Boolean(draws[1].transform),coverMode==='left');
+    data.dispose();
+  }
+});
+
+test('A single-page manual reuses its sole page and pending back previews cannot survive disposal',async()=>{
+  const single=fixture({pages:1}),one=await single.render();assert.equal(await one.loadBack(),one.front);
+  assert.deepEqual(single.requested,[1]);one.dispose();
+  let finish;
+  const app=fixture({pages:7,draw:page=>page===7?new Promise(resolve=>{finish=resolve;}):Promise.resolve()}),data=await app.render();
+  const back=data.loadBack();while(!finish)await new Promise(resolve=>setImmediate(resolve));
+  data.dispose();finish();await assert.rejects(back,error=>error.name==='AbortError');
+  assert.equal(data.back,undefined);assert.ok(app.canvases.every(canvas=>canvas.width===0));
+});
 
 test('PS2 booklet dimensions preserve page proportions and fit the inside of the case', () => {
   const { api } = fixture(); const profile = { width: 135, height: 190 };

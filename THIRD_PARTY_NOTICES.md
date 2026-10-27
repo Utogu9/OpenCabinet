@@ -15,6 +15,7 @@ Those dependencies may include additional components with their own notices.
 | [Tauri](https://github.com/tauri-apps/tauri), its CLI, build tools and API | Desktop application framework | MIT OR Apache-2.0 |
 | [Tauri opener plugin](https://github.com/tauri-apps/plugins-workspace) | Open files and locations using the operating system | MIT OR Apache-2.0 |
 | [PDF.js](https://github.com/mozilla/pdf.js) | Local PDF manual rendering | Apache-2.0; bundled resources have additional notices |
+| [Three.js](https://github.com/mrdoob/three.js) | Experimental WebGL Dreamcast case viewer | MIT |
 | [rusqlite](https://github.com/rusqlite/rusqlite) | SQLite access | MIT |
 | [SQLite](https://www.sqlite.org/copyright.html) | Library and catalog databases | Public domain |
 | [serde](https://github.com/serde-rs/serde), [serde_json](https://github.com/serde-rs/json) | Serialization | MIT OR Apache-2.0 |

@@ -2255,6 +2255,24 @@ mod game_edit_tests {
     }
 
     #[test]
+    fn inlay_survives_portable_save_and_manifest_serialization() {
+        let directory = MediaDirectory::new();
+        let root = directory.0.join("library");
+        let original = directory.image("inlay.png");
+        let mut conn = database();
+        let mut edit = details();
+        edit.images = Some(vec![GameImage { path: original.clone(), kind: "inlay".into() }]);
+        let saved = save_game_with_media(&mut conn, edit, &root).unwrap();
+        assert_eq!(saved.images[0].kind, "inlay");
+        assert!(Path::new(&saved.images[0].path).is_file());
+        assert!(Path::new(&original).is_file());
+        assert_eq!(read_game_images(&conn, 1).unwrap()[0].kind, "inlay");
+        let collection_dir: String = conn.query_row("SELECT directory FROM media_collections WHERE id=(SELECT media_collection_id FROM games WHERE id=1)", [], |row| row.get(0)).unwrap();
+        let manifest: serde_json::Value = serde_json::from_slice(&fs::read(root.join(collection_dir).join("manifest.json")).unwrap()).unwrap();
+        assert_eq!(manifest["images"][0]["kind"], "inlay");
+    }
+
+    #[test]
     fn removing_images_updates_the_cover_and_survives_schema_initialization() {
         let directory = MediaDirectory::new();
         let root = directory.0.join("library");
