@@ -100,7 +100,7 @@ let escapeDismissalReady = false;
 let libraryLoading = false, libraryLoadError = false, initialLibraryLoad = null;
 
 function validCoverLimit(value) {
-  return Number.isInteger(value) && value >= 1 && value <= 2000;
+  return Number.isInteger(value) && value >= 1 && value <= 99999;
 }
 
 function readPreferences() {
@@ -469,7 +469,6 @@ function setupAppUpdates() {
       check.hidden = ['downloading', 'installing'].includes(state.phase);
       install.hidden = !state.update;
       install.disabled = active || !state.update?.install_allowed;
-      document.getElementById('btn-accept-about').disabled = appUpdates?.busy || false;
       document.getElementById('btn-close-about').disabled = appUpdates?.busy || false;
       const keys = { idle: 'update.hint', checking: 'update.checking', current: 'update.current',
         available: 'update.available', downloading: 'update.downloading', installing: 'update.installing', error: 'update.checkFailed' };
@@ -502,7 +501,7 @@ function setupAbout() {
     }
     dialog.showModal();
     appUpdates?.refresh();
-    document.getElementById("btn-accept-about").focus();
+    document.getElementById("btn-close-about").focus();
     const version = document.getElementById("about-version");
     try { version.textContent = globalThis.OpenCabinetI18n.t("msg.584ed1896d", await window.__TAURI__.app.getVersion()); }
     catch { version.textContent = ""; }
@@ -510,7 +509,10 @@ function setupAbout() {
   const close = () => { if (!appUpdates?.busy) dialog.close(); };
   dialog.addEventListener('cancel', event => { if (appUpdates?.busy) event.preventDefault(); });
   document.getElementById("btn-close-about").addEventListener("click", close);
-  document.getElementById("btn-accept-about").addEventListener("click", close);
+  document.getElementById("btn-project-github").addEventListener("click", async () => {
+    try { await invoke("plugin:opener|open_url", { url: "https://github.com/Utogu9/OpenCabinet" }); }
+    catch (reason) { showToast(String(reason), true); }
+  });
   dialog.addEventListener("close", () => button.focus());
   setupModalBackdropClose(dialog, close);
 }

@@ -174,7 +174,10 @@ test("About opens from the menu, shows the installed version and closes without 
   assert.equal(instance.get("about-dialog").open, true);
   assert.equal(instance.get("about-version").textContent, "Versión 1.2.3");
   assert.equal(instance.get("dropdown-tools-menu").classList.contains("show"), false);
-  instance.get("btn-accept-about").handlers.click();
+  assert.equal(instance.get("btn-close-about").focused, true);
+  await instance.get("btn-project-github").handlers.click();
+  assert.equal(instance.calls.find(call => call.command === "plugin:opener|open_url").args.url, "https://github.com/Utogu9/OpenCabinet");
+  instance.get("btn-close-about").handlers.click();
   assert.equal(instance.get("about-dialog").open, false);
   assert.equal(instance.get("btn-open-about").focused, true);
   assert.equal(instance.storage.size, 0);
@@ -361,12 +364,25 @@ test("A pending data restart cannot discard unsaved display preferences", async 
 test("Invalid preferences cannot replace the saved limit", async () => {
   const instance = app(); await instance.open();
   instance.get("preference-cache-mode").value = "ram";
-  for (const value of ["", "abc", 0, -1, 1.5, 2001, Infinity]) {
+  for (const value of ["", "abc", 0, -1, 1.5, 100000, Infinity]) {
     await instance.save(value);
     assert.equal(instance.get("preferences-dialog").open, true);
     assert.equal(instance.get("preferences-error").classList.contains("hidden"), false);
     assert.equal(instance.storage.size, 0);
     assert.equal(instance.evaluate("preferences.maxCachedCovers"), 400);
+  }
+});
+
+test("RAM thumbnail limits above 2000 persist up to 99999", async () => {
+  const instance = app(); await instance.open();
+  instance.get("preference-cache-mode").value = "ram";
+  for (const limit of [2001, 99999]) {
+    await instance.save(limit);
+    assert.equal(instance.get("preferences-dialog").open, false);
+    const restarted = app(instance.storage); await restarted.open();
+    assert.equal(restarted.evaluate("preferences.maxCachedCovers"), limit);
+    assert.equal(restarted.get("preference-cover-limit").value, String(limit));
+    await instance.open();
   }
 });
 

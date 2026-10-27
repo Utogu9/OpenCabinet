@@ -10,7 +10,7 @@ El botón **Acerca de** de la barra de menú abre la información de OpenCabinet
 
 Ambas elecciones se guardan localmente junto con las preferencias de la biblioteca. Las configuraciones guardadas por versiones anteriores conservan el límite de caché y reciben los valores predeterminados de las nuevas opciones.
 
-En **Opciones → Preferencias** se configura el máximo de portadas en caché (400 de forma predeterminada, entre 1 y 2000). La elección se guarda localmente y se aplica al guardar, también después de reiniciar.
+En **Opciones → Preferencias** se configura el máximo de portadas en caché (400 de forma predeterminada, entre 1 y 99999). La elección se guarda localmente y se aplica al guardar, también después de reiniciar.
 
 Al seleccionar una plataforma, Todo o una búsqueda, OpenCabinet prepara miniaturas en orden alfabético hasta completar ese límite. Las portadas visibles tienen prioridad. Cuando hay más juegos que espacio disponible, se reemplazan las miniaturas menos usadas, priorizando conservar las visibles. La precarga no recorre indefinidamente toda la colección.
 

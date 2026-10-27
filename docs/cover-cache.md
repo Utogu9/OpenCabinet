@@ -3,9 +3,9 @@
 En **Opciones → Preferencias → Datos de usuario** se puede elegir entre:
 
 - **Disco (predeterminado):** conserva miniaturas WebP con calidad del 90 % de hasta 320 × 400 píxeles en `data/cache/covers-v2`. Prepara todas las portadas de la biblioteca en segundo plano, sin límite de archivos. Prioriza la vista actual, con dos trabajos simultáneos y pausas durante el desplazamiento. Una caché adicional en RAM mantiene fluida la navegación; su límite es configurable y vale 400 miniaturas decodificadas por defecto.
-- **Solo RAM:** no consulta ni escribe la caché en disco. Conserva el límite configurable de 1 a 2000 portadas (400 por defecto); al cerrar OpenCabinet se libera la memoria.
+- **Solo RAM:** no consulta ni escribe la caché en disco. Conserva el límite configurable de 1 a 99999 portadas (400 por defecto); al cerrar OpenCabinet se libera la memoria.
 
-El campo **Máximo de miniaturas en RAM** está disponible en ambos modos, entre 1 y 2000. Cuenta portadas, cubiertas completas, inlays y vistas previas de manuales decodificadas, dentro de una misma caché compartida. Se aplica al guardar sin reiniciar. En modo disco no limita los archivos persistentes: se sigue preparando toda la biblioteca.
+El campo **Máximo de miniaturas en RAM** está disponible en ambos modos, entre 1 y 99999. Cuenta portadas, cubiertas completas, inlays y vistas previas de manuales decodificadas, dentro de una misma caché compartida. Se aplica al guardar sin reiniciar. En modo disco no limita los archivos persistentes: se sigue preparando toda la biblioteca.
 
 La carpeta de caché puede elegirse mediante **Examinar**. La ruta personalizada y el modo se guardan junto con las preferencias existentes. Una ruta vacía utiliza `cache` dentro de la carpeta de datos activa, por lo que sigue sus cambios de ubicación. Las preferencias se aplican al guardar, sin reiniciar. Se valida que la carpeta elegida permita escribir. Al cambiar de carpeta se vuelve a preparar la caché allí; la anterior se conserva y las imágenes originales no se mueven.
 

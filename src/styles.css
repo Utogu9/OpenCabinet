@@ -1932,9 +1932,15 @@ button:disabled {
 #preferences-form .preference-help { overflow-wrap: anywhere; }
 #metadata-import-progress { width: 100%; margin-top: 8px; }
 #preferences-form .form-actions { flex-wrap: wrap; }
-#about-dialog { padding: 0; }
+#about-dialog { padding: 0; max-width: 680px; }
+.about-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+.about-actions [hidden] { display: none !important; }
+#btn-keyboard-shortcuts { margin-right: auto; }
+.about-updates-heading { display: flex; align-items: center; gap: 12px; margin-bottom: 8px; }
+.app-updates .about-updates-heading h3 { margin: 0; }
+#btn-project-github { display: grid; place-items: center; padding: 6px; }
 .about-app-name { font-size: 1.8rem; font-weight: 700; }
-.keyboard-shortcuts-dialog { width: min(720px, calc(100vw - 32px)); max-height: 85vh; overflow-y: auto; }
+.keyboard-shortcuts-dialog { width: min(720px, calc(100vw - 32px)); max-width: 720px; max-height: 85vh; overflow-y: auto; }
 .keyboard-shortcuts-dialog form { display: flex; flex-direction: column; gap: 20px; }
 .keyboard-shortcuts-list { display: grid; grid-template-columns: minmax(140px, auto) 1fr; gap: 12px 20px; align-items: baseline; }
 .keyboard-shortcuts-list dt, .keyboard-shortcuts-list dd { margin: 0; }
