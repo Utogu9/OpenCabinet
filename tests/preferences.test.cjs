@@ -64,13 +64,14 @@ test('User Data separates backups from folder settings and preserves drafts when
  const instance=app();await instance.open();
  instance.get('preferences-tab-data').handlers.click();
  instance.get('preference-cover-limit').value='800';
- instance.get('preferences-data-tab-backups').handlers.click();
- assert.equal(instance.get('preferences-data-general').classList.contains('hidden'),true);
- assert.equal(instance.get('preferences-data-backups').classList.contains('hidden'),false);
+ instance.get('preferences-tab-backups').handlers.click();
+ assert.equal(instance.get('preferences-panel-data').classList.contains('hidden'),true);
+ assert.equal(instance.get('preferences-panel-backups').classList.contains('hidden'),false);
+ assert.equal(instance.get('preferences-tab-data').classList.contains('has-active-subcategory'),true);
  assert.equal(instance.get('btn-save-preferences').classList.contains('hidden'),true);
- instance.get('preferences-data-tab-backups').handlers.keydown({key:'ArrowLeft',preventDefault(){}});
- assert.equal(instance.get('preferences-data-general').classList.contains('hidden'),false);
- assert.equal(instance.get('preferences-data-tab-general').focused,true);
+ instance.get('preferences-tab-backups').handlers.keydown({key:'ArrowUp',preventDefault(){}});
+ assert.equal(instance.get('preferences-panel-data').classList.contains('hidden'),false);
+ assert.equal(instance.get('preferences-tab-data').focused,true);
  assert.equal(instance.get('preference-cover-limit').value,'800');
  instance.get('preferences-tab-library').handlers.click();
  assert.equal(instance.get('btn-save-preferences').classList.contains('hidden'),false);
@@ -83,7 +84,7 @@ test('Embedded backup operations block closing Preferences until completion',asy
    if(command==='create_backup')return new Promise(resolve=>{finish=resolve;});
  }});
  await instance.open();instance.get('preferences-tab-data').handlers.click();
- instance.get('preferences-data-tab-backups').handlers.click();await new Promise(resolve=>setImmediate(resolve));
+ instance.get('preferences-tab-backups').handlers.click();await new Promise(resolve=>setImmediate(resolve));
  const pending=instance.get('btn-create-backup').handlers.click();await new Promise(resolve=>setImmediate(resolve));
  assert.equal(instance.get('btn-close-preferences').disabled,true);
  instance.get('btn-close-preferences').handlers.click();assert.equal(instance.get('preferences-dialog').open,true);
@@ -156,7 +157,8 @@ test("Preference categories preserve drafts, navigate by keyboard, and reveal in
     assert.equal(instance.get("preference-start-maximized").checked, false);
   }
   instance.get("preferences-tab-startup").handlers.keydown({ key: "End", preventDefault() {} });
-  assert.equal(instance.get("preferences-tab-data").focused, true);
+  assert.equal(instance.get("preferences-tab-backups").focused, true);
+  instance.get("preferences-tab-data").handlers.click();
   await instance.save(0);
   assert.equal(instance.get("preferences-panel-data").classList.contains("hidden"), false);
   instance.get("btn-cancel-preferences").handlers.click();

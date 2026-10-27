@@ -148,38 +148,17 @@ function setupPreferences() {
   let location = null, draftDirectory = "", request = 0, saving = false, choosing = false;
   let selection = null;
   let reading = null;
-  let backupsPanel = null, dataCategory = "general", preferenceCategory = "startup";
-  const dataTabs = ["general", "backups"].map(name => ({ name,
-    button: document.getElementById(`preferences-data-tab-${name}`),
-    panel: document.getElementById(`preferences-data-${name}`) }));
-  function updateSaveVisibility() { save.classList.toggle("hidden", preferenceCategory === "data" && dataCategory === "backups"); }
-  function showDataCategory(name, focus = false) {
-    if (backupsPanel?.busy) return;
-    dataCategory = name;
-    dataTabs.forEach(tab => {
-      const active = tab.name === name;
-      tab.button.setAttribute("aria-selected", String(active)); tab.button.tabIndex = active ? 0 : -1;
-      tab.panel.classList.toggle("hidden", !active);
-      if (active && focus) tab.button.focus();
-    });
-    document.getElementById("preferences-panels").scrollTop = 0;
-    updateSaveVisibility();
-    if (name === "backups") void backupsPanel?.open();
-  }
-  dataTabs.forEach((tab, index) => {
-    tab.button.addEventListener("click", () => showDataCategory(tab.name));
-    tab.button.addEventListener("keydown", event => {
-      const target = event.key === "Home" ? 0 : event.key === "End" ? dataTabs.length - 1
-        : ["ArrowRight", "ArrowLeft"].includes(event.key) ? (index + 1) % dataTabs.length : null;
-      if (target !== null) { event.preventDefault(); showDataCategory(dataTabs[target].name, true); }
-    });
-  });
-  const tabs = ["startup", "library", "metadata", "data"].map(name => ({
+  let backupsPanel = null, preferenceCategory = "startup";
+  function updateSaveVisibility() { save.classList.toggle("hidden", preferenceCategory === "backups"); }
+  const tabs = ["startup", "library", "metadata", "data", "backups"].map(name => ({
     name, button: document.getElementById(`preferences-tab-${name}`),
     panel: document.getElementById(`preferences-panel-${name}`),
   }));
   function showCategory(name, focus = false) {
+    if (backupsPanel?.busy) return;
     preferenceCategory = name; updateSaveVisibility();
+    document.getElementById("preferences-tab-data").classList.toggle("has-active-subcategory", name === "backups");
+    if (name === "backups") void backupsPanel?.open();
     document.getElementById("preferences-panels").scrollTop = 0;
     tabs.forEach(tab => {
       const active = tab.name === name;
@@ -215,7 +194,6 @@ function setupPreferences() {
       ? globalThis.OpenCabinetI18n.t("msg.8d1a55bd93", location.active_directory) : globalThis.OpenCabinetI18n.t("msg.cd9c5528d2");
     const busy = saving || choosing || !!backupsPanel?.busy;
     tabs.forEach(tab => { tab.button.disabled = busy; });
-    dataTabs.forEach(tab => { tab.button.disabled = busy; });
     metadataImport.disabled=metadataReset.disabled=busy;
     metadataCatalog.value=draftCatalog===undefined?(metadataSource?.label||globalThis.OpenCabinetI18n.t('source.default')):draftCatalog===null?globalThis.OpenCabinetI18n.t('source.default'):draftCatalog;
     browse.disabled = reset.disabled = save.disabled = !location || busy;
@@ -267,7 +245,7 @@ function setupPreferences() {
     selection = null;
     metadataSource=null;draftCatalog=undefined;
     update();
-    showDataCategory("general"); showCategory("startup");
+    showCategory("startup");
     dialog.showModal();
     tabs[0].button.focus();
     const currentRequest = ++request;
@@ -334,7 +312,7 @@ function setupPreferences() {
   document.getElementById("preferences-form").addEventListener("submit", async (event) => {
     event.preventDefault();
     if (saving || choosing || backupsPanel?.busy || !location) return;
-    if (preferenceCategory === "data" && dataCategory === "backups") { await backupsPanel?.saveSettings(); return; }
+    if (preferenceCategory === "backups") { await backupsPanel?.saveSettings(); return; }
     const value = Number(input.value);
     if (!validCoverLimit(value)) {
       showCategory("data");

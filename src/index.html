@@ -1113,6 +1113,9 @@
             <button id="preferences-tab-library" type="button" role="tab" aria-controls="preferences-panel-library" aria-selected="false" tabindex="-1"><span data-i18n="msg.c9169c12cb"></span></button>
             <button id="preferences-tab-metadata" type="button" role="tab" aria-controls="preferences-panel-metadata" aria-selected="false" tabindex="-1"><span data-i18n="source.title"></span></button>
             <button id="preferences-tab-data" type="button" role="tab" aria-controls="preferences-panel-data" aria-selected="false" tabindex="-1"><span data-i18n="msg.cf6371762e"></span></button>
+            <div class="preferences-subcategory-row" role="presentation">
+              <button id="preferences-tab-backups" class="preferences-subcategory" type="button" role="tab" aria-controls="preferences-panel-backups" aria-selected="false" tabindex="-1"><span data-i18n="backup.title"></span></button>
+            </div>
           </nav>
           <div class="game-editor-panels" id="preferences-panels">
         <section id="preferences-panel-startup" class="preferences-section" role="tabpanel" aria-labelledby="preferences-tab-startup">
@@ -1160,11 +1163,6 @@
         </section>
         <section id="preferences-panel-data" class="preferences-section hidden" role="tabpanel" aria-labelledby="preferences-tab-data">
           <h3 id="preferences-data-title"><span data-i18n="msg.cf6371762e"></span></h3>
-          <nav class="preferences-data-tabs" role="tablist" aria-label="" data-i18n-aria-label="msg.cf6371762e">
-            <button id="preferences-data-tab-general" type="button" role="tab" aria-controls="preferences-data-general" aria-selected="true" data-i18n="backup.data_general"></button>
-            <button id="preferences-data-tab-backups" type="button" role="tab" aria-controls="preferences-data-backups" aria-selected="false" tabindex="-1" data-i18n="backup.title"></button>
-          </nav>
-          <div id="preferences-data-general" class="preferences-data-page" role="tabpanel" aria-labelledby="preferences-data-tab-general">
           <div class="form-group">
             <label for="preference-data-directory"><span data-i18n="msg.86d32a06c1"></span></label>
             <div class="path-input-group">
@@ -1203,8 +1201,8 @@
             <input id="preference-cover-limit" type="number" min="1" max="2000" step="1" required aria-describedby="preference-cover-help" />
             <p id="preference-cover-help" class="preference-help"><span data-i18n="msg.e2de227f73"></span></p>
           </div>
-          </div>
-          <div id="preferences-data-backups" class="preferences-data-page hidden" role="tabpanel" aria-labelledby="preferences-data-tab-backups">
+        </section>
+        <section id="preferences-panel-backups" class="preferences-section hidden" role="tabpanel" aria-labelledby="preferences-tab-backups">
       <h3 id="backups-title" data-i18n="backup.title"></h3>
       <p class="preference-help" data-i18n="backup.help"></p>
       <label class="preference-toggle"><input id="backup-automatic" type="checkbox" /><span data-i18n="backup.enable"></span></label>
@@ -1223,7 +1221,6 @@
       <div class="form-actions">
         <button id="btn-backup-restart" class="primary-btn hidden" type="button" data-i18n="backup.restart"></button>
       </div>
-          </div>
         </section>
           </div>
         </div>

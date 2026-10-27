@@ -2,8 +2,10 @@
 
 En **Opciones → Preferencias → Datos de usuario → Copias de seguridad** se pueden
 crear y restaurar archivos `.ocbackup`, abrir su carpeta y elegir si se realizan
-copias automáticas. Es una página dentro de Datos de usuario, junto a la página
-**Carpeta y caché**, y no una ventana emergente. Se guardan en `backups`, dentro
+copias automáticas. Se accede desde el menú lateral de Preferencias: **Copias de
+seguridad** aparece con sangría debajo de **Datos de usuario**. Datos de usuario
+conserva los ajustes de carpeta y caché; las copias tienen una página propia, sin
+pestañas debajo del título ni ventana emergente. Se guardan en `backups`, dentro
 de los datos activos. Durante una operación no se puede cerrar Preferencias.
 
 Las automáticas están activadas inicialmente. Al iniciar y una vez por hora se
