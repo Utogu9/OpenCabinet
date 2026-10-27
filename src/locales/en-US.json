@@ -1354,6 +1354,10 @@
     "update.finishTasks": "Finish games, imports and downloads before updating. If you changed the data folder, restart the app first.",
     "update.releaseOnly": "Automatic installation requires a Windows x64 release build.",
     "update.checkAgain": "Check for updates again before installing.",
-    "import.direct-executable": "Do not use an emulator for this game"
+    "import.direct-executable": "Do not use an emulator for this game",
+    "import.review-add-file": "Add game…",
+    "import.review-add-folder": "Add folder…",
+    "import.review-add-busy": "Adding games…",
+    "import.review-add-error": "Could not add games: {0}"
   }
 }

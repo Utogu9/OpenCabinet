@@ -1,5 +1,15 @@
 # Importar juegos
 
+**No usar emulador para este juego** también está disponible al elegir **Varios
+juegos**. En ese caso, se elige primero un `.exe` y luego se pueden sumar otros
+con **Agregar juego…** desde la revisión. Todos permanecen en la plataforma
+elegida y se ejecutan directamente, sin modificar su emulador predeterminado.
+
+La revisión aparece aunque haya un solo juego nuevo. Permite agregar archivos
+individuales y, en importaciones emuladas, **Agregar carpeta…** para escanear
+otros directorios de la misma plataforma. Conserva los títulos corregidos,
+evita repetir rutas y permite excluir juegos antes de buscar datos e imágenes.
+
 Al importar **Un juego**, la opción **No usar emulador para este juego**, debajo
 del título del emulador, permite elegir un `.exe` y ejecutarlo directamente.
 Esto permite guardar recompilaciones en la biblioteca de su consola original.

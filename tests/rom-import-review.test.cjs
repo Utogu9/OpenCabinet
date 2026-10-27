@@ -4,7 +4,7 @@ const fs = require("node:fs");
 const vm = require('./helpers/localized-vm.cjs');
 const path = require("node:path");
 
-function importer(count, skipped = 0, importError = false) {
+function importer(count, skipped = 0, importError = false, handlers = {}) {
   class Element {
     constructor(fragment = false) {
       this.fragment = fragment;
@@ -64,6 +64,7 @@ function importer(count, skipped = 0, importError = false) {
         Channel: class {},
         invoke: async (command, args) => {
           calls.push({ command, args });
+          if (handlers[command]) return handlers[command](args);
           if (command === "scan_roms_folder") return preview;
           if (command === "prepare_disc_import") return preview;
           assert.equal(command, "import_scanned_roms");
@@ -87,11 +88,81 @@ function importer(count, skipped = 0, importError = false) {
     // in metadata-import.test.cjs.
     reviewMetadataImport = async (preview) => { reviewMetadata(preview); return null; };
   `, context);
-  return { get, calls, preview, metadataPreviews, start: () => vm.runInContext("handleExecuteScan()", context),
+  return { get, calls, preview, metadataPreviews, evaluate: code => vm.runInContext(code, context), start: () => vm.runInContext("handleExecuteScan()", context),
     busy: () => vm.runInContext("scanInProgress", context) };
 }
 
 const nextTurn = () => new Promise((resolve) => setImmediate(resolve));
+
+test('Review adds individual games and folders, preserves edited titles and skips duplicate paths', async () => {
+ let folderCalls=0;
+ const app=importer(2,0,false,{
+   select_game_file:()=>({rom_path:'D:/More/Third.iso',title:'Third'}),
+   preview_single_game:({filePath,title})=>({games:[{rom_path:filePath,title}],total_found:1,skipped_count:0}),
+   select_folder:()=> 'E:/More',
+   scan_roms_folder:()=> ++folderCalls===1 ? app.preview : {games:[{rom_path:'c:/ROMS/Game 0.iso',title:'Duplicate'},{rom_path:'E:/More/Fourth.iso',title:'Fourth'}],total_found:2,skipped_count:0},
+ });
+ const pending=app.start(); await nextTurn();
+ app.get('scan-review-list').children[0].children[0].value='Edited first';
+ await app.get('btn-review-add-file').onclick();
+ await app.get('btn-review-add-file').onclick();
+ await app.get('btn-review-add-folder').onclick();
+ assert.equal(app.get('scan-review-list').children.length,4);
+ assert.equal(app.get('scan-review-list').children[0].children[0].value,'Edited first');
+ const scan=app.calls.filter(call=>call.command==='scan_roms_folder').at(-1);
+ assert.equal(scan.args.folderPath,'E:/More'); assert.equal(scan.args.platform,'PS2');
+ app.get('btn-confirm-scan-review').onclick(); await pending;
+ assert.equal(app.preview.games.length,4); assert.equal(app.preview.games[0].title,'Edited first');
+ assert.equal(app.preview.skipped_count,2);
+ assert.equal(app.metadataPreviews[0].games.length,4);
+});
+
+test('Executable review keeps every added game on the console and hides directory scanning', async () => {
+ const app=importer(0,0,false,{
+   preview_single_game:({filePath,title,launchDirectly})=>({games:[{rom_path:filePath,title,launch_directly:launchDirectly}],total_found:1,skipped_count:0}),
+   select_game_file:()=>({rom_path:'D:/Other/Second.exe',title:'Second'}),
+ });
+ app.get('scan-launch-directly').checked=true;
+ app.get('scan-file-input').value='C:/First.exe'; app.get('scan-single-title').value='First';
+ const pending=app.start(); await nextTurn();
+ assert.equal(app.get('btn-review-add-folder').classList.contains('hidden'),true);
+ await app.get('btn-review-add-file').onclick();
+ const pick=app.calls.find(call=>call.command==='select_game_file');
+ assert.equal(pick.args.launchDirectly,true); assert.equal(pick.args.platform,'PS2');
+ app.get('btn-confirm-scan-review').onclick(); await pending;
+ const imported=app.calls.find(call=>call.command==='import_scanned_roms').args;
+ assert.equal(imported.platform,'PS2'); assert.equal(imported.preview.games.length,2);
+ assert.ok(imported.preview.games.every(game=>game.launch_directly));
+});
+
+test('Review can cancel an active addition and ignores its late response', async () => {
+ let finish;
+ const app=importer(2,0,false,{select_game_file:()=>new Promise(resolve=>{finish=resolve;})});
+ const pending=app.start(); await nextTurn();
+ const adding=app.get('btn-review-add-file').onclick(); await nextTurn();
+ assert.equal(app.get('btn-confirm-scan-review').disabled,true);
+ app.get('btn-confirm-scan-review').onclick();
+ assert.equal(app.calls.some(call=>call.command==='import_scanned_roms'),false);
+ app.get('btn-cancel-scan-review').onclick(); await pending;
+ finish({rom_path:'C:/Late.iso',title:'Late'}); await adding;
+ assert.equal(app.calls.some(call=>call.command==='preview_single_game'),false);
+ assert.equal(app.get('scan-review-list').children.length,0);
+ assert.equal(app.preview.games.length,2);
+});
+
+test('Cancelled pickers and failed additions leave review usable for retry', async () => {
+ let attempt=0;
+ const app=importer(2,0,false,{select_game_file:()=>{if(++attempt===1)return null; throw new Error('Picker failed');}});
+ const pending=app.start(); await nextTurn();
+ await app.get('btn-review-add-file').onclick();
+ assert.equal(app.get('scan-review-add-status').textContent,'');
+ assert.equal(app.get('btn-confirm-scan-review').disabled,false);
+ await app.get('btn-review-add-file').onclick();
+ assert.match(app.get('scan-review-add-status').textContent,/Picker failed/);
+ assert.equal(app.get('btn-review-add-file').disabled,false);
+ app.get('btn-confirm-scan-review').onclick(); await pending;
+ assert.equal(app.preview.games.length,2);
+});
 
 test("Two or more new games wait for review before importing", async () => {
   const app = importer(2, 3);
@@ -132,9 +203,11 @@ test("Cancelling review never calls import and allows another scan", async () =>
   assert.equal(app.calls.length, 2);
 });
 
-test("One new game skips review even if many games are already registered", async () => {
+test("One new game can be reviewed and extended even if many games are already registered", async () => {
   const app = importer(1, 20);
-  await app.start();
+  const pending = app.start(); await nextTurn();
+  assert.equal(app.get("scan-review-container").classList.contains("hidden"), false);
+  app.get("btn-confirm-scan-review").onclick(); await pending;
   assert.deepEqual(app.calls.map((call) => call.command), ["scan_roms_folder", "import_scanned_roms"]);
   assert.equal(app.get("scan-review-container").classList.contains("hidden"), true);
   assert.equal(app.busy(), false);

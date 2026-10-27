@@ -65,6 +65,7 @@ function scanner(handlers = {}) {
     renderEmulatorsTable = () => {}; updatePlatformStatistics = () => {};
     populateEmulatorPlatformDropdown = () => {}; renderPlatformsTable = () => {}; renderPlatformFilters = () => {};
     loadGames = async () => {}; reviewMetadataImport = async () => null;
+    reviewScannedGames = async () => true;
     createImportProgressTask = () => ({ running:false, finish(){}, committing(){} });
     setupScannerModal(); updateScannerEmulatorCheck();
   `);
@@ -365,7 +366,29 @@ test('Single-console executable skips emulator setup and preserves platform thro
  assert.equal(app.calls.some(c=>c.command==='add_emulator'),false);
  await app.get('btn-import-folder').fire('click');
  assert.equal(app.get('scan-launch-directly').checked,false);
- assert.equal(app.get('scan-direct-choice').classList.contains('hidden'),true);
+ assert.equal(app.get('scan-direct-choice').classList.contains('hidden'),false);
+});
+
+test('Multiple executable import starts with one file without emulator and always reaches review', async () => {
+ const app=scanner({select_game_file:()=>({rom_path:'D:/Recomps/Game.exe',title:'Game'}),preview_single_game:({filePath,title,launchDirectly})=>({games:[{rom_path:filePath,title,launch_directly:launchDirectly}],total_found:1,skipped_count:0})});
+ await app.get('btn-import-folder').fire('click'); await app.selectPlatform('PS2');
+ app.get('scan-launch-directly').checked=true; await app.get('scan-launch-directly').fire('change');
+ assert.equal(app.get('scan-folder-step').classList.contains('hidden'),true);
+ assert.equal(app.get('scan-folder-input').required,false);
+ assert.equal(app.get('scan-single-step').classList.contains('hidden'),false);
+ await app.get('btn-import-next').fire('click');
+ assert.equal(app.get('import-files-step').classList.contains('hidden'),false);
+ await app.get('btn-browse-game-file').fire('click');
+ app.evaluate('globalThis.reviewCount=0; reviewScannedGames=async preview=>{reviewCount++; return true;}');
+ await app.evaluate('handleExecuteScan()');
+ assert.equal(app.evaluate('reviewCount'),1);
+ assert.equal(app.calls.some(call=>['scan_roms_folder','add_emulator'].includes(call.command)),false);
+ const saved=app.calls.find(call=>call.command==='import_scanned_roms').args;
+ assert.equal(saved.platform,'PS2'); assert.equal(saved.preview.games[0].launch_directly,true);
+ await app.get('btn-import-back').fire('click');
+ app.get('scan-launch-directly').checked=false; await app.get('scan-launch-directly').fire('change');
+ assert.equal(app.get('scan-folder-step').classList.contains('hidden'),false);
+ assert.equal(app.get('scan-file-input').value,'');
 });
 
 test('Single-console ROM import keeps emulator requirements, extension filtering and the confirmed file',async()=>{

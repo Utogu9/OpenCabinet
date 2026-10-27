@@ -82,6 +82,8 @@ function importer(options = {}) {
     allPlatforms = [{ name: 'My Genesis' }]; allEmulators = [{ platform: 'My Genesis' }];
     getSelectedPlatformName = () => 'My Genesis'; showToast = () => {}; loadGames = async () => markLoaded();
   `, context);
+  // Single-game metadata tests begin after title review; review itself is covered separately.
+  if (count === 1) vm.runInContext("reviewScannedGames = async () => true", context);
   return { get, calls, preview, catalog, game, matches, start: () => vm.runInContext("handleExecuteScan()", context),
     evaluate: (code) => vm.runInContext(code, context),
     busy: () => vm.runInContext("scanInProgress", context), loaded: () => loaded,

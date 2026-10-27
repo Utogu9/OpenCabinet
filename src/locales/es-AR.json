@@ -1354,6 +1354,10 @@
     "update.finishTasks": "Terminá las partidas, importaciones y descargas antes de actualizar. Si cambiaste la carpeta de datos, reiniciá primero la app.",
     "update.releaseOnly": "La instalación automática requiere una versión de distribución de Windows x64.",
     "update.checkAgain": "Volvé a buscar actualizaciones antes de instalar.",
-    "import.direct-executable": "No usar emulador para este juego"
+    "import.direct-executable": "No usar emulador para este juego",
+    "import.review-add-file": "Agregar juego…",
+    "import.review-add-folder": "Agregar carpeta…",
+    "import.review-add-busy": "Agregando juegos…",
+    "import.review-add-error": "No se pudieron agregar los juegos: {0}"
   }
 }
