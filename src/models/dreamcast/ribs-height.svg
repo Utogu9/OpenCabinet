@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256">
+  <!-- Original OpenCabinet ridge pattern. Each tile ends halfway through a gap. -->
+  <defs>
+    <pattern id="ribs" width="8" height="256" patternUnits="userSpaceOnUse">
+      <rect width="8" height="256" fill="#fff"/>
+      <rect x="3" width="2" height="256" fill="#000"/>
+    </pattern>
+  </defs>
+  <rect width="256" height="256" fill="url(#ribs)"/>
+</svg>

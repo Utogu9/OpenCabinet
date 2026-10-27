@@ -1,4 +1,4 @@
-// Only Dreamcast uses WebGL in this local experiment. Other formats keep their viewer.
+// Dreamcast uses the bundled WebGL model. Other case formats use the CSS viewer.
 (() => {
   let moduleTask;
   const load = () => moduleTask ??= import('./three-box-viewer.js').catch(error => { moduleTask=null; throw error; });

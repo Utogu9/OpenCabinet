@@ -3,7 +3,7 @@ test('The Dreamcast front goes straight to its manual, with cover fallback only 
   let chromium;try{({chromium}=require('playwright-core'));}catch{t.skip('Optional browser test requires playwright-core.');return;}
   const executable=process.env.OPENCABINET_CHROMIUM||(process.platform==='win32'?'C:/Program Files/Google/Chrome/Application/chrome.exe':chromium.executablePath());
   const root=path.resolve(__dirname,'..');
-  if(!fs.existsSync(executable)||!fs.existsSync(path.join(root,'src/models/dreamcast/case.bin'))){t.skip('Chromium and the local experimental model must be available.');return;}
+  if(!fs.existsSync(executable)||!fs.existsSync(path.join(root,'src/models/dreamcast/case.bin'))){t.skip('Chromium and the bundled Dreamcast assets must be available.');return;}
   const server=http.createServer((req,res)=>{
     const file=path.resolve(root,'.'+new URL(req.url,'http://localhost').pathname);
     if(!file.startsWith(root+path.sep)){res.writeHead(403).end();return;}

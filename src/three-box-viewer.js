@@ -109,7 +109,7 @@ export async function createViewer(host, options={}) {
     texture.colorSpace=THREE.NoColorSpace;texture.wrapS=THREE.RepeatWrapping;texture.repeat.set(8,1);
     texture.anisotropy=Math.min(8,renderer.capabilities.getMaxAnisotropy());
     ribs.bumpMap=texture;ribs.alphaMap=texture;ribs.needsUpdate=true;schedule();
-  },undefined,()=>{/* Keep the clear rail if a local experimental asset is missing. */});
+  },undefined,()=>{/* Keep the clear rail if its ridge texture cannot be loaded. */});
   const raycaster=new THREE.Raycaster(),pointer=new THREE.Vector2();
   const listen=(target,name,callback,config)=>{target.addEventListener(name,callback,config);listeners.push([target,name,callback,config]);};
   function initialRotation(){return math.multiply(math.axisAngle([1,0,0],9),math.axisAngle([0,1,0],28));}

@@ -1,4 +1,5 @@
-// Prepare local WebGL assets. OBJ parsing happens here, never on game selection.
+// Bundle Three.js and validate the distributed model. Optional OBJ authoring
+// files can rebuild geometry here; they are never parsed on game selection.
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
@@ -127,22 +128,41 @@ export function convertDreamcast(directory) {
   return {manifest:{version:3,hinge:positionInCase(hinge[0],hinge[1],center[2]),dimensions:[142,125,10],meshes},binary:Buffer.concat(buffers)};
 }
 
-export function prepare() {
-  const vendor=path.join(root,'src/vendor/three');fs.mkdirSync(vendor,{recursive:true});
-  for (const file of ['three.module.js','three.core.js']) writeChanged(path.join(vendor,file),fs.readFileSync(path.join(root,'node_modules/three/build',file)));
-  writeChanged(path.join(vendor,'RoomEnvironment.js'),fs.readFileSync(path.join(root,'node_modules/three/examples/jsm/environments/RoomEnvironment.js'),'utf8').replace("from 'three'","from './three.module.js'"));
-  writeChanged(path.join(vendor,'LICENSE'),fs.readFileSync(path.join(root,'node_modules/three/LICENSE')));
-  const source=path.join(root,'_modelos/Dreamcast'),destination=path.join(root,'src/models/dreamcast');
-  if (!fs.existsSync(source)) { console.log('Dreamcast source models not present; keeping prepared assets, if any.');return; }
+function validateRuntime(directory) {
+  const missing=['case.json','case.bin','insert.webp','insert2.webp','ribs-height.svg','LICENSE-CC0.txt']
+    .filter(file=>!fs.existsSync(path.join(directory,file)));
+  if(missing.length)throw Error(`Missing bundled Dreamcast assets: ${missing.join(', ')}`);
+  const manifest=JSON.parse(fs.readFileSync(path.join(directory,'case.json'),'utf8'));
+  const length=fs.statSync(path.join(directory,'case.bin')).size;
+  if(manifest.version!==3||!Array.isArray(manifest.meshes)||!manifest.meshes.length||manifest.meshes.some(mesh=>
+    !Number.isInteger(mesh.vertexOffset)||mesh.vertexOffset<0||!Number.isInteger(mesh.vertexCount)||mesh.vertexCount<1
+    ||!Number.isInteger(mesh.indexOffset)||mesh.indexOffset<0||!Number.isInteger(mesh.indexCount)||mesh.indexCount<3
+    ||mesh.vertexOffset+mesh.vertexCount*32>length||mesh.indexOffset+mesh.indexCount*4>length)) {
+    throw Error('The bundled Dreamcast geometry is incomplete or has an unsupported format.');
+  }
+}
+
+export function prepare({projectRoot=root,dependencyRoot=path.join(projectRoot,'node_modules/three')}={}) {
+  const vendor=path.join(projectRoot,'src/vendor/three');fs.mkdirSync(vendor,{recursive:true});
+  for (const file of ['three.module.js','three.core.js']) writeChanged(path.join(vendor,file),fs.readFileSync(path.join(dependencyRoot,'build',file)));
+  writeChanged(path.join(vendor,'RoomEnvironment.js'),fs.readFileSync(path.join(dependencyRoot,'examples/jsm/environments/RoomEnvironment.js'),'utf8').replace("from 'three'","from './three.module.js'"));
+  writeChanged(path.join(vendor,'LICENSE'),fs.readFileSync(path.join(dependencyRoot,'LICENSE')));
+  const source=path.join(projectRoot,'_modelos/Dreamcast'),destination=path.join(projectRoot,'src/models/dreamcast');
   fs.mkdirSync(destination,{recursive:true});
+  const ribs=fs.readFileSync(path.join(projectRoot,'src/assets/textures/cd-case-ribs.svg'));
+  writeChanged(path.join(destination,'ribs-height.svg'),ribs);
+  if(!sourceIds.every(id=>fs.existsSync(path.join(source,`model_${id}.obj`)))) {
+    validateRuntime(destination);console.log('Using the bundled Dreamcast model.');return;
+  }
   const fingerprint=crypto.createHash('sha256').update(fs.readFileSync(fileURLToPath(import.meta.url)));
   for (const id of sourceIds) fingerprint.update(fs.readFileSync(path.join(source,`model_${id}.obj`)));
-  const ribs=fs.readFileSync(path.join(root,'src/assets/textures/cd-case-ribs.svg'));fingerprint.update(ribs);
+  fingerprint.update(ribs);
   const hash=fingerprint.digest('hex'),stamp=path.join(destination,'.source-hash');
-  if (fs.existsSync(stamp) && fs.readFileSync(stamp,'utf8')===hash && ['case.json','case.bin','ribs-height.svg'].every(file=>fs.existsSync(path.join(destination,file)))) return;
+  if (fs.existsSync(stamp) && fs.readFileSync(stamp,'utf8')===hash && ['case.json','case.bin'].every(file=>fs.existsSync(path.join(destination,file)))) {validateRuntime(destination);return;}
   const {manifest,binary}=convertDreamcast(source);
   // insert.webp and insert2.webp are supplied assets: never regenerate or overwrite them.
   writeChanged(path.join(destination,'case.bin'),binary);writeChanged(path.join(destination,'case.json'),JSON.stringify(manifest));writeChanged(path.join(destination,'ribs-height.svg'),ribs);writeChanged(stamp,hash);
+  validateRuntime(destination);
   console.log(`Dreamcast: ${manifest.meshes.length} parts, ${(binary.length/1024/1024).toFixed(2)} MiB; repeated shell OBJ files omitted.`);
 }
 if (process.argv[1] && path.resolve(process.argv[1])===fileURLToPath(import.meta.url)) prepare();

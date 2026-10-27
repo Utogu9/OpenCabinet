@@ -1,15 +1,26 @@
-# Prueba local de Dreamcast con Three.js
+# Caja de Dreamcast con Three.js
 
-La rama `experiment/threejs-boxes` usa WebGL para Dreamcast. Los otros formatos
+El visor usa WebGL para Dreamcast. Los otros formatos
 conservan el visor anterior. El lateral, la pantalla completa y las vistas
 previas comparten la selección del visor. Si WebGL o el modelo no están
 disponibles, se utiliza el visor anterior.
 
-`npm run prepare:three` prepara Three.js para funcionar sin conexión y convierte
-los OBJ de `_modelos/Dreamcast` a `src/models/dreamcast/case.json` y `case.bin`.
-También se ejecuta antes de iniciar o compilar Tauri. Los archivos originales y
-los generados están ignorados por Git: esta prueba utiliza el modelo local, sin
-publicarlo. Los insertos de reemplazo `insert.webp` (negro) e `insert2.webp`
+`src/models/dreamcast/case.json` y `case.bin` contienen la geometría preparada
+y versionada. Proviene de **Compact disc and case**, de **effe**, con licencia
+CC0; se conserva su aviso original en `src/models/dreamcast/LICENSE-CC0.txt`.
+Los créditos de la geometría y de las texturas están separados en el README
+de esa carpeta y en `THIRD_PARTY_NOTICES.md`.
+
+`npm run prepare:three` prepara la dependencia Three.js para funcionar sin
+conexión y valida los archivos del modelo incluidos en el repositorio. También
+se ejecuta antes de iniciar o compilar Tauri. No requiere `_modelos`: si están
+disponibles todos los OBJ originales en `_modelos/Dreamcast`, puede regenerar
+la geometría; si faltan o la carpeta está vacía, utiliza la versión distribuida.
+Los OBJ opcionales, la firma `.source-hash` y la antigua textura PNG de estrías
+no se versionan. Una distribución incompleta del modelo detiene la preparación
+con un error en lugar de producir una aplicación sin sus recursos.
+
+Los insertos de reemplazo `insert.webp` (negro) e `insert2.webp`
 (blanco) se colocan en `src/models/dreamcast/`. Son imágenes estrechas completas:
 se usan todas sus UV, sin el recorte del antiguo `insert.png`. El preparador
 no las genera ni las sobrescribe, y ya no copia `insidecase.png`.
@@ -140,7 +151,7 @@ atrasadas no pueden reemplazar el juego seleccionado.
 un patrón sin sombras, que no se decolore la impresión y que las normales
 invertidas no provoquen errores. Es opcional: requiere `playwright-core`, los
 archivos preparados de Three.js y Chromium (ruta configurable mediante
-`OPENCABINET_CHROMIUM`). No necesita los modelos privados ni imágenes de juegos.
+`OPENCABINET_CHROMIUM`). No necesita los OBJ originales ni imágenes de juegos.
 
 Los pliegues incorporan también una dispersión suave blanquecina, limitada a
 las paredes moldeadas. Crece con el recorrido óptico del material y se acumula

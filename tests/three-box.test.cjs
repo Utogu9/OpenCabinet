@@ -4,6 +4,7 @@ const fs=require('node:fs');
 const path=require('node:path');
 const vm=require('node:vm');
 const tick=()=>new Promise(resolve=>setImmediate(resolve));
+const hasOriginals=directory=>[0,1,2,3,4,5,6,7,8,11].every(id=>fs.existsSync(path.join(directory,`model_${id}.obj`)));
 function router(load) {
   const context=vm.createContext({console});
   vm.runInContext(fs.readFileSync(path.join(__dirname,'../src/three-box-router.js'),'utf8'),context);
@@ -53,9 +54,10 @@ test('Full covers retain contiguous UV windows; separate back and spine images e
   assert.deepEqual(artworkWindow('back_cover'),{offset:[0,0],repeat:[1,1]});assert.deepEqual(artworkWindow('spine'),{offset:[0,0],repeat:[1,1]});
   assert.equal(chooseArtwork([{kind:'cover',path:'front'},{kind:'box_full',path:'wrap'}]).cover,'wrap');
 });
-test('Prepared local geometry has one shell, a movable lid and separate UV surfaces for both spines',async t=>{
-  const source=path.join(__dirname,'../_modelos/Dreamcast');if(!fs.existsSync(source)){t.skip('Local experimental model is not distributed.');return;}
-  const {convertDreamcast,sourceIds}=await import('../scripts/prepare-three.mjs');const {manifest,binary}=convertDreamcast(source);
+test('The bundled geometry has one shell, a movable lid and separate UV surfaces for both spines',async()=>{
+  const {sourceIds}=await import('../scripts/prepare-three.mjs');
+  const directory=path.join(__dirname,'../src/models/dreamcast');
+  const manifest=JSON.parse(fs.readFileSync(path.join(directory,'case.json'),'utf8')),binary=fs.readFileSync(path.join(directory,'case.bin'));
   assert.equal(sourceIds.includes(9),false);assert.equal(sourceIds.includes(10),false);assert.equal(sourceIds.includes(12),false);
   const back=manifest.meshes.find(mesh=>mesh.material==='back_cover'),spines=['spine_left','spine_right'].map(kind=>manifest.meshes.find(mesh=>mesh.material===kind));
   assert.ok(back);assert.ok(spines.every(Boolean));assert.ok(manifest.meshes.some(mesh=>mesh.part==='lid'&&mesh.material==='acrylic'));
@@ -103,7 +105,7 @@ test('Dreamcast selects white inserts only for a distinct white front-cover band
 });
 
 test('The molded acrylic rails retain their original texture coordinates and stay attached to the lid',async t=>{
-  const directory=path.join(__dirname,'../_modelos/Dreamcast');if(!fs.existsSync(directory)){t.skip('Local experimental model is not distributed.');return;}
+  const directory=path.join(__dirname,'../_modelos/Dreamcast');if(!hasOriginals(directory)){t.skip('Optional original OBJ authoring files are not available.');return;}
   const {convertDreamcast}=await import('../scripts/prepare-three.mjs');
   const {OBJLoader}=await import('three/addons/loaders/OBJLoader.js');
   const original=new OBJLoader().parse(fs.readFileSync(path.join(directory,'model_11.obj'),'utf8')).children[0].geometry;
@@ -164,7 +166,7 @@ test('Pointer movement follows the mouse in Three.js world space and the lid ope
 });
 
 test('The supplied shell keeps complete hinge arms on the lid and the fixed column on the rear shell',async t=>{
-  const directory=path.join(__dirname,'../_modelos/Dreamcast');if(!fs.existsSync(directory)){t.skip('Local experimental model is not distributed.');return;}
+  const directory=path.join(__dirname,'../_modelos/Dreamcast');if(!hasOriginals(directory)){t.skip('Optional original OBJ authoring files are not available.');return;}
   const {shellParts,convertDreamcast,hinge}=await import('../scripts/prepare-three.mjs');
   const {OBJLoader}=await import('three/addons/loaders/OBJLoader.js');
   const {Vector3}=await import('three');
