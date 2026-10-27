@@ -220,8 +220,9 @@ export async function createViewer(host, options={}) {
       if(signal.aborted){abort();return;}signal.addEventListener('abort',abort,{once:true});image.src=imageSource(path);
     });
   }
-  async function loadArtwork(images,token) {
+  async function loadArtwork(images,token,manualTask) {
     const signal=artController.signal,art=chooseArtwork(images),imageTasks=new Map();
+    const frontReady=Promise.resolve(manualTask).catch(()=>{});
     let originalCoverReady=false;
     function source(path){if(!imageTasks.has(path))imageTasks.set(path,imageAt(path,signal,path===art.cover?'high':'low'));return imageTasks.get(path);}
     const current=()=>!disposed&&token===revision&&!signal.aborted;
@@ -230,25 +231,29 @@ export async function createViewer(host, options={}) {
       selectInsertForCover(preview,!!art.full);
       const texture=textureFor(preview,'cover',!!art.full);textures.add(texture);assign('cover',texture);
     }
-    if(art.cover) {
+    // The booklet is the front artwork when a manual exists. Do not briefly
+    // paint the game's cached/original cover while discovering or preparing it.
+    void frontReady.then(()=>{
+      if(!current()||manual||manualPreviewReady)return;
+      if(!art.cover){titleInsert();return;}
       const preview=options.getCoverPreview?.(art.cover);
       if(preview)showPreview(preview);
       else if(options.loadCoverPreview)Promise.resolve(options.loadCoverPreview(art.cover,signal)).then(showPreview).catch(()=>{});
-    }
+    }).catch(()=>{});
     function put(material,image,kind,full=false,region=null) {
       const texture=textureFor(image,kind,full,region);textures.add(texture);assign(material,texture);
     }
     async function applyCover() {
       if(!art.cover)return;
       try {
-        const image=await source(art.cover);if(!current()||manual||manualPreviewReady)return;
+        const image=await source(art.cover);await frontReady;if(!current()||manual||manualPreviewReady)return;
         selectInsertForCover(image,!!art.full);
         originalCoverReady=true;put('cover',image,'cover',!!art.full);
       }catch(error){
         if(!current()||error.name==='AbortError')return;
         const individual=chooseArtwork(images.filter(image=>image.kind!=='box_full')).cover;
         if(art.full&&individual&&individual!==art.cover) {
-          try{const image=await source(individual);if(!current()||manual||manualPreviewReady)return;selectInsertForCover(image);originalCoverReady=true;put('cover',image,'cover');}
+          try{const image=await source(individual);await frontReady;if(!current()||manual||manualPreviewReady)return;selectInsertForCover(image);originalCoverReady=true;put('cover',image,'cover');}
           catch{/* Keep the preview or untextured insert. */}
         }
       }
@@ -310,8 +315,11 @@ export async function createViewer(host, options={}) {
     }
     // Prioritize the full front, while the cached inlay can already fill the tray.
     const coverTask=applyCover(),inlayTask=applyInlay();
-    await coverTask;if(!current())return;
-    await Promise.all([applyRear(),inlayTask,applyDisc()]);
+    // The other faces wait for the front download, never for PDF rendering.
+    const otherTask=(art.cover?source(art.cover).catch(()=>{}):Promise.resolve()).then(()=>{
+      if(current())return Promise.all([applyRear(),applyDisc()]);
+    });
+    await Promise.all([coverTask,inlayTask,otherTask]);
   }
   function clearManual() {
     manualPreviewReady=false;
@@ -335,10 +343,12 @@ export async function createViewer(host, options={}) {
   async function preloadManual(token) {
     if(!loadManual)return;
     const controller=new AbortController();manualController=controller;onManualState({status:'loading'});
+    let shownPreview=null;
     const current=()=>!disposed&&token===revision&&!controller.signal.aborted;
     try {
       const result=await loadManual(game,controller.signal,image=>{
-        if(!image||!current()||manual)return;
+        if(!image||image===shownPreview||!current()||manual)return;
+        shownPreview=image;
         const copy=document.createElement('canvas');copy.width=image.width;copy.height=image.height;
         copy.getContext('2d').drawImage(image,0,0);
         const texture=textureFor(copy,'cover');manualTextures.add(texture);assign('cover',texture);
@@ -447,8 +457,7 @@ export async function createViewer(host, options={}) {
       const style=resolved?.regions?.[globalThis.OpenCabinet3D.regionFor(game.rom_path)]||resolved?.base;
       acrylic.attenuationColor.set(style?.color||0xe4eff6);acrylic.attenuationDistance=style?.color?.length===7 ? 3 : 120;
       ribs.color.set(style?.color||0xcddde5);ribs.opacity=style?.color?.length===7 ? .30 : .22;
-      if(!chooseArtwork(images).cover)titleInsert();
-      onProfile(profile);artController=new AbortController();void loadArtwork(images,revision);void preloadManual(revision);
+      onProfile(profile);artController=new AbortController();const manualTask=preloadManual(revision);void loadArtwork(images,revision,manualTask);
       layoutDirty=true;notify();schedule();
     },
     get canOpen(){return !!game;},get isOpen(){return openTarget;},get rotationLock(){return rotationLock;},
@@ -470,7 +479,7 @@ export async function createViewer(host, options={}) {
       if(onManualActivate({manual,game,origin:canvas})===false)return false;
       manualExtracted=true;manualMeshes.forEach(mesh=>mesh.visible=false);schedule();return true;},
     returnManual(){manualExtracted=false;manualMeshes.forEach(mesh=>mesh.visible=true);schedule();},
-    refreshManual(){if(!game)return;revision++;artController?.abort();artController=new AbortController();clearManual();const imageList=JSON.parse(key)[2];void loadArtwork(imageList,revision);void preloadManual(revision);},
+    refreshManual(){if(!game)return;revision++;artController?.abort();artController=new AbortController();clearManual();const imageList=JSON.parse(key)[2],manualTask=preloadManual(revision);void loadArtwork(imageList,revision,manualTask);},
     clear(){revision++;stopDrag();closeMenu();artController?.abort();artController=null;clearManual();
       for(const kind of ['cover','back_cover','spine_left','spine_right','disc','paper','paper_spine_left','paper_spine_right'])assign(kind,null);
       meshes.find(mesh=>mesh.name==='dreamcast-insert').visible=true;selectInsert();

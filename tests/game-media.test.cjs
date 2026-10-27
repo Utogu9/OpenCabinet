@@ -1219,6 +1219,19 @@ test('Wide manual previews offer a per-PDF cover override and restore the choice
   app.boxConfig().onManualCoverChange('auto');await start();assert.equal(rendered.at(-1).mode,'auto');
 });
 
+test('Selecting a Dreamcast game presents its prepared manual before waiting for the folder scan',async()=>{
+  let finishScan;const order=[];
+  const app=mediaApp({box3D:true,manualPDF:{supportsGame:()=>true},handlers:{
+    get_box_brand_images:()=>({}),get_game_manuals:()=>{order.push('scan');return new Promise(resolve=>{finishScan=resolve;});},
+  }});
+  app.evaluate(`allGames[0].platform='Sega Dreamcast';
+    manualCoverCache={showGamePreview(id,{onPreview}){onPreview({width:800});return 'C:/manual.pdf';},
+      trackGame(){},render:async path=>({path})};renderGameMedia(allGames[0]);`);
+  const result=app.boxConfig().loadManual(app.evaluate('allGames[0]'),new AbortController().signal,image=>{assert.equal(image.width,800);order.push('preview');});
+  assert.deepEqual(order,['preview','scan']);
+  finishScan(['C:/manual.pdf']);assert.equal((await result).path,'C:/manual.pdf');
+});
+
 test('Both viewers use the native Tauri window from maximized and normal states, and restore it on Escape',async()=>{
  for(const maximized of [true,false])for(const box of [true,false]){
   const nativeWindow=nativeViewerWindow(maximized);let browserCalls=0;

@@ -943,8 +943,14 @@ function createDetailsGameBox() {
       viewer.refreshManual();
     },
     async loadManual(game, signal, onPreview) {
+      if (signal.aborted || game.id !== gameId) throw new DOMException(globalThis.OpenCabinetI18n.t("msg.92a2872d72"), "AbortError");
+      if(isDreamcastGame(game)) {
+        const knownPath=manualCoverCache?.showGamePreview(game.id,{path:manualPath,signal,onPreview});
+        if(knownPath)manualPath=knownPath;
+      }
       const paths = await invoke("get_game_manuals", { id: game.id });
       if (signal.aborted || game.id !== gameId) throw new DOMException(globalThis.OpenCabinetI18n.t("msg.92a2872d72"), "AbortError");
+      if(isDreamcastGame(game))manualCoverCache?.trackGame(game.id,paths);
       manualPaths = paths; manualSelect.replaceChildren();
       paths.forEach(path => {
         const option = document.createElement("option"); option.value = path;

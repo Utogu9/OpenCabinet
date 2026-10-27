@@ -1,0 +1,22 @@
+<!doctype html><meta charset="utf-8"><title>Manual front artwork priority</title>
+<style>#stage{width:480px;height:400px}</style><div id="stage"></div>
+<script>globalThis.OpenCabinetI18n={t:key=>key};</script>
+<script src="/src/game-box.js"></script>
+<script type="module">
+import {createViewer} from '/src/three-box-viewer.js';
+const image=(size,color)=>{const canvas=document.createElement('canvas');canvas.width=canvas.height=size;const ctx=canvas.getContext('2d');ctx.fillStyle=color;ctx.fillRect(0,0,size,size);return canvas;};
+window.coverPreview=image(64,'#2255bb');window.manualPreview=image(128,'#aa2233');window.manualFront=image(256,'#aa2233');
+const original=image(512,'#2255bb').toDataURL();
+window.requests=new Map();window.frontHistory=[];window.disposals=[];let selected=0;
+window.viewer=await createViewer(document.querySelector('#stage'),{
+  debug:state=>{
+    window.debug=state;let map=state.materials.cover.map;
+    Object.defineProperty(state.materials.cover,'map',{get:()=>map,set:value=>{map=value;frontHistory.push({game:selected,width:value?.image?.width||0});}});
+  },
+  getCoverPreview:()=>coverPreview,
+  loadManual:(game,signal,onPreview)=>new Promise((resolve,reject)=>requests.set(game.id,{signal,onPreview,resolve,reject})),
+});
+window.select=id=>{selected=id;viewer.update({id,title:`Game ${id}`,platform:'Sega Dreamcast'},[{kind:'cover',path:original},{kind:'back_cover',path:original}]);};
+window.finishManual=id=>requests.get(id).resolve({path:`${id}.pdf`,front:manualFront,pageCount:4,coverMode:'auto',dispose:()=>disposals.push(id)});
+window.fixtureReady=true;
+</script>

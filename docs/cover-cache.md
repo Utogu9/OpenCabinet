@@ -41,7 +41,13 @@ entrada. Un archivo dañado se vuelve a generar y un fallo de caché no impide
 leer el manual.
 
 Al seleccionar el juego, esa primera página aparece mientras PDF.js prepara
-la versión definitiva. Una selección sin caché reutiliza ese mismo render
+la versión definitiva. Si la preparación previa ya conoce el manual del juego,
+el visor reutiliza inmediatamente sus píxeles en RAM o solicita la ruta conocida
+de la miniatura en disco, sin esperar a consultar de nuevo la carpeta ni la
+fecha del PDF. Esas comprobaciones siguen en paralelo. La portada del juego no
+se muestra provisionalmente sobre el manual mientras se resuelve su carga;
+queda como alternativa cuando no hay manual o su carga falla sin una vista previa.
+Una selección sin caché reutiliza ese mismo render
 para generar la miniatura: no abre dos veces el PDF para crear ambas versiones.
 El resto de las páginas y la contraportada siguen cargándose bajo demanda.
 En modo sólo RAM no se leen ni escriben estas carpetas, y las vistas previas

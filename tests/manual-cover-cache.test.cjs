@@ -99,3 +99,26 @@ test('A one-image RAM limit delivers a live manual preview even when a visible c
   const manual=app.bitmap('manual'),result=await app.cache.load('manual',new AbortController().signal,async()=>manual);
   assert.equal(result.closed,false);assert.equal(cover.closed,true);assert.equal(app.cache.size,1);app.cache.dispose();assert.equal(manual.closed,true);
 });
+
+test('A prepared manual appears synchronously before slow file validation or PDF rendering',async()=>{
+  const app=setup();let slow=false,finishLookup;
+  const service=app.create({lookup:(...args)=>slow?new Promise(resolve=>{finishLookup=()=>resolve({key:'v1',cached:true,path:'manual.pdf:v1:auto.webp'});}):app.config.lookup(...args)});
+  await service.render('manual.pdf',{signal:new AbortController().signal});await tick();
+  service.trackGame(7,['manual.pdf']);slow=true;
+  const signal=new AbortController().signal,shown=[];
+  assert.equal(service.showGamePreview(7,{signal,onPreview:image=>shown.push(image.label)}),'manual.pdf');
+  assert.deepEqual(shown,['manual.pdf:auto'],'game selection reuses RAM before requesting any filesystem work');
+  const selected=[];const loading=service.render('manual.pdf',{signal,onPreview:image=>selected.push(image.label)});
+  assert.deepEqual(selected,['manual.pdf:auto'],'render also delivers existing pixels before awaiting its lookup');
+  finishLookup();await loading;await tick();assert.equal(selected.length,1,'validation does not display the same preview twice');
+  service.dispose();app.cache.dispose();
+});
+
+test('An evicted prepared manual reads its known disk thumbnail without waiting for a new source lookup',async()=>{
+  const app=setup(),service=app.create();service.warm([9]);await app.runTimers(1500);await tick();
+  app.cache.setLimit(1);app.cache.put('another-cover',app.bitmap('other'));
+  const queries=app.calls.filter(call=>call[0]==='lookup').length,shown=[];
+  service.showGamePreview(9,{signal:new AbortController().signal,onPreview:image=>shown.push(image.label)});await tick();
+  assert.deepEqual(shown,['9.pdf:v1:auto.webp']);assert.equal(app.calls.filter(call=>call[0]==='lookup').length,queries);
+  service.dispose();app.cache.dispose();
+});
