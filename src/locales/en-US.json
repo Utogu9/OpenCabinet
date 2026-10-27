@@ -1358,6 +1358,9 @@
     "import.review-add-file": "Add game…",
     "import.review-add-folder": "Add folder…",
     "import.review-add-busy": "Adding games…",
-    "import.review-add-error": "Could not add games: {0}"
+    "import.review-add-error": "Could not add games: {0}",
+    "language.restart_title": "Language changed",
+    "language.restart_message": "Your language preference was saved. We recommend restarting OpenCabinet so all text appears in your chosen language.",
+    "language.restart_acknowledge": "Got it"
   }
 }

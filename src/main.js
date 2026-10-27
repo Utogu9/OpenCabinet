@@ -82,7 +82,7 @@ let catalogCoverLoader = null;
 let catalogCoverCache = null;
 let catalogFullCoverPaths = new Set();
 const PREFERENCES_KEY = "opencabinet.preferences";
-const DEFAULT_PREFERENCES = { language: "es-AR", maxCachedCovers: 400, cacheMode: "disk", cacheDirectory: "", startMaximized: true, coversOnly: false, timeFormat: "24h", combineRegionStatistics: true };
+const DEFAULT_PREFERENCES = { language: globalThis.OpenCabinetI18n.defaultLocale, maxCachedCovers: 400, cacheMode: "disk", cacheDirectory: "", startMaximized: true, coversOnly: false, timeFormat: "24h", combineRegionStatistics: true };
 let preferences = readPreferences();
 const launchingGames = new Set();
 let deletingGames = false;
@@ -99,7 +99,7 @@ function readPreferences() {
   try {
     const saved = JSON.parse(window.localStorage.getItem(PREFERENCES_KEY));
     return {
-      language: globalThis.OpenCabinetI18n.hasLocale(saved?.language) ? saved.language : "es-AR",
+      language: globalThis.OpenCabinetI18n.hasLocale(saved?.language) ? saved.language : DEFAULT_PREFERENCES.language,
       maxCachedCovers: validCoverLimit(saved?.maxCachedCovers) ? saved.maxCachedCovers : DEFAULT_PREFERENCES.maxCachedCovers,
       cacheMode: saved?.cacheMode === "ram" ? "ram" : "disk",
       cacheDirectory: typeof saved?.cacheDirectory === "string" ? saved.cacheDirectory : "",
@@ -384,6 +384,7 @@ function setupPreferences() {
       showToast(!location.pending_directory ? globalThis.OpenCabinetI18n.t(languageChanged ? "language.changed" : "msg.1dacf61b0b") : location.pending_action === "use_existing"
         ? globalThis.OpenCabinetI18n.t("msg.4b41879dc5")
         : globalThis.OpenCabinetI18n.t("msg.76729405df"));
+      if (languageChanged) document.getElementById("language-restart-dialog").showModal();
     } catch (reason) {
       try {
         if (previous === null) window.localStorage.removeItem(PREFERENCES_KEY);

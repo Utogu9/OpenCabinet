@@ -7,6 +7,8 @@ const catalogs = Object.fromEntries(fs.readdirSync(path.join(directory, 'locales
 const source = fs.readFileSync(path.join(directory, 'i18n.js'), 'utf8');
 function createContext(...args) {
   const context = vm.createContext(...args);
+  // Existing UI fixtures use Spanish; language-detection tests supply their own navigator.
+  if (!('navigator' in context)) context.navigator = { language: 'es-AR' };
   context.OpenCabinetLocaleCatalogs = catalogs;
   vm.runInContext(source, context);
   return context;

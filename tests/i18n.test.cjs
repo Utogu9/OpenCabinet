@@ -16,6 +16,18 @@ test('Both complete catalogs preserve interpolation tokens and valid metadata',(
   }
 });
 
+test('Initial language detects all Spanish locales and otherwise uses English without overriding saved choices',()=>{
+  for(const language of ['es','es-ES','es-MX','ES-ar','es_CL','en-US','fr-FR','pt-BR','ja-JP','']) {
+    const api=vm.createContext({navigator:{language}}).OpenCabinetI18n;
+    assert.equal(api.locale,/^es(?:[-_]|$)/i.test(language)?'es-AR':'en-US');
+  }
+  assert.equal(vm.createContext({navigator:{languages:['es-ES']}}).OpenCabinetI18n.locale,'es-AR');
+  const stored=vm.createContext({navigator:{language:'es-MX'},localStorage:{getItem:()=>JSON.stringify({language:'en-US'})}});
+  assert.equal(stored.OpenCabinetI18n.locale,'en-US');
+  const corrupt=vm.createContext({navigator:{language:'de-DE'},localStorage:{getItem:()=>'{broken'}});
+  assert.equal(corrupt.OpenCabinetI18n.locale,'en-US');
+});
+
 test('The chosen language translates dynamic UI text while interpolation keeps user content verbatim',()=>{
   const content='Guardar <My Game> / 日本語';
   const storage=new Map([['opencabinet.preferences',JSON.stringify({language:'en-US'})]]);

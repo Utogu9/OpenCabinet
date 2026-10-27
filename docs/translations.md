@@ -8,7 +8,9 @@ Los archivos editables están en `src/locales/`:
 El idioma se elige en **Opciones → Preferencias → Inicio → Idioma**. Hay que guardar
 y volver a abrir OpenCabinet para aplicarlo. Esto evita reconstruir ventanas,
 visores o importaciones que están en curso. Las preferencias existentes continúan
-en español de Argentina hasta elegir otro idioma.
+en su idioma guardado. Si no hay un idioma elegido, se usa el del sistema:
+cualquier variante de español selecciona `es-AR` y el resto, `en-US`.
+Al guardar un cambio de idioma aparece un aviso que recomienda reiniciar.
 
 ## Agregar una traducción
 

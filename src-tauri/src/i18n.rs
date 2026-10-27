@@ -4,7 +4,27 @@ pub(crate) use i18n_format;
 static LANGUAGE: AtomicUsize = AtomicUsize::new(usize::MAX);
 
 pub fn locale() -> &'static str {
-    CATALOGS.get(LANGUAGE.load(Ordering::Relaxed)).map(|entry|entry.0).unwrap_or("es-AR")
+    CATALOGS.get(LANGUAGE.load(Ordering::Relaxed)).map(|entry|entry.0).unwrap_or_else(system_locale)
+}
+fn default_locale(language: &str) -> &'static str {
+    let primary = language.split(['-', '_', '.', '@']).next().unwrap_or("");
+    if primary.eq_ignore_ascii_case("es") { "es-AR" } else { "en-US" }
+}
+fn system_locale() -> &'static str {
+    #[cfg(windows)]
+    {
+        let mut name = [0u16; 85];
+        // Windows writes the current user's locale, including the terminating NUL.
+        let length = unsafe { windows_sys::Win32::Globalization::GetUserDefaultLocaleName(name.as_mut_ptr(), name.len() as i32) };
+        if length > 1 { return default_locale(&String::from_utf16_lossy(&name[..length as usize - 1])); }
+    }
+    #[cfg(not(windows))]
+    for variable in ["LC_ALL", "LC_MESSAGES", "LANG"] {
+        if let Ok(language) = std::env::var(variable) {
+            if !language.is_empty() { return default_locale(&language); }
+        }
+    }
+    "en-US"
 }
 pub fn set_locale(code: &str) -> Result<(), String> {
     let index=CATALOGS.iter().position(|entry|entry.0==code).ok_or_else(||text("language.invalid").to_owned())?;
@@ -18,6 +38,7 @@ fn lookup(code: &str, key: &str) -> Option<&'static str> {
     entries.binary_search_by_key(&key, |entry|entry.0).ok().map(|index|entries[index].1)
 }
 pub fn initialize() {
+    let _ = set_locale(system_locale());
     let root=crate::storage::active_directory().ok().or_else(|| {
         let exe=std::env::current_exe().ok()?; let program=exe.parent()?;
         let current=program.join("opencabinet.config.json");
@@ -55,6 +76,11 @@ pub fn save_ui_language(language: String) -> Result<(), String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn system_language_maps_all_spanish_variants_and_defaults_other_languages_to_english() {
+        for code in ["es", "es-AR", "es-ES", "ES-mx", "es_CL.UTF-8"] { assert_eq!(default_locale(code), "es-AR"); }
+        for code in ["en-US", "pt-BR", "fr", "", "est"] { assert_eq!(default_locale(code), "en-US"); }
+    }
     #[test]
     fn native_catalogs_include_english_and_spanish_without_changing_library_values() {
         assert_eq!(lookup("en-US","language.invalid"),Some("Select an available language."));

@@ -23,6 +23,7 @@ function app(storage = new Map(), failSave = false, options = {}) {
     return elements.get(id);
   };
   const context = vm.createContext({
+    navigator: { language: options.systemLanguage || 'es-AR' },
     document: { getElementById: get, createElement: () => ({}) },
     window: {
       __TAURI__: { app: { getVersion: async () => "1.2.3" }, core: { Channel:class {}, invoke: async (command, args) => {
@@ -165,9 +166,23 @@ test("Language selection is a saved draft and applies on the next startup",async
   assert.equal(instance.evaluate('preferences.language'),'en-US');
   assert.equal(instance.evaluate('globalThis.OpenCabinetI18n.locale'),'es-AR');
   assert.equal(instance.calls.find(call=>call.command==='save_ui_language').args.language,'en-US');
+  assert.equal(instance.get('language-restart-dialog').open,true);
   const restarted=app(instance.storage);await restarted.open();
   assert.equal(restarted.get('preference-language').value,'en-US');
   assert.equal(restarted.evaluate('globalThis.OpenCabinetI18n.locale'),'en-US');
+  await restarted.save(400);
+  assert.equal(restarted.get('language-restart-dialog').open,false);
+});
+
+test('Preferences follow the system language until a language is saved explicitly', async () => {
+  for (const language of ['es-ES','es-MX','es','en-GB','pt-BR']) {
+    const instance=app(new Map(),false,{systemLanguage:language}); await instance.open();
+    assert.equal(instance.get('preference-language').value,language.startsWith('es')?'es-AR':'en-US');
+    assert.equal(instance.evaluate('preferences.language'),instance.evaluate('globalThis.OpenCabinetI18n.locale'));
+  }
+  const stored=new Map([['opencabinet.preferences',JSON.stringify({language:'es-AR'})]]);
+  const instance=app(stored,false,{systemLanguage:'en-US'}); await instance.open();
+  assert.equal(instance.get('preference-language').value,'es-AR');
 });
 
 test("An unavailable language cannot overwrite the current preferences",async()=>{

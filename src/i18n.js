@@ -2,13 +2,15 @@
 (() => {
   const catalogs = globalThis.OpenCabinetLocaleCatalogs || {};
   const fallback = 'es-AR';
-  let selected = fallback;
+  const userLanguage = globalThis.navigator?.language || globalThis.navigator?.languages?.[0] || '';
+  const defaultLocale = /^es(?:[-_]|$)/i.test(userLanguage) ? 'es-AR' : 'en-US';
+  let selected = defaultLocale;
   const hasLocale = code => Object.prototype.hasOwnProperty.call(catalogs, code);
   try {
     const storage = globalThis.localStorage || globalThis.window?.localStorage;
     const saved = JSON.parse(storage?.getItem('opencabinet.preferences') || 'null');
     if (hasLocale(saved?.language)) selected = saved.language;
-  } catch { /* Missing or unreadable preferences use the established language. */ }
+  } catch { /* Missing or unreadable preferences use the system language. */ }
   function t(key, ...values) {
     const message = catalogs[selected]?.messages?.[key] ?? catalogs[fallback]?.messages?.[key] ?? key;
     return message.replace(/\{(\d+)\}/g, (token, index) => index < values.length ? String(values[index] ?? '') : token);
@@ -24,6 +26,7 @@
   }
   globalThis.OpenCabinetI18n = {
     t, translateDOM, hasLocale, get locale() { return selected; },
+    defaultLocale,
     gameMode(value) {
       // Recognize the built-in metadata catalog value without translating custom metadata.
       const known = ['es-AR', 'en-US'].map(code => catalogs[code]?.messages?.['game.mode.cooperative']);
