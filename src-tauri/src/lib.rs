@@ -15,6 +15,8 @@ mod platform_details;
 mod platform_defaults;
 mod retroarch;
 mod manual_import;
+mod backups;
+mod game_availability;
 mod steam;
 mod epic;
 mod media_library;
@@ -2415,9 +2417,20 @@ pub fn run() {
             if let Err(e) = init_database(app) {
                 eprintln!("Error al inicializar la base de datos portable: {}", e);
             }
+            backups::start_worker(app.handle().clone());
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
+            backups::get_backup_status,
+            backups::save_backup_settings,
+            backups::save_backup_preferences,
+            backups::get_restored_preferences,
+            backups::acknowledge_restored_preferences,
+            backups::create_backup,
+            backups::choose_backup,
+            backups::open_backup_directory,
+            backups::restore_backup,
+            game_availability::get_game_availability,
             app_updates::check_app_update,
             app_updates::install_app_update,
             metadata::repository::get_metadata_source,

@@ -1936,6 +1936,16 @@ button:disabled {
   max-width: 100%;
 }
 
+.preferences-data-page { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+.preferences-data-tabs { display: flex; flex-wrap: wrap; gap: 6px; border-bottom: 1px solid var(--border-color); padding-bottom: 12px; }
+.preferences-data-tabs button { padding: 8px 14px; border: 1px solid transparent; border-radius: 6px; background: transparent; color: var(--text-muted); cursor: pointer; font: inherit; }
+.preferences-data-tabs button[aria-selected="true"] { background: var(--card-bg); border-color: var(--border-color); color: var(--text-main); }
+.preferences-data-tabs button:focus-visible { outline: 2px solid var(--accent-color); outline-offset: 2px; }
+.preferences-data-tabs button:disabled { opacity: .5; cursor: not-allowed; }
+#backup-list { width: 100%; overflow: hidden; text-overflow: ellipsis; }
+#backup-directory { overflow-wrap: anywhere; }
+#btn-play-game:disabled { opacity: .5; filter: grayscale(1); cursor: not-allowed; }
+
 .preference-toggle input[type="checkbox"] {
   width: 16px;
   height: 16px;

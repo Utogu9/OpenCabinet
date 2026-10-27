@@ -47,6 +47,7 @@ function app(storage = new Map(), failSave = false, options = {}) {
     },
   });
   const evaluate = (code) => vm.runInContext(code, context);
+  if(options.backups) evaluate(fs.readFileSync(path.join(__dirname, "../src/backups.js"), "utf8"));
   evaluate(fs.readFileSync(path.join(__dirname, "../src/main.js"), "utf8"));
   evaluate("let refreshes = 0; applyLibraryFilters = () => refreshes++; showToast = () => {}; setupPreferences();");
   return {
@@ -58,6 +59,37 @@ function app(storage = new Map(), failSave = false, options = {}) {
     },
   };
 }
+
+test('User Data separates backups from folder settings and preserves drafts when switching pages',async()=>{
+ const instance=app();await instance.open();
+ instance.get('preferences-tab-data').handlers.click();
+ instance.get('preference-cover-limit').value='800';
+ instance.get('preferences-data-tab-backups').handlers.click();
+ assert.equal(instance.get('preferences-data-general').classList.contains('hidden'),true);
+ assert.equal(instance.get('preferences-data-backups').classList.contains('hidden'),false);
+ assert.equal(instance.get('btn-save-preferences').classList.contains('hidden'),true);
+ instance.get('preferences-data-tab-backups').handlers.keydown({key:'ArrowLeft',preventDefault(){}});
+ assert.equal(instance.get('preferences-data-general').classList.contains('hidden'),false);
+ assert.equal(instance.get('preferences-data-tab-general').focused,true);
+ assert.equal(instance.get('preference-cover-limit').value,'800');
+ instance.get('preferences-tab-library').handlers.click();
+ assert.equal(instance.get('btn-save-preferences').classList.contains('hidden'),false);
+});
+
+test('Embedded backup operations block closing Preferences until completion',async()=>{
+ let finish;
+ const instance=app(new Map(),false,{backups:true,invoke:(command)=>{
+   if(command==='get_backup_status')return {settings:{automatic:true,keep:7},entries:[],directory:'D:/data/backups'};
+   if(command==='create_backup')return new Promise(resolve=>{finish=resolve;});
+ }});
+ await instance.open();instance.get('preferences-tab-data').handlers.click();
+ instance.get('preferences-data-tab-backups').handlers.click();await new Promise(resolve=>setImmediate(resolve));
+ const pending=instance.get('btn-create-backup').handlers.click();await new Promise(resolve=>setImmediate(resolve));
+ assert.equal(instance.get('btn-close-preferences').disabled,true);
+ instance.get('btn-close-preferences').handlers.click();assert.equal(instance.get('preferences-dialog').open,true);
+ let blocked=false;instance.get('preferences-dialog').handlers.cancel({preventDefault(){blocked=true;}});assert.equal(blocked,true);
+ finish('done');await pending;assert.equal(instance.get('btn-close-preferences').disabled,false);
+});
 
 test('Personal catalog selection is a draft until saved and cancel restores the current source',async()=>{
   const instance=app(new Map(),false,{invoke:async(command,args)=>{

@@ -207,7 +207,7 @@ fn require_empty(path: &Path) -> Result<()> {
     Ok(())
 }
 
-fn validate_existing_library(directory: &Path) -> Result<()> {
+pub(crate) fn validate_existing_library(directory: &Path) -> Result<()> {
     let database = database_path(directory);
     if !database.is_file() {
         return Err(crate::i18n::text("msg.6097baaf84").into());
@@ -432,7 +432,7 @@ fn check_database(path: &Path) -> Result<()> {
     Ok(())
 }
 
-fn rebase_library(path: &Path, source: &Path, destination: &Path) -> Result<()> {
+pub(crate) fn rebase_library(path: &Path, source: &Path, destination: &Path) -> Result<()> {
     if !path.exists() {
         return Ok(());
     }
@@ -446,6 +446,7 @@ fn rebase_library(path: &Path, source: &Path, destination: &Path) -> Result<()> 
         ("games", "epic_manifest_path"),
         ("games", "cover_path"),
         ("game_images", "path"),
+        ("platform_images", "path"),
         ("emulators", "executable_path"),
         ("emulators", "retroarch_core_path"),
         ("retroarch_settings", "executable_path"),
@@ -842,6 +843,11 @@ pub(crate) fn has_pending_directory() -> Result<bool> {
     Ok(current()?.location()?.pending_directory.is_some())
 }
 
+pub(crate) fn schedule_restored_library(directory: &Path) -> Result<()> {
+    current()?.schedule(directory, Some(DirectoryAction::UseExisting))?;
+    Ok(())
+}
+
 #[tauri::command]
 pub async fn schedule_data_directory(
     directory: String,
@@ -882,7 +888,7 @@ pub fn restart_for_data_move(
     jobs: tauri::State<'_, crate::metadata::MetadataJobs>,
     retroarch: tauri::State<'_, crate::retroarch::RetroArchJobs>,
 ) -> Result<()> {
-    if tracker.has_active_sessions() || jobs.has_active_job() || retroarch.busy() {
+    if tracker.has_active_sessions() || jobs.has_active_job() || retroarch.busy() || crate::backups::busy() {
         return Err(crate::i18n::text("msg.bcfea2fcc9").into());
     }
     if current()?.location()?.pending_directory.is_none() {

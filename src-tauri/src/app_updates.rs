@@ -48,7 +48,7 @@ fn supported_install() -> bool {
 }
 
 fn ensure_idle(app: &tauri::AppHandle) -> Result<(), String> {
-    if app.state::<crate::PlayTracker>().has_active_sessions()
+    if crate::backups::busy() || app.state::<crate::PlayTracker>().has_active_sessions()
         || app
             .state::<crate::metadata::MetadataJobs>()
             .has_active_job()
@@ -134,6 +134,9 @@ pub async fn install_app_update(
         .await
         .map_err(|e| format!("{} {e}", crate::i18n::text("update.downloadFailed")))?;
     // Download verifies the signature; install verifies it again. Interrupted downloads stay in RAM.
+    ensure_idle(&app)?;
+    tauri::async_runtime::spawn_blocking(crate::backups::safety_snapshot)
+        .await.map_err(|e| e.to_string())??;
     ensure_idle(&app)?;
     on_progress
         .send(Progress {

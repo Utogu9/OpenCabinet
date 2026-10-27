@@ -6,6 +6,8 @@ let allEmulators = [];
 let allPlatforms = [];
 let toastTimeout = null;
 let selectedGameId = null;
+let fileAvailabilityRequest = 0;
+let selectedFileAvailability = null;
 let selectedGameIds = new Set();
 let selectionAnchorId = null;
 let visibleGameIds = [];
@@ -146,11 +148,38 @@ function setupPreferences() {
   let location = null, draftDirectory = "", request = 0, saving = false, choosing = false;
   let selection = null;
   let reading = null;
+  let backupsPanel = null, dataCategory = "general", preferenceCategory = "startup";
+  const dataTabs = ["general", "backups"].map(name => ({ name,
+    button: document.getElementById(`preferences-data-tab-${name}`),
+    panel: document.getElementById(`preferences-data-${name}`) }));
+  function updateSaveVisibility() { save.classList.toggle("hidden", preferenceCategory === "data" && dataCategory === "backups"); }
+  function showDataCategory(name, focus = false) {
+    if (backupsPanel?.busy) return;
+    dataCategory = name;
+    dataTabs.forEach(tab => {
+      const active = tab.name === name;
+      tab.button.setAttribute("aria-selected", String(active)); tab.button.tabIndex = active ? 0 : -1;
+      tab.panel.classList.toggle("hidden", !active);
+      if (active && focus) tab.button.focus();
+    });
+    document.getElementById("preferences-panels").scrollTop = 0;
+    updateSaveVisibility();
+    if (name === "backups") void backupsPanel?.open();
+  }
+  dataTabs.forEach((tab, index) => {
+    tab.button.addEventListener("click", () => showDataCategory(tab.name));
+    tab.button.addEventListener("keydown", event => {
+      const target = event.key === "Home" ? 0 : event.key === "End" ? dataTabs.length - 1
+        : ["ArrowRight", "ArrowLeft"].includes(event.key) ? (index + 1) % dataTabs.length : null;
+      if (target !== null) { event.preventDefault(); showDataCategory(dataTabs[target].name, true); }
+    });
+  });
   const tabs = ["startup", "library", "metadata", "data"].map(name => ({
     name, button: document.getElementById(`preferences-tab-${name}`),
     panel: document.getElementById(`preferences-panel-${name}`),
   }));
   function showCategory(name, focus = false) {
+    preferenceCategory = name; updateSaveVisibility();
     document.getElementById("preferences-panels").scrollTop = 0;
     tabs.forEach(tab => {
       const active = tab.name === name;
@@ -184,7 +213,9 @@ function setupPreferences() {
     directory.value = draftDirectory;
     document.getElementById("preferences-current-directory").textContent = location
       ? globalThis.OpenCabinetI18n.t("msg.8d1a55bd93", location.active_directory) : globalThis.OpenCabinetI18n.t("msg.cd9c5528d2");
-    const busy = saving || choosing;
+    const busy = saving || choosing || !!backupsPanel?.busy;
+    tabs.forEach(tab => { tab.button.disabled = busy; });
+    dataTabs.forEach(tab => { tab.button.disabled = busy; });
     metadataImport.disabled=metadataReset.disabled=busy;
     metadataCatalog.value=draftCatalog===undefined?(metadataSource?.label||globalThis.OpenCabinetI18n.t('source.default')):draftCatalog===null?globalThis.OpenCabinetI18n.t('source.default'):draftCatalog;
     browse.disabled = reset.disabled = save.disabled = !location || busy;
@@ -213,7 +244,11 @@ function setupPreferences() {
       status.textContent += `${status.textContent ? "\n" : ""}${message}`;
     }
   }
-  function close() { if (!saving && !choosing) dialog.close(); }
+  if (globalThis.OpenCabinetBackups) backupsPanel = globalThis.OpenCabinetBackups.setup({ document, invoke,
+    Channel: window.__TAURI__.core.Channel, getPreferences: () => preferences, onBusyChange: update,
+    onRestored: async () => { location = await readLocation(); draftDirectory = location.pending_directory || location.active_directory; selection = null; update(); },
+    canRestart: () => !scanInProgress && !launchingGames.size && !allGames.some(game => game.is_running) });
+  function close() { if (!saving && !choosing && !backupsPanel?.busy) dialog.close(); }
   openButton.addEventListener("click", async (event) => {
     event.stopPropagation();
     document.getElementById("dropdown-options-menu").classList.remove("show");
@@ -232,7 +267,7 @@ function setupPreferences() {
     selection = null;
     metadataSource=null;draftCatalog=undefined;
     update();
-    showCategory("startup");
+    showDataCategory("general"); showCategory("startup");
     dialog.showModal();
     tabs[0].button.focus();
     const currentRequest = ++request;
@@ -248,7 +283,7 @@ function setupPreferences() {
     if (currentRequest === request) update();
   });
   dialog.addEventListener("close", () => { request++; });
-  dialog.addEventListener("cancel", (event) => { if (saving || choosing) event.preventDefault(); });
+  dialog.addEventListener("cancel", (event) => { if (saving || choosing || backupsPanel?.busy) event.preventDefault(); });
   document.getElementById("btn-close-preferences").addEventListener("click", close);
   document.getElementById("btn-cancel-preferences").addEventListener("click", close);
   async function inspectSelection(selected, currentRequest) {
@@ -298,7 +333,8 @@ function setupPreferences() {
   });
   document.getElementById("preferences-form").addEventListener("submit", async (event) => {
     event.preventDefault();
-    if (saving || choosing || !location) return;
+    if (saving || choosing || backupsPanel?.busy || !location) return;
+    if (preferenceCategory === "data" && dataCategory === "backups") { await backupsPanel?.saveSettings(); return; }
     const value = Number(input.value);
     if (!validCoverLimit(value)) {
       showCategory("data");
@@ -369,6 +405,7 @@ function setupPreferences() {
       const cacheChanged = preferences.cacheMode !== next.cacheMode || preferences.cacheDirectory !== next.cacheDirectory;
       const statisticsChanged = preferences.combineRegionStatistics !== next.combineRegionStatistics;
       preferences = next;
+      void invoke("save_backup_preferences", { preferences }).catch(reason => console.error(reason));
       allGames.forEach(projectRegionalStatistics);
       if (statisticsChanged) renderPlatformFilters();
       catalogCoverLoader?.dispose();
@@ -1696,11 +1733,33 @@ function updatePlayStatus(game) {
   time.textContent = formatPlayTime(game);
   time.title = globalThis.OpenCabinetI18n.t("msg.5eb694af2a", game.session_count || 0, game.is_running ? globalThis.OpenCabinetI18n.t("msg.1c07d89d05") : "");
   const play = document.getElementById("btn-play-game");
-  play.disabled = Boolean(game.is_running) || launchingGames.has(game.id);
+  const availability = selectedFileAvailability?.id === game.id ? selectedFileAvailability : null;
+  const unavailable = availability?.available === false;
+  const checking = availability?.available === null;
+  play.disabled = Boolean(game.is_running) || launchingGames.has(game.id) || unavailable || checking;
   play.innerHTML = game.is_running
     ? globalThis.OpenCabinetI18n.t("msg.cd7fe1c80d")
+    : unavailable ? globalThis.OpenCabinetI18n.t("availability.missing")
+    : checking ? globalThis.OpenCabinetI18n.t("availability.checking")
     : launchingGames.has(game.id) ? '<span class="play-icon-shape">▶</span> INICIANDO...'
     : globalThis.OpenCabinetI18n.t("msg.aa6ae9fe63");
+  play.title = unavailable ? availability.missing_paths?.join("\n") || globalThis.OpenCabinetI18n.t("availability.missing") : "";
+}
+
+async function checkSelectedGameFiles(game) {
+  const request = ++fileAvailabilityRequest;
+  selectedFileAvailability = { id: game.id, available: null };
+  updatePlayStatus(game);
+  try {
+    const result = await invoke("get_game_availability", { gameId: game.id });
+    if (request !== fileAvailabilityRequest || selectedGameId !== game.id) return;
+    selectedFileAvailability = { id: game.id, ...result };
+  } catch (error) {
+    if (request !== fileAvailabilityRequest || selectedGameId !== game.id) return;
+    selectedFileAvailability = null;
+    console.error("File availability check failed", error);
+  }
+  if (selectedGameId === game.id) updatePlayStatus(game);
 }
 
 function playStatisticsSnapshot(game) {
@@ -1815,9 +1874,11 @@ function showGameDetails(game) {
   document.getElementById("details-description").textContent = game.description || globalThis.OpenCabinetI18n.t("msg.591e5cef97");
 
   updatePlayStatus(game);
+  void checkSelectedGameFiles(game);
 }
 
 function resetGameDetails() {
+  ++fileAvailabilityRequest; selectedFileAvailability = null;
   selectedGameId = null;
   logoPanelKey = null;
   detailsGameBox?.clear();
@@ -5427,12 +5488,21 @@ function setupDetailsResizer() {
 }
 
 window.addEventListener("DOMContentLoaded", async () => {
+  try {
+    const restored = await invoke("get_restored_preferences");
+    if (restored) {
+      window.localStorage.setItem(PREFERENCES_KEY, JSON.stringify(restored));
+      await invoke("acknowledge_restored_preferences");
+      window.location.reload(); return;
+    }
+  } catch (error) { console.error("Could not apply restored preferences", error); }
   globalThis.OpenCabinetI18n.translateDOM();
   const languageReady = invoke("set_ui_language", { language: preferences.language }).catch(error => console.error(error));
   setupGameContextMenu();
   setupPlatformContextMenu();
   setupMenuBarAndModal();
   setupPreferences();
+  void invoke("save_backup_preferences", { preferences }).catch(error => console.error(error));
   setupAbout();
   setupAppUpdates();
   setupEmulatorExecutableBrowsers();
