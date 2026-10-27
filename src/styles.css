@@ -1217,6 +1217,7 @@ body.resizing-details * {
 .fullscreen-box .game-box-stage { flex: 1; height: auto; min-height: 0; perspective: max(850px, 150vh); }
 .fullscreen-box #btn-box-fullscreen { display: none; }
 
+.gallery-thumbnails-frame { position: relative; min-width: 0; --gallery-thumbnail-height: 48px; }
 .gallery-viewer {
   height: 260px;
   display: flex;
@@ -1327,6 +1328,15 @@ body.resizing-details * {
 }
 
 .gallery-controls {
+  position: absolute;
+  top: calc(2px + var(--gallery-thumbnail-height) / 2);
+  transform: translateY(-50%);
+  left: 4px;
+  right: 4px;
+  opacity: 0;
+  transition: opacity 150ms ease;
+  z-index: 1;
+  pointer-events: none;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -1334,6 +1344,16 @@ body.resizing-details * {
   font-size: 0.78rem;
   color: var(--text-muted);
 }
+.gallery-controls .secondary-btn { pointer-events: none; display: grid; place-items: center; width: 32px; height: 32px; padding: 0; color: rgba(255, 255, 255, .82); background: rgba(15, 17, 21, .3); border: 0; border-radius: 50%; box-shadow: none; transition: background-color 150ms ease, color 150ms ease; }
+.gallery-controls svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.gallery-thumbnails-frame:hover .gallery-controls, .gallery-thumbnails-frame:focus-within .gallery-controls { opacity: 1; }
+.gallery-thumbnails-frame:hover .gallery-controls .secondary-btn, .gallery-thumbnails-frame:focus-within .gallery-controls .secondary-btn { pointer-events: auto; }
+@media (hover: none) {
+  .gallery-thumbnails-frame .gallery-controls { opacity: 1; }
+  .gallery-thumbnails-frame .gallery-controls .secondary-btn { pointer-events: auto; }
+}
+.gallery-controls .secondary-btn:hover:not(:disabled) { background: rgba(15, 17, 21, .55); color: #fff; }
+.gallery-controls .secondary-btn:focus-visible { outline: 2px solid var(--accent-color); outline-offset: 2px; }
 
 .gallery-thumbnails {
   display: flex;
@@ -1344,7 +1364,7 @@ body.resizing-details * {
 
 .gallery-thumbnail {
   width: 60px;
-  height: 48px;
+  height: var(--gallery-thumbnail-height, 48px);
   flex-shrink: 0;
   overflow: hidden;
   padding: 2px;

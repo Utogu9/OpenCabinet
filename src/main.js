@@ -678,6 +678,20 @@ function renderGameLogo(game, images) {
   if (platformEditButton) container.appendChild(platformEditButton);
 }
 
+function revealGalleryThumbnail(thumbnails, button) {
+  if (!button || !thumbnails?.clientWidth || !button.getBoundingClientRect) return;
+  const viewport = thumbnails.getBoundingClientRect();
+  const image = button.getBoundingClientRect();
+  const left = image.left - viewport.left - thumbnails.clientLeft;
+  const right = left + image.width;
+  const current = thumbnails.scrollLeft;
+  let target = current;
+  if (left < 2) target += left - 2;
+  else if (right > thumbnails.clientWidth - 2) target += right - thumbnails.clientWidth + 2;
+  target = Math.max(0, Math.min(target, thumbnails.scrollWidth - thumbnails.clientWidth));
+  if (Math.abs(target - current) > 1) thumbnails.scrollTo({ left: target, behavior: "smooth" });
+}
+
 function createFullscreenGallery() {
   const dialog = document.getElementById("fullscreen-gallery");
   const viewer = document.getElementById("fullscreen-gallery-viewer");
@@ -702,7 +716,7 @@ function createFullscreenGallery() {
     viewer.replaceChildren(photo);
     document.getElementById("fullscreen-gallery-caption").textContent = `${kind} · ${session.index + 1} / ${session.images.length}`;
     buttons.forEach((button, i) => button.setAttribute("aria-current", String(i === session.index)));
-    buttons[session.index]?.scrollIntoView?.({ block: "nearest", inline: "nearest" });
+    revealGalleryThumbnail(thumbnails, buttons[session.index]);
     session.onChange(session.index);
   }
 
@@ -761,6 +775,7 @@ function createFullscreenGallery() {
       renderThumbnails();
       show(index);
       if (!dialog.open) dialog.showModal();
+      revealGalleryThumbnail(thumbnails, buttons[session.index]);
       document.getElementById("fullscreen-gallery-close").focus();
       // Keep the full-window viewer available if native fullscreen is unavailable.
       if (nativeFullscreen) {
@@ -937,6 +952,10 @@ function createDetailsGameBox() {
     photos.classList.toggle("hidden", box);
     boxButton.setAttribute("aria-pressed", String(box));
     photosButton.setAttribute("aria-pressed", String(!box));
+    if (!box) {
+      const thumbnails = document.getElementById("gallery-thumbnails");
+      revealGalleryThumbnail(thumbnails, thumbnails.querySelector?.('[aria-current="true"]'));
+    }
   }
   boxButton.addEventListener("click", () => mode(true));
   photosButton.addEventListener("click", () => mode(false));
@@ -989,7 +1008,6 @@ function renderGameMedia(game) {
   const thumbnails = document.getElementById("gallery-thumbnails");
   const previous = document.getElementById("gallery-previous");
   const next = document.getElementById("gallery-next");
-  const caption = document.getElementById("gallery-caption");
   thumbnails.replaceChildren();
   if (galleryGameId !== game.id) galleryImagePath = null;
   galleryGameId = game.id;
@@ -999,7 +1017,6 @@ function renderGameMedia(game) {
     viewer.replaceChildren();
     if (images.length === 0) {
       viewer.textContent = game.is_platform ? globalThis.OpenCabinetI18n.t("msg.605a47650f") : globalThis.OpenCabinetI18n.t("msg.da6920a1d3");
-      caption.textContent = globalThis.OpenCabinetI18n.t("msg.d81a2af610");
       galleryImagePath = null;
       return;
     }
@@ -1008,8 +1025,8 @@ function renderGameMedia(game) {
     galleryImagePath = image.path;
     const kind = (game.is_platform ? PLATFORM_IMAGE_TYPES : GAME_IMAGE_TYPES).find(([key]) => key === (image.source_kind || image.kind))?.[1] || globalThis.OpenCabinetI18n.t("msg.58d6f29b06");
     viewer.appendChild(mediaImage(image.path, `${game.title} — ${kind}`));
-    caption.textContent = `${kind} · ${index + 1} / ${images.length}`;
     buttons.forEach((button, i) => button.setAttribute("aria-current", String(i === index)));
+    revealGalleryThumbnail(thumbnails, buttons[index]);
   }
   images.forEach((image, i) => {
     const button = document.createElement("button");

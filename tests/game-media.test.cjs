@@ -617,7 +617,7 @@ test("Spine downloads can be selected, classified and saved from the game editor
   app.evaluate("renderGameMedia(allGames[0])");
   const thumbs = app.get("gallery-thumbnails").children;
   await thumbs[thumbs.length - 1].trigger("click");
-  assert.match(app.get("gallery-caption").textContent, /Lomo \(spine\)/);
+  assert.match(app.get("gallery-viewer").children[0].alt, /Lomo \(spine\)/);
 });
 
 test("Additional metadata catalog types download, retain their category on Save and appear in the gallery", async () => {
@@ -649,7 +649,7 @@ test("Additional metadata catalog types download, retain their category on Save 
   app.evaluate("renderGameMedia(allGames[0])");
   const thumbs = app.get("gallery-thumbnails").children;
   await thumbs[thumbs.length - 1].trigger("click");
-  assert.match(app.get("gallery-caption").textContent, /Arcade: marquesina/);
+  assert.match(app.get("gallery-viewer").children[0].alt, /Arcade: marquesina/);
 });
 
 test("Alternative names and a results dropdown let users select a different source game", async () => {
@@ -862,17 +862,36 @@ test("Exiting native box fullscreen closes the viewer and late fullscreen entry 
   assert.equal(delayed.get("game-box-panel").parentNode, delayed.get("game-box-slot"));
 });
 
+test("Carousel scrolls its own thumbnail strip to follow selection and wrap without moving the page", async () => {
+  const app = mediaApp();
+  app.evaluate("renderGameMedia(allGames[0])");
+  const strip = app.get("gallery-thumbnails");
+  strip.clientWidth = 100; strip.scrollWidth = 200; strip.scrollLeft = 0; strip.clientLeft = 0;
+  strip.getBoundingClientRect = () => ({ left: 0 });
+  const positions = [];
+  strip.scrollTo = ({left, behavior}) => { positions.push(left); strip.scrollLeft = left; assert.equal(behavior, "smooth"); };
+  strip.children.forEach((button, i) => { button.getBoundingClientRect = () => ({left: i * 68 - strip.scrollLeft, width: 60}); });
+  await app.get("gallery-next").trigger("click");
+  assert.equal(strip.scrollLeft, 30);
+  await app.get("gallery-next").trigger("click");
+  assert.equal(strip.scrollLeft, 98);
+  await app.get("gallery-next").trigger("click");
+  assert.equal(strip.scrollLeft, 0);
+  await strip.children[0].trigger("click");
+  assert.equal(positions.length, 3, "visible thumbnails do not scroll again");
+});
+
 test("Carousel starts at the cover, includes every image and wraps", async () => {
   const app = mediaApp();
   app.evaluate("renderGameMedia(allGames[0])");
-  assert.match(app.get("gallery-caption").textContent, /1 \/ 3/);
+  assert.equal(app.get("gallery-thumbnails").children[0].attributes["aria-current"], "true");
   assert.match(app.get("gallery-viewer").children[0].src, /cover\.png/);
   assert.match(app.get("details-logo-container").children[1].children[0].src, /logo\.png/);
   await app.get("gallery-next").trigger("click");
-  assert.match(app.get("gallery-caption").textContent, /2 \/ 3/);
+  assert.equal(app.get("gallery-thumbnails").children[1].attributes["aria-current"], "true");
   await app.get("gallery-previous").trigger("click");
   await app.get("gallery-previous").trigger("click");
-  assert.match(app.get("gallery-caption").textContent, /3 \/ 3/);
+  assert.equal(app.get("gallery-thumbnails").children[2].attributes["aria-current"], "true");
   await app.get("gallery-thumbnails").children[0].trigger("click");
   assert.equal(app.get("gallery-thumbnails").children[0].attributes["aria-current"], "true");
   app.evaluate("renderGameMedia({ id: 2, title: 'Empty' })");
@@ -893,7 +912,7 @@ test("Double click opens the current image, navigates the fullscreen carousel an
   assert.match(app.get("fullscreen-gallery-caption").textContent, /2 \/ 3/);
   await app.get("fullscreen-gallery").trigger("keydown", { key: "ArrowRight" });
   assert.match(app.get("fullscreen-gallery-viewer").children[0].src, /screen\.png/);
-  assert.match(app.get("gallery-caption").textContent, /3 \/ 3/);
+  assert.equal(app.get("gallery-thumbnails").children[2].attributes["aria-current"], "true");
   await app.get("fullscreen-gallery-next").trigger("click");
   assert.match(app.get("fullscreen-gallery-caption").textContent, /1 \/ 3/);
   await app.get("fullscreen-gallery-previous").trigger("click");
@@ -905,7 +924,7 @@ test("Double click opens the current image, navigates the fullscreen carousel an
   assert.equal(app.document.fullscreenElement, null);
   assert.equal(app.get("fullscreen-gallery-viewer").children.length, 0);
   assert.equal(app.document.activeElement, app.get("gallery-viewer"));
-  assert.match(app.get("gallery-caption").textContent, /2 \/ 3/);
+  assert.equal(app.get("gallery-thumbnails").children[1].attributes["aria-current"], "true");
 });
 
 test("Double clicking a thumbnail opens that image and reopening uses the current game", async () => {
@@ -931,7 +950,7 @@ test("Refreshing details preserves fullscreen selection and switching games clos
   assert.equal(app.get("fullscreen-gallery").open, true);
   assert.match(app.get("fullscreen-gallery-viewer").children[0].src, /logo\.png/);
   await app.get("fullscreen-gallery-next").trigger("click");
-  assert.match(app.get("gallery-caption").textContent, /3 \/ 3/);
+  assert.equal(app.get("gallery-thumbnails").children[2].attributes["aria-current"], "true");
   app.evaluate("renderGameMedia({ id: 2, title: 'Empty' })");
   assert.equal(app.get("fullscreen-gallery").open, false);
   await app.get("gallery-viewer").trigger("dblclick");
@@ -1045,7 +1064,7 @@ test('Cartridge labels can be added manually, saved and shown separately from ca
   assert.equal(saved.find(image=>image.kind==='cover').path,'C:/original/cover.png');
   app.evaluate('renderGameMedia(allGames[0])');
   const thumbnails=app.get('gallery-thumbnails').children;await thumbnails.at(-1).trigger('click');
-  assert.match(app.get('gallery-caption').textContent,/Etiqueta de cartucho/);
+  assert.match(app.get('gallery-viewer').children[0].alt,/Etiqueta de cartucho/);
   await app.open();await app.get('btn-download-game-images').trigger('click');
   assert.equal(app.quantity('cart_label'),undefined,'manual-only labels are not offered as metadata catalog downloads');
 });
