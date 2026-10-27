@@ -1,3 +1,21 @@
+## What's new in v0.1.1
+
+- Import standalone executables under console platforms, including batches. Add files or folders during import review.
+- Automatic lightweight backups, optional full media backups, and restoration from Preferences → User Data.
+- Check the selected game's files and indicate when none are available.
+- Detect the system language on first launch and recommend restarting after a language change.
+- Improve keyboard navigation, visible focus, menu access and dialog focus management. Press F1 for shortcuts.
+- Refine the photo carousel controls and keep the selected thumbnail visible.
+
+## Novedades de v0.1.1
+
+- Importación de ejecutables en plataformas de consola, también por lotes. Se pueden agregar archivos o carpetas desde la revisión.
+- Copias automáticas livianas, copias completas opcionales y restauración desde Preferencias → Datos de usuario.
+- Comprobación de los archivos del juego seleccionado e indicación cuando faltan todos.
+- Detección inicial del idioma del sistema y aviso de reinicio al cambiarlo.
+- Mejoras de navegación por teclado, foco visible, menús y ventanas. F1 muestra los atajos.
+- Ajustes del carrusel de fotos y desplazamiento para mantener visible la miniatura seleccionada.
+
 ## Downloads / Descargas
 
 - **`windows_x64_setup.exe`**: Windows x64 installer / Instalador para Windows x64.
