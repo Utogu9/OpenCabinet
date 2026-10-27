@@ -4,7 +4,13 @@ pub(crate) use i18n_format;
 static LANGUAGE: AtomicUsize = AtomicUsize::new(usize::MAX);
 
 pub fn locale() -> &'static str {
-    CATALOGS.get(LANGUAGE.load(Ordering::Relaxed)).map(|entry|entry.0).unwrap_or_else(system_locale)
+    CATALOGS.get(LANGUAGE.load(Ordering::Relaxed)).map(|entry|entry.0).unwrap_or_else(|| {
+        // Native fixtures assert Spanish messages independently of the runner's locale.
+        #[cfg(test)]
+        { "es-AR" }
+        #[cfg(not(test))]
+        { system_locale() }
+    })
 }
 fn default_locale(language: &str) -> &'static str {
     let primary = language.split(['-', '_', '.', '@']).next().unwrap_or("");
@@ -76,6 +82,10 @@ pub fn save_ui_language(language: String) -> Result<(), String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn native_fixture_language_is_independent_of_the_host() {
+        assert_eq!(locale(), "es-AR");
+    }
     #[test]
     fn system_language_maps_all_spanish_variants_and_defaults_other_languages_to_english() {
         for code in ["es", "es-AR", "es-ES", "ES-mx", "es_CL.UTF-8"] { assert_eq!(default_locale(code), "es-AR"); }
