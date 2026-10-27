@@ -1713,12 +1713,10 @@ function updatePlayStatus(game) {
   const play = document.getElementById("btn-play-game");
   const availability = selectedFileAvailability?.id === game.id ? selectedFileAvailability : null;
   const unavailable = availability?.available === false;
-  const checking = availability?.available === null;
-  play.disabled = Boolean(game.is_running) || launchingGames.has(game.id) || unavailable || checking;
+  play.disabled = Boolean(game.is_running) || launchingGames.has(game.id) || unavailable;
   play.innerHTML = game.is_running
     ? globalThis.OpenCabinetI18n.t("msg.cd7fe1c80d")
     : unavailable ? globalThis.OpenCabinetI18n.t("availability.missing")
-    : checking ? globalThis.OpenCabinetI18n.t("availability.checking")
     : launchingGames.has(game.id) ? '<span class="play-icon-shape">▶</span> INICIANDO...'
     : globalThis.OpenCabinetI18n.t("msg.aa6ae9fe63");
   play.title = unavailable ? availability.missing_paths?.join("\n") || globalThis.OpenCabinetI18n.t("availability.missing") : "";

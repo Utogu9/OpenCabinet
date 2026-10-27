@@ -9,8 +9,12 @@ function app(invoke){
  return {get,run:code=>vm.runInContext(code,context)};
 }
 test('Only the selected game is checked; a missing file disables and relabels Play',async()=>{
- const calls=[];const instance=app(async(command,args)=>{calls.push({command,args});return {available:false,missing_paths:['D:/missing.iso']};});
- await instance.run('selectedGameId=1; checkSelectedGameFiles({id:1,session_count:0})');
+ let finish;
+ const calls=[];const instance=app((command,args)=>{calls.push({command,args});return new Promise(resolve=>{finish=resolve;});});
+ const pending=instance.run('selectedGameId=1; checkSelectedGameFiles({id:1,session_count:0})');
+ assert.equal(instance.get('btn-play-game').disabled,false);
+ assert.equal(instance.get('btn-play-game').innerHTML,instance.run('globalThis.OpenCabinetI18n.t("msg.aa6ae9fe63")'));
+ finish({available:false,missing_paths:['D:/missing.iso']});await pending;
  assert.equal(calls.length,1);assert.deepEqual({...calls[0].args},{gameId:1});
  assert.equal(instance.get('btn-play-game').disabled,true);
  assert.equal(instance.get('btn-play-game').innerHTML,'Falta el archivo');
