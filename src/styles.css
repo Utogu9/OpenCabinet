@@ -1663,6 +1663,8 @@ button:disabled {
 }
 .import-task-header { display: flex; align-items: center; justify-content: space-between; gap: 8px; cursor: grab; user-select: none; touch-action: none; }
 .import-task.import-task-success { background: #122c21; border-color: #3d9966; }
+.update-task { border-color: var(--accent-color); }
+.update-task .import-task-header h3 { color: var(--accent-color); }
 .import-task-success .import-task-header h3 { color: #98edb8; }
 .import-task-success progress { accent-color: #5bd58b; }
 .import-task-header.dragging { cursor: grabbing; }

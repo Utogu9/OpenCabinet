@@ -18,6 +18,9 @@ function app(storage = new Map(), failSave = false, options = {}) {
         addEventListener(name, handler) { this.handlers[name] = handler; },
         showModal() { this.open = true; }, close() { this.open = false; this.handlers.close?.(); }, focus() { this.focused = true; },
         setAttribute(name, value) { this.attributes[name] = value; },
+        removeAttribute(name) { delete this.attributes[name]; },
+        querySelector(selector) { return get(`${id}:${selector}`); },
+        click() { return this.handlers.click?.(); },
       });
     }
     return elements.get(id);
@@ -48,6 +51,14 @@ function app(storage = new Map(), failSave = false, options = {}) {
   });
   const evaluate = (code) => vm.runInContext(code, context);
   if(options.backups) evaluate(fs.readFileSync(path.join(__dirname, "../src/backups.js"), "utf8"));
+  if(options.updates) {
+    evaluate(fs.readFileSync(path.join(__dirname, "../src/app-updates.js"), "utf8"));
+    evaluate(`window.OpenCabinetUpdates=OpenCabinetUpdates;
+      let floatingAttachments=0;
+      window.OpenCabinetTaskWindows={attach(card){floatingAttachments++;return {
+        show(){card.classList.remove('hidden');},hide(){card.classList.add('hidden');}
+      };}};`);
+  }
   evaluate(fs.readFileSync(path.join(__dirname, "../src/main.js"), "utf8"));
   evaluate("let refreshes = 0; applyLibraryFilters = () => refreshes++; showToast = () => {}; setupPreferences();");
   return {
@@ -181,6 +192,44 @@ test("About opens from the menu, shows the installed version and closes without 
   assert.equal(instance.get("about-dialog").open, false);
   assert.equal(instance.get("btn-open-about").focused, true);
   assert.equal(instance.storage.size, 0);
+});
+
+test("Available updates use a dismissible floating task and open About without installing", async () => {
+  let version = '0.2.0';
+  const instance = app(new Map(), false, { updates: true, invoke(command) {
+    if(command === 'check_app_update') return { version, install_allowed: true };
+  }});
+  instance.evaluate('setupAbout();setupAppUpdates()');
+  const card = instance.get('update-task');
+  assert.equal(card.classList.contains('hidden'), true);
+  await instance.evaluate('appUpdates.check(true)');
+  assert.equal(instance.evaluate('floatingAttachments'), 1);
+  assert.equal(card.classList.contains('hidden'), false);
+  assert.match(instance.get('update-task-label').textContent, /0\.2\.0/);
+  instance.get('btn-dismiss-update-task').click();
+  assert.equal(card.classList.contains('hidden'), true);
+  await instance.evaluate('appUpdates.check(true)');
+  assert.equal(card.classList.contains('hidden'), true, 'a dismissed version stays dismissed');
+  version = '0.3.0'; await instance.evaluate('appUpdates.check(true)');
+  assert.equal(card.classList.contains('hidden'), false);
+  assert.match(instance.get('update-task-label').textContent, /0\.3\.0/);
+  instance.get('btn-view-update').click();
+  assert.equal(card.classList.contains('hidden'), true);
+  assert.equal(instance.get('about-dialog').open, true);
+  await instance.evaluate('appUpdates.check()');
+  assert.equal(card.classList.contains('hidden'), true, 'About already displays the available update');
+  assert.equal(instance.calls.some(call=>call.command==='install_app_update'), false);
+});
+
+test("Current and offline checks never show an update notification", async () => {
+  for(const offline of [false, true]) {
+    const instance = app(new Map(), false, { updates: true, invoke(command) {
+      if(command === 'check_app_update') { if(offline) throw Error('Offline'); return null; }
+    }});
+    instance.evaluate('setupAppUpdates()'); await instance.evaluate('appUpdates.check(true)');
+    assert.equal(instance.get('update-task').classList.contains('hidden'), true);
+    assert.equal(instance.get('btn-open-about').classList.contains('update-available'), false);
+  }
 });
 
 test("Preferences default to 400 and persist across app restarts", async () => {

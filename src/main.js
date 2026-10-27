@@ -455,13 +455,25 @@ function setupAppUpdates() {
   const check = document.getElementById('btn-check-update');
   const install = document.getElementById('btn-install-update');
   const notes = document.getElementById('updates-notes');
+  const updateTask = document.getElementById('update-task');
+  const floating = window.OpenCabinetTaskWindows.attach(updateTask);
+  let dismissedVersion = null;
+  document.getElementById('btn-dismiss-update-task').addEventListener('click', () => {
+    dismissedVersion = appUpdates?.state.update?.version;
+    floating.hide();
+  });
+  document.getElementById('btn-view-update').addEventListener('click', () => {
+    floating.hide();
+    document.getElementById('btn-open-about').click();
+  });
   appUpdates = window.OpenCabinetUpdates.create({
     invoke, channel: () => new window.__TAURI__.core.Channel(),
     busy: () => scanInProgress || launchingGames.size || savingEmulator || savingInlineEmulator
       || retroarchSetup?.busy || inlineRetroarchSetup?.busy || allGames.some(game => game.is_running),
     notify: version => {
       document.getElementById('btn-open-about').classList.add('update-available');
-      showToast(t('update.available', version));
+      document.getElementById('update-task-label').textContent = t('update.available', version);
+      if (version !== dismissedVersion && !document.getElementById('about-dialog').open) floating.show();
     },
     render(state) {
       const active = ['checking', 'downloading', 'installing'].includes(state.phase);
@@ -484,6 +496,7 @@ function setupAppUpdates() {
       notes.hidden = !state.update?.notes;
       notes.querySelector('p').textContent = state.update?.notes || '';
       if (!state.update) document.getElementById('btn-open-about').classList.remove('update-available');
+      if (!state.update || ['downloading', 'installing'].includes(state.phase)) floating.hide();
     },
   });
   check.addEventListener('click', () => appUpdates.check());
