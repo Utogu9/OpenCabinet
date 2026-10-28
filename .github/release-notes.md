@@ -1,20 +1,20 @@
-## What's new in v0.1.1
+## What's new in v0.1.2
 
-- Import standalone executables under console platforms, including batches. Add files or folders during import review.
-- Automatic lightweight backups, optional full media backups, and restoration from Preferences → User Data.
-- Check the selected game's files and indicate when none are available.
-- Detect the system language on first launch and recommend restarting after a language change.
-- Improve keyboard navigation, visible focus, menu access and dialog focus management. Press F1 for shortcuts.
-- Refine the photo carousel controls and keep the selected thumbnail visible.
+- Dreamcast boxes now use Three.js with a detailed 3D model, interactive opening and improved acrylic rendering.
+- Support unfolded back covers and inlays, with black or white fallback inserts matched to the cover.
+- Cache Dreamcast inlays and manual cover previews for faster display without flashing the game cover first.
+- Improve dialog spacing and the About layout, with a link to the project on GitHub.
+- Raise the configurable RAM thumbnail limit to 99999.
+- Show available updates in a draggable floating notification with a shortcut to About.
 
-## Novedades de v0.1.1
+## Novedades de v0.1.2
 
-- Importación de ejecutables en plataformas de consola, también por lotes. Se pueden agregar archivos o carpetas desde la revisión.
-- Copias automáticas livianas, copias completas opcionales y restauración desde Preferencias → Datos de usuario.
-- Comprobación de los archivos del juego seleccionado e indicación cuando faltan todos.
-- Detección inicial del idioma del sistema y aviso de reinicio al cambiarlo.
-- Mejoras de navegación por teclado, foco visible, menús y ventanas. F1 muestra los atajos.
-- Ajustes del carrusel de fotos y desplazamiento para mantener visible la miniatura seleccionada.
+- Las cajas de Dreamcast ahora usan Three.js con un modelo 3D detallado, apertura interactiva y mejoras en el acrílico.
+- Soporte para contraportadas desplegadas e inlays, con insertos negros o blancos elegidos según la portada.
+- Caché de inlays y vistas previas de manuales de Dreamcast para mostrarlos más rápido, sin mostrar primero la portada del juego.
+- Mejoras en los márgenes de las ventanas y en Acerca de, con un enlace al proyecto en GitHub.
+- El límite configurable de miniaturas en RAM aumenta a 99999.
+- Aviso flotante arrastrable de actualizaciones disponibles, con acceso a Acerca de.
 
 ## Downloads / Descargas
 
