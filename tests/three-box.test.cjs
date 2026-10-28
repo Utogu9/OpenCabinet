@@ -5,8 +5,8 @@ const path=require('node:path');
 const vm=require('node:vm');
 const tick=()=>new Promise(resolve=>setImmediate(resolve));
 const hasOriginals=directory=>[0,1,2,3,4,5,6,7,8,11].every(id=>fs.existsSync(path.join(directory,`model_${id}.obj`)));
-function router(load,{switchModel=false}={}) {
-  const context=vm.createContext({console,OpenCabinetLocalModels:{switch:switchModel}});
+function router(load,{switchModel=false,pspModel=false}={}) {
+  const context=vm.createContext({console,OpenCabinetLocalModels:{switch:switchModel,psp:pspModel}});
   vm.runInContext(fs.readFileSync(path.join(__dirname,'../src/three-box-router.js'),'utf8'),context);
   const viewers=[];
   function make(type) {
@@ -16,7 +16,7 @@ function router(load,{switchModel=false}={}) {
     viewers.push(viewer);return viewer;
   }
   const api=context.OpenCabinetThreeBoxes.createRouter({classList:{remove(){}},dataset:{}},{},()=>make('css'),
-    platform=>platform==='Switch'?{variant:'switch',id:'switch'}:{variant:platform==='Dreamcast'?'dreamcast':'ps2',id:platform==='Dreamcast'?'jewel':'dvd'},settings=>settings,
+    platform=>['Switch','PSP'].includes(platform)?{variant:platform.toLowerCase(),id:platform.toLowerCase()}:{variant:platform==='Dreamcast'?'dreamcast':'ps2',id:platform==='Dreamcast'?'jewel':'dvd'},settings=>settings,
     model=>load(make,model));
   return {api,viewers};
 }
@@ -41,6 +41,16 @@ test('Local Switch and bundled Dreamcast models use separate viewers and preserv
   app.api.update({id:2,platform:'Dreamcast'},[]);await tick();
   assert.equal(app.viewers[0].disposed,true);assert.equal(app.viewers[1].type,'dreamcast');
   assert.deepEqual(models,['switch','dreamcast']);
+});
+
+test('PSP loads its own optional model and preserves the CSS fallback and other model families',async()=>{
+  const missing=router(async()=>{throw Error('A missing PSP must not load Three.js');});
+  missing.api.update({id:1,platform:'PSP'},[]);await tick();assert.equal(missing.viewers[0].type,'css');
+  const loaded=[],app=router(async(make,model)=>{loaded.push(model);return {createViewer:()=>make(model)};},{switchModel:true,pspModel:true});
+  app.api.update({id:1,platform:'PSP'},[]);app.api.setOpen(true);await tick();
+  assert.equal(app.viewers[0].type,'psp');assert.equal(app.viewers[0].isOpen,true);
+  app.api.update({id:2,platform:'Switch'},[]);await tick();assert.equal(app.viewers[0].disposed,true);
+  assert.deepEqual(loaded,['psp','switch']);app.api.dispose();
 });
 test('Late module responses cannot replace a newly selected platform',async()=>{
   let resolve;const app=router(make=>new Promise(done=>{resolve=()=>done({createViewer:()=>make('three')});}));

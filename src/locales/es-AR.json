@@ -569,6 +569,8 @@
     "msg.0463315afa": "Hojas de imprenta (lados alternados)",
     "msg.e5f08bf5a6": "Hojas escaneadas (sin alternar lados)",
     "msg.e263ce9df7": "Páginas originales del PDF",
+    "manual.readingAuto": "Automático",
+    "manual.readingSpreads": "Páginas dobles consecutivas",
     "msg.68b3597d75": "Pasar a la hoja anterior",
     "msg.2b8c99dd02": "Pasar a la hoja siguiente",
     "msg.145b63eae5": "Páginas del manual",

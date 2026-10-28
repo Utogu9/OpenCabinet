@@ -4,7 +4,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('./helpers/localized-vm.cjs');
 
-function fixture({ pages = 37, width = 400, height = 600, failure, wait, draw } = {}) {
+function fixture({ pages = 37, width = 400, height = 600, sizes = {}, failure, wait, draw } = {}) {
   const canvases = [], requested = [], argumentsList = []; let destroyed = 0, cleaned = 0;
   const context = vm.createContext({ URL, DOMException, AbortController, document: {
     baseURI: 'http://tauri.localhost/index.html',
@@ -20,7 +20,8 @@ function fixture({ pages = 37, width = 400, height = 600, failure, wait, draw } 
       if (wait) await wait; if (failure) throw new Error(failure);
       return { numPages: pages, async getPage(page) {
         requested.push(page);
-        return { getViewport: ({ scale }) => ({ width: width * scale, height: height * scale }), cleanup: () => { cleaned++; },
+        const [pageWidth,pageHeight]=sizes[page]||[width,height];
+        return { getViewport: ({ scale }) => ({ width: pageWidth * scale, height: pageHeight * scale }), cleanup: () => { cleaned++; },
           render: options => ({ promise: draw ? draw(page, options) : Promise.resolve(), cancel() {} }) };
       } };
     })() };
@@ -40,6 +41,38 @@ test('The back preview loads only the final page on demand and owns its canvas u
   assert.equal(await data.loadBack(),a);assert.deepEqual(app.requested,[1,37]);
   data.dispose();assert.equal(a.width,0);assert.equal(data.front.width,0);
   await assert.rejects(data.loadBack(),error=>error.name==='AbortError');
+});
+
+test('Automatic reading splits consecutive interior spreads while keeping narrow PSP covers intact',async()=>{
+  const drawings=[],app=fixture({pages:14,width:486,height:481.536,
+    sizes:{1:[245.661,481.402],14:[242.746,484.143]},draw:(page,options)=>{drawings.push({page,options});}});
+  const preview=await app.render();assert.equal(preview.splitCover,false);assert.deepEqual(app.requested,[1]);preview.dispose();
+  const doc=await app.open({layout:'auto'});
+  assert.equal(doc.layout,'spreads');assert.equal(doc.sourcePageCount,14);assert.equal(doc.pageCount,26);
+  assert.ok(Math.abs(doc.aspectRatio-245.661/481.402)<1e-9);
+  assert.equal(drawings.length,1,'metadata inspection must not rasterize any reading pages');
+  for(const page of [1,2,3,4,25,26])await doc.renderPage(page,{maxSide:1024});
+  assert.deepEqual(drawings.slice(1).map(d=>[d.page,Boolean(d.options.transform)]),[[1,false],[2,false],[2,true],[3,false],[13,true],[14,false]]);
+  for(const {options} of drawings.slice(2,6))assert.equal(options.canvasContext.canvas.width,Math.ceil(options.viewport.width/2));
+  assert.equal(drawings.at(-1).options.canvasContext.canvas.width,Math.ceil(drawings.at(-1).options.viewport.width));
+  doc.dispose();
+});
+
+test('Automatic reading keeps portrait pages and isolated landscape diagrams in their original order',async()=>{
+  const drawings=[],app=fixture({pages:10,sizes:{2:[800,600]},draw:(page,options)=>drawings.push({page,options})});
+  const doc=await app.open({layout:'auto'});assert.equal(doc.layout,'original');assert.equal(doc.pageCount,10);
+  await doc.renderPage(2);assert.equal(drawings[0].options.transform,undefined);
+  assert.equal(drawings[0].options.canvasContext.canvas.width,Math.ceil(drawings[0].options.viewport.width));doc.dispose();
+  const single=await fixture({pages:1}).open({layout:'auto'});assert.equal(single.pageCount,1);assert.equal(single.layout,'original');single.dispose();
+});
+
+test('Automatic imposed covers and explicit sequential spreads use distinct page orders',async()=>{
+  const app=fixture({pages:4,width:1200,height:900}),imposed=await app.open({layout:'auto'});
+  assert.equal(imposed.layout,'booklet');assert.equal(imposed.pageCount,8);imposed.dispose();
+  const drawings=[],sequential=fixture({pages:2,width:1200,height:900,draw:(page,options)=>drawings.push([page,Boolean(options.transform)])});
+  const doc=await sequential.open({layout:'spreads'});assert.equal(doc.pageCount,4);
+  for(const page of [1,2,3,4])await doc.renderPage(page);
+  assert.deepEqual(drawings,[[1,false],[1,true],[2,false],[2,true]]);doc.dispose();
 });
 
 test('A folded back preview uses the opposite half of the first scan, not the last physical scan',async()=>{

@@ -63,10 +63,11 @@ export function createContactShadows(renderer,light,{rear,lidShell,paper,manualB
   };
 }
 
-export function configureAcrylicOptics(material,{normalAxis='z',millimetersPerUnit=1,reliefStrength=1}={}) {
+export function configureAcrylicOptics(material,{normalAxis='z',millimetersPerUnit=1,reliefStrength=1,bodyHaze=0}={}) {
   if(!['x','y','z'].includes(normalAxis))throw Error('Invalid acrylic normal axis');
   if(!Number.isFinite(millimetersPerUnit)||millimetersPerUnit<=0)throw Error('Invalid acrylic model units');
   if(!Number.isFinite(reliefStrength)||reliefStrength<0||reliefStrength>1)throw Error('Invalid acrylic relief strength');
+  if(!Number.isFinite(bodyHaze)||bodyHaze<0||bodyHaze>1)throw Error('Invalid plastic body haze');
   // Transmission supplies Three.js's opaque-scene buffer. Blend the thin
   // sheets lightly, but refract through the thicker molded walls instead of
   // painting a brighter outline over them. Keep the printed artwork unlit.
@@ -79,11 +80,12 @@ export function configureAcrylicOptics(material,{normalAxis='z',millimetersPerUn
   material.onBeforeCompile=shader=>{
     shader.uniforms.acrylicScatterDensity={value:.06*millimetersPerUnit};
     shader.uniforms.acrylicReliefStrength={value:reliefStrength};
+    shader.uniforms.acrylicBodyHaze={value:bodyHaze};
     shader.vertexShader=`uniform float acrylicReliefStrength;\nvarying float vAcrylicRelief;\n${shader.vertexShader}`.replace('#include <begin_vertex>',`
       vAcrylicRelief = acrylicReliefStrength * smoothstep(0.04, 0.8, 1.0 - abs(normalize(normal).${normalAxis}));
       #include <begin_vertex>
     `);
-    shader.fragmentShader=`uniform float acrylicScatterDensity;\nvarying float vAcrylicRelief;\n${shader.fragmentShader}`;
+    shader.fragmentShader=`uniform float acrylicScatterDensity;\nuniform float acrylicBodyHaze;\nvarying float vAcrylicRelief;\n${shader.fragmentShader}`;
     // Use one sharp sample: rough bicubic refraction blurs the scan, whereas
     // molded case plastic mainly displaces it at each change of surface angle.
     shader.fragmentShader=shader.fragmentShader.replace('#include <transmission_fragment>',
@@ -113,8 +115,10 @@ export function configureAcrylicOptics(material,{normalAxis='z',millimetersPerUn
       // interfaces. Its soft whitish body scattering remains visible under
       // indirect light, even when no specular highlight points at the camera.
       // Each visible interface blends normally, so overlapping layers build up
-      // this cue; broad flat sheets keep zero scattering and do not bleach art.
-      float acrylicScatter = vAcrylicRelief * min(0.35, 1.0 - exp(-acrylicScatterDensity * acrylicThickness / max(acrylicCos, 0.18)));
+      // this cue. Clear cases leave broad sheets clear; milky polypropylene
+      // also scatters light through its flat body, over the inside artwork.
+      float acrylicEdgeScatter = min(0.35, 1.0 - exp(-acrylicScatterDensity * acrylicThickness / max(acrylicCos, 0.18)));
+      float acrylicScatter = mix(acrylicBodyHaze, acrylicEdgeScatter, vAcrylicRelief);
       vec3 acrylicAmbient = clamp(getIBLIrradiance(acrylicSurfaceNormal) / PI + vec3(0.25), vec3(0.35), vec3(0.85));
       acrylicAmbient *= sqrt(attenuationColor);
       float acrylicScattered = acrylicScatter;
@@ -127,5 +131,5 @@ export function configureAcrylicOptics(material,{normalAxis='z',millimetersPerUn
       #include <opaque_fragment>
     `);
   };
-  material.customProgramCacheKey=()=> 'opencabinet-acrylic-refraction-v2:'+normalAxis;
+  material.customProgramCacheKey=()=> 'opencabinet-acrylic-refraction-v3:'+normalAxis;
 }

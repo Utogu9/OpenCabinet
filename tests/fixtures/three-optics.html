@@ -51,7 +51,14 @@ for(const original of glass.children){const mesh=new THREE.Mesh(original.geometr
 glass.visible=false;const scaled=pixels();let scaledDifference=0;
 for(let i=0;i<reference.length;i+=4)for(let c=0;c<3;c++)scaledDifference+=Math.abs(reference[i+c]-scaled[i+c]);
 scaledDifference/=640*512*3;
-window.opticsResult={displacedPixels,indirectEdgePixels,layeredEdgePixels,print,glErrors,scaledDifference};
+// Milky case bodies lighten the scan behind their flat walls. Paper outside
+// the plastic remains opaque and must retain exactly the same printed colors.
+const hazeUniform=renderer.properties.get(scaledMaterial).uniforms.acrylicBodyHaze;
+const sample=data=>Array.from(data.slice((y*640+x)*4,(y*640+x)*4+3));
+hazeUniform.value=.16;const hazyPrint=sample(pixels());
+paper.position.z=5;hazeUniform.value=0;const outsideClear=sample(pixels());
+hazeUniform.value=.16;const outsideHazy=sample(pixels());
+window.opticsResult={displacedPixels,indirectEdgePixels,layeredEdgePixels,print,glErrors,scaledDifference,hazyPrint,outsideClear,outsideHazy};
 scaledGlass.children.forEach(mesh=>mesh.geometry.dispose());scaledMaterial.dispose();
 new Set(glass.children.map(mesh=>mesh.geometry)).forEach(geometry=>geometry.dispose());paper.geometry.dispose();paper.material.dispose();
 material.dispose();texture.dispose();environment.dispose();renderer.dispose();renderer.forceContextLoss();

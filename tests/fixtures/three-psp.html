@@ -1,0 +1,26 @@
+<!doctype html><meta charset="utf-8"><title>PSP model integration</title>
+<link rel="stylesheet" href="/src/styles.css"><style>#stage{width:1000px;height:780px}</style>
+<div id="stage" class="game-box-stage" tabindex="0"></div>
+<script>globalThis.OpenCabinetI18n={t:key=>key};</script>
+<script src="/src/local-models.js"></script><script src="/src/three-box-router.js"></script><script src="/src/game-box.js"></script>
+<script type="module">
+window.manualMode=false;window.manualLoads=0;window.manualBackLoads=0;window.manualDisposed=0;
+window.viewer=OpenCabinet3D.createViewer(document.getElementById('stage'),{
+ debug:state=>window.debug=state,
+ async loadManual(game,signal,onPreview){
+  if(!window.manualMode)return null;
+  window.manualLoads++;
+  const front=document.createElement('canvas');front.width=512;front.height=1003;
+  const ctx=front.getContext('2d');ctx.fillStyle='#4488cc';ctx.fillRect(0,0,512,1003);
+  ctx.fillStyle='#ffffff';ctx.font='48px sans-serif';ctx.fillText('MANUAL',80,100);onPreview(front);
+  const data={front,path:'fixture.pdf',pageCount:2,coverMode:'full',loadBack(){window.manualBackLoads++;return Promise.resolve(front);},dispose(){window.manualDisposed++;}};
+  if(window.manualMode==='slow')await new Promise(resolve=>window.finishManual=resolve);
+  return data;
+ },
+ onManualState:state=>window.manualState=state,
+ onManualActivate(){window.manualActive=true;return true;},
+ onManualDeactivate(){window.manualActive=false;},
+});
+window.select=(id,images=[])=>viewer.update({id,title:'PSP test '+id,platform:'Sony PSP'},images);
+select(1);
+</script>

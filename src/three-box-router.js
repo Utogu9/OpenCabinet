@@ -3,7 +3,8 @@
   const moduleTasks=new Map();
   const load = model => {
     if(!moduleTasks.has(model))moduleTasks.set(model,(model==='switch'
-      ? import('./three-switch-viewer.js') : import('./three-box-viewer.js'))
+      ? import('./three-switch-viewer.js') : model==='psp'
+      ? import('./three-psp-viewer.js') : import('./three-box-viewer.js'))
       .catch(error=>{moduleTasks.delete(model);throw error;}));
     return moduleTasks.get(model);
   };
@@ -19,7 +20,7 @@
         pending=[game,images,settings];
         const profile=profileFor(game.platform,null,game.rom_path,resolveSettings(settings,game.box_3d));
         const model=profile.variant==='dreamcast' && ['jewel','jewelPal'].includes(profile.id) ? 'dreamcast'
-          : profile.id==='switch' && globalThis.OpenCabinetLocalModels?.switch ? 'switch' : null;
+          : ['switch','psp'].includes(profile.id) && globalThis.OpenCabinetLocalModels?.[profile.id] ? profile.id : null;
         const desired=model ? `three:${model}` : 'css';
         if(backend===desired) {viewer?.update(...pending);return;}
         release();open=false;

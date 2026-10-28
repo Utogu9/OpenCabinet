@@ -4,7 +4,7 @@ const fs=require('node:fs');
 const path=require('node:path');
 const http=require('node:http');
 
-test('Acrylic refracts printed details at molded edges without shadows, bleaching or inverted-normal artifacts',async t=>{
+test('Plastic optics preserve clear artwork, support milky bodies and leave exterior prints unchanged',async t=>{
   let chromium;
   try {({chromium}=require('playwright-core'));}catch{
     t.skip('Optional WebGL test requires playwright-core and Chromium.');return;
@@ -36,6 +36,8 @@ test('Acrylic refracts printed details at molded edges without shadows, bleachin
   assert.ok(result.layeredEdgePixels>100,`two nearby acrylic layers accumulate the milky edge cue (${result.layeredEdgePixels} pixels)`);
   assert.ok(result.print.every((value,i)=>Math.abs(value-[153,26,51][i])<25),`flat acrylic preserves print colors (${result.print})`);
   assert.ok(result.scaledDifference<1,`changing model units must not magnify artwork or produce displaced copies (${result.scaledDifference})`);
+  assert.ok(result.hazyPrint.reduce((a,b)=>a+b,0)>result.print.reduce((a,b)=>a+b,0)+40,`milky bodies lighten the inside scan (${result.hazyPrint})`);
+  assert.ok(result.outsideClear.every((value,i)=>Math.abs(value-result.outsideHazy[i])<=1),`body haze must not affect an exterior print (${result.outsideClear}, ${result.outsideHazy})`);
   assert.ok(result.glErrors.every(error=>error===0));assert.deepEqual(errors,[]);
   t.diagnostic(JSON.stringify(result));
 });

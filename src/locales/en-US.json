@@ -569,6 +569,8 @@
     "msg.0463315afa": "Printer sheets (alternating sides)",
     "msg.e5f08bf5a6": "Scanned sheets (without alternating sides)",
     "msg.e263ce9df7": "Original PDF pages",
+    "manual.readingAuto": "Automatic",
+    "manual.readingSpreads": "Sequential two-page spreads",
     "msg.68b3597d75": "Turn to previous sheet",
     "msg.2b8c99dd02": "Turn to next sheet",
     "msg.145b63eae5": "Manual pages",

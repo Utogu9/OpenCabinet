@@ -117,9 +117,43 @@
       const doc = await task.promise; check();
       if (disposed) throw cancelled();
       if (!Number.isInteger(doc.numPages) || doc.numPages < 1) throw new Error(globalThis.OpenCabinetI18n.t("msg.7d9efe8ff6"));
+      const boxes=new Map();
+      async function pageBox(number) {
+        check();if(disposed)throw cancelled();
+        if(boxes.has(number))return boxes.get(number);
+        const page=await doc.getPage(number);check();
+        const box=page.getViewport({scale:1});page.cleanup();
+        if(![box.width,box.height].every(value=>Number.isFinite(value)&&value>0))throw new Error(globalThis.OpenCabinetI18n.t("msg.21ea61a51b"));
+        const ratio=box.width/box.height;boxes.set(number,ratio);return ratio;
+      }
+      const doubleWidth=(ratio,single)=>ratio/single>=1.8&&ratio/single<=2.2;
+      let firstRatio,singleRatio,sequence=null,mixed=false;
+      if(layout==='auto') {
+        firstRatio=await pageBox(1);
+        if(firstRatio>=1.05&&firstRatio<=1.7)layout='booklet';
+        else {
+          mixed=doc.numPages>1&&doubleWidth(await pageBox(2),firstRatio);
+          layout=mixed?'spreads':'original';
+        }
+      }
+      if(layout==='spreads') {
+        // Covers may be individual narrow pages while the inside scans contain
+        // two consecutive pages. Inspect page boxes only when opening the reader;
+        // selecting a game still parses/renders its cover page alone.
+        firstRatio ??= await pageBox(1);
+        const second=doc.numPages>1?await pageBox(2):firstRatio,last=await pageBox(doc.numPages);
+        singleRatio=doubleWidth(second,firstRatio)?firstRatio:doubleWidth(firstRatio,last)?last:firstRatio/2;
+        const scans=[];
+        for(let number=1;number<=doc.numPages;number++)scans.push({number,split:doubleWidth(await pageBox(number),singleRatio)});
+        // An isolated landscape diagram should not change an otherwise normal
+        // portrait manual. Automatic mixed-format detection needs a majority.
+        if(mixed&&scans.filter(scan=>scan.split).length<Math.max(1,Math.ceil((doc.numPages-2)/2)))layout='original';
+        else sequence=scans.flatMap(scan=>scan.split?[{scan:scan.number,side:'left'},{scan:scan.number,side:'right'}]:[{scan:scan.number,side:'full'}]);
+      }
       const booklet = layout === 'booklet' || layout === 'nested';
-      const pageCount = doc.numPages * (booklet ? 2 : 1);
-      return { path, pageCount, sourcePageCount: doc.numPages, release, dispose,
+      const pageCount = sequence?sequence.length:doc.numPages * (booklet ? 2 : 1);
+      const aspectRatio=sequence?singleRatio:firstRatio?firstRatio/(booklet?2:1):undefined;
+      return { path, pageCount, sourcePageCount: doc.numPages, layout, aspectRatio, release, dispose,
         detach(canvas) { if(!canvases.delete(canvas))throw new Error('Canvas does not belong to this PDF session.'); },
         async renderPage(number, { signal: pageSignal, maxSide = 3072 } = {}) {
           const current = () => { check(); if (disposed || pageSignal?.aborted) throw cancelled(); };
@@ -129,9 +163,11 @@
           // [N,1], [2,N-1], [N-2,3], [4,N-3], ... . Map lazily, without
           // requesting, rasterizing or keeping the other PDF pages in memory.
           const low = number <= doc.numPages;
-          const scanIndex = booklet ? (low ? number - 1 : pageCount - number) : number - 1;
-          let rightHalf = layout === 'nested' ? low : (scanIndex % 2 === 0 ? low : !low);
-          if (coverSide === 'left') rightHalf = !rightHalf;
+          const slice=sequence?.[number-1];
+          const scanIndex = slice?slice.scan-1:booklet ? (low ? number - 1 : pageCount - number) : number - 1;
+          const splitPage=slice?slice.side!=='full':booklet;
+          let rightHalf = slice?slice.side==='right':layout === 'nested' ? low : (scanIndex % 2 === 0 ? low : !low);
+          if (!slice&&coverSide === 'left') rightHalf = !rightHalf;
           let canvas, drawing, page;
           const cancel = () => drawing?.cancel();
           pageSignal?.addEventListener('abort', cancel, { once: true });
@@ -140,11 +176,11 @@
             const box = page.getViewport({ scale: 1 });
             if (![box.width, box.height].every(value => Number.isFinite(value) && value > 0)) throw new Error(globalThis.OpenCabinetI18n.t("msg.21ea61a51b"));
             const side = Number.isFinite(maxSide) ? Math.max(512, Math.min(4096, maxSide)) : 3072;
-            const viewport = page.getViewport({ scale: side / Math.max(box.width / (booklet ? 2 : 1), box.height) });
+            const viewport = page.getViewport({ scale: side / Math.max(box.width / (splitPage ? 2 : 1), box.height) });
             canvas = document.createElement('canvas'); canvases.add(canvas);
-            canvas.width = Math.max(1, Math.ceil(viewport.width / (booklet ? 2 : 1))); canvas.height = Math.max(1, Math.ceil(viewport.height));
+            canvas.width = Math.max(1, Math.ceil(viewport.width / (splitPage ? 2 : 1))); canvas.height = Math.max(1, Math.ceil(viewport.height));
             drawing = page.render({ canvasContext: canvas.getContext('2d', { alpha: false }), viewport, background: '#ffffff',
-              ...(booklet && rightHalf ? { transform: [1, 0, 0, 1, -viewport.width / 2, 0] } : {}) });
+              ...(splitPage && rightHalf ? { transform: [1, 0, 0, 1, -viewport.width / 2, 0] } : {}) });
             renders.add(drawing); await drawing.promise; current();
             return canvas;
           } catch (error) {

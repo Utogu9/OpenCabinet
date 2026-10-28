@@ -4,6 +4,7 @@
   const firstPage = spread => spread ? spread * 2 : 1;
   const maxSpread = count => Math.floor(count / 2);
   const offset = (spread, count) => spread === 0 ? '-25%' : spread * 2 === count ? '25%' : '0%';
+  const readingLayouts=['auto','booklet','nested','spreads','original'];
   function create({ imageSource = value => value, openPDF = (...args) => globalThis.OpenCabinetManualPDF.open(...args), onClose = () => {} } = {}) {
     let active = null;
     const readingPreferenceKey = 'opencabinet.manualReadingModes';
@@ -70,6 +71,13 @@
     function face(s, node, page) {
       const entry = page && s.cache.get(page);
       node.dataset.page = entry ? String(page) : ''; node.dataset.empty = String(!entry);
+      const baseWidth=node===s.leafFront||node===s.leafBack?100:50;
+      const actual=entry?.canvas?.width/entry?.canvas?.height;
+      const ratio=Number.isFinite(actual)&&actual>0?actual:s.ratio;
+      const width=Math.min(1,ratio/s.ratio),height=Math.min(1,s.ratio/ratio);
+      // Fit the whole page surface to its image, rather than fitting an image
+      // inside a larger white sheet. Mixed-size PDF scans must not gain borders.
+      Object.assign(node.style,{width:`${baseWidth*width}%`,height:`${height*100}%`,top:`${(1-height)*50}%`});
       if (entry) { node.replaceChildren(entry.canvas); entry.canvas.setAttribute('aria-label', globalThis.OpenCabinetI18n.t("msg.19198aaeed", page)); }
       else node.replaceChildren();
     }
@@ -159,6 +167,7 @@
         const doc = await openPDF(s.path, { imageSource, signal: s.lifetime.signal, layout: s.readingMode, coverSide: s.coverSide });
         if (active !== s || s.closing) { doc.dispose(); return; }
         s.doc = doc; s.count = doc.pageCount; s.page = Math.min(s.page, s.count); s.wanted = Math.floor(s.page / 2);
+        if(Number.isFinite(doc.aspectRatio)&&doc.aspectRatio>0){s.ratio=doc.aspectRatio;fit(s);}
         controls(s); await display(s);
       } catch (error) {
         if (active === s && !s.closing) { s.error.textContent = globalThis.OpenCabinetI18n.t("msg.3152cf27b5"); s.retry.hidden = false; }
@@ -235,21 +244,22 @@
       get isOpen() { return !!active; },
       open(manual, { title = globalThis.OpenCabinetI18n.t("msg.b0b9fe24ff"), origin = null, focusTarget = null, readingMode = readingModes[manual.path] } = {}) {
         close(false, false);
-        if (!['booklet', 'nested', 'original'].includes(readingMode)) readingMode = manual.splitCover ? 'booklet' : 'original';
-        const booklet = readingMode !== 'original';
+        if (!readingLayouts.includes(readingMode)) readingMode = 'auto';
+        const booklet = readingMode==='booklet'||readingMode==='nested'||(readingMode==='auto'&&manual.splitCover);
         const dialog = el('dialog', null, 'manual-reader-dialog'); dialog.setAttribute('aria-label', globalThis.OpenCabinetI18n.t("msg.63e31b372a", title));
         const header = el('header', null, 'manual-reader-header'); header.append(el('h2', globalThis.OpenCabinetI18n.t("msg.23871abd2e", title)));
         header.append(button(globalThis.OpenCabinetI18n.t("msg.b2954ba4b9"), globalThis.OpenCabinetI18n.t("msg.af1359c7c2"), () => close()));
         const layoutLabel = el('label', globalThis.OpenCabinetI18n.t("msg.b02ea97257"), 'manual-reader-layout');
         const layoutSelect = el('select'); layoutSelect.setAttribute('aria-label', globalThis.OpenCabinetI18n.t("msg.8cd5384fd3"));
-        for (const [value, text] of [['booklet', globalThis.OpenCabinetI18n.t("msg.0463315afa")],
-          ['nested', globalThis.OpenCabinetI18n.t("msg.e5f08bf5a6")], ['original', globalThis.OpenCabinetI18n.t("msg.e263ce9df7")]]) {
+        for (const [value, text] of [['auto',globalThis.OpenCabinetI18n.t('manual.readingAuto')],['booklet', globalThis.OpenCabinetI18n.t("msg.0463315afa")],
+          ['nested', globalThis.OpenCabinetI18n.t("msg.e5f08bf5a6")],['spreads',globalThis.OpenCabinetI18n.t('manual.readingSpreads')], ['original', globalThis.OpenCabinetI18n.t("msg.e263ce9df7")]]) {
           const option = el('option', text); option.value = value; layoutSelect.append(option);
         }
         layoutSelect.value = readingMode; layoutLabel.append(layoutSelect); header.append(layoutLabel);
         layoutSelect.addEventListener('change', () => {
-          if (active !== s || s.closing || !['booklet', 'nested', 'original'].includes(layoutSelect.value)) return;
-          const mode = layoutSelect.value; readingModes[manual.path] = mode;
+          if (active !== s || s.closing || !readingLayouts.includes(layoutSelect.value)) return;
+          const mode = layoutSelect.value;
+          if(mode==='auto')delete readingModes[manual.path];else readingModes[manual.path] = mode;
           try { globalThis.localStorage?.setItem(readingPreferenceKey, JSON.stringify(readingModes)); } catch {}
           // Replace only the reading session; keep the extracted booklet and
           // fullscreen ownership, and cancel every outstanding old page task.

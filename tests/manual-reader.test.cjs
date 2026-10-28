@@ -34,7 +34,8 @@ function app({ open, draw, animated = false, pageCount = 5, nativeWindow, manual
   vm.runInContext(fs.readFileSync('src/manual-reader.js', 'utf8'), context);
   const factory = async (path, options) => {
     if (open) return open(path, options);
-    const doc = { pageCount: pageCount * (['booklet','nested'].includes(options.layout)?2:1), path, options, requested: [], released: [], disposed: 0,
+    const layout=options.layout==='auto'?(manual.splitCover?'booklet':'original'):options.layout;
+    const doc = { pageCount: pageCount * (['booklet','nested'].includes(layout)?2:1), layout, path, options, requested: [], released: [], disposed: 0,
       renderPage(page, config) {
         const canvas = new Element('canvas'); canvas.width = page === 4 ? 1000 : 600; canvas.height = 900;
         doc.requested.push({ page, signal: config.signal, canvas });
@@ -78,8 +79,8 @@ test('A cover spread defaults to imposed reading and mode changes retain fullscr
   const storage=new Map(), nativeWindow=require('./fixtures/native-window.cjs')();
   const manual={splitCover:true,aspectRatio:2/3,sourceAspectRatio:4/3,coverMode:'left'};
   const a=app({manual,pageCount:4,storage,nativeWindow});a.openReader();await turn();await a.fullscreen.idle();
-  let u=a.ui();assert.equal(u.layout.value,'booklet');assert.equal(u.input.max,'8');
-  assert.equal(a.docs[0].options.layout,'booklet');assert.equal(a.docs[0].options.coverSide,'left');
+  let u=a.ui();assert.equal(u.layout.value,'auto');assert.equal(u.input.max,'8');
+  assert.equal(a.docs[0].options.layout,'auto');assert.equal(a.docs[0].layout,'booklet');assert.equal(a.docs[0].options.coverSide,'left');
   assert.ok(Math.abs(parseFloat(u.book.style.width)/parseFloat(u.book.style.height)-4/3)<1e-8);
   u.next.trigger('click');await turn();assert.deepEqual(pages(u),['2','3']);
   u.dialog.trigger('keydown',{key:'End'});await turn();assert.deepEqual(pages(u),['8','']);
@@ -91,6 +92,37 @@ test('A cover spread defaults to imposed reading and mode changes retain fullscr
   a.reader.dispose();await a.fullscreen.idle();assert.equal(a.closed(),1);
   const b=app({manual,pageCount:4,storage});b.openReader();await turn();
   assert.equal(b.ui().layout.value,'original');assert.equal(b.docs[0].options.layout,'original');b.reader.dispose();
+});
+
+test('Automatic mixed-format reading adopts the resolved page count and can replace a saved override',async()=>{
+  const storage=new Map(),layouts=[];
+  const a=app({pageCount:14,storage,manual:{splitCover:false,sourceAspectRatio:.51,aspectRatio:.51},
+    open:async(path,options)=>{
+      layouts.push(options.layout);
+      return {pageCount:options.layout==='original'?14:26,layout:options.layout==='auto'?'spreads':options.layout,aspectRatio:.51,
+        renderPage:async()=>{const canvas=new a.Element('canvas');canvas.width=510;canvas.height=1000;return canvas;},release(){},dispose(){}};
+    }});
+  a.openReader();await turn();let u=a.ui();
+  assert.equal(u.layout.value,'auto');assert.equal(u.input.max,'26');
+  assert.ok(Math.abs(parseFloat(u.book.style.width)/parseFloat(u.book.style.height)-1.02)<1e-8);
+  u.input.value='26';u.input.trigger('change');await turn();assert.deepEqual(pages(u),['26','']);
+  u.layout.value='original';u.layout.trigger('change');await turn();assert.equal(a.ui().input.max,'14');
+  u=a.ui();u.layout.value='auto';u.layout.trigger('change');await turn();assert.equal(a.ui().input.max,'26');
+  assert.equal(JSON.parse(storage.get('opencabinet.manualReadingModes'))['Guide.pdf'],undefined);
+  assert.deepEqual(layouts,['auto','original','auto']);a.reader.dispose();
+});
+
+test('Mixed page proportions fit the printed surface without adding white margins or stretching it',async()=>{
+  const a=app({pageCount:5,draw:(page,canvas)=>{canvas.width=page===2?450:page===3?900:600;canvas.height=900;return Promise.resolve(canvas);}});
+  a.openReader();await turn();a.ui().next.trigger('click');await turn();const u=a.ui();
+  for(const face of [u.left,u.right]) {
+    const width=parseFloat(face.style.width)/100*parseFloat(u.book.style.width);
+    const height=parseFloat(face.style.height)/100*parseFloat(u.book.style.height);
+    const image=face.children[0];
+    assert.ok(Math.abs(width/height-image.width/image.height)<1e-8,'each page frame has exactly the image aspect ratio');
+    assert.ok(width<=parseFloat(u.book.style.width)/2+.001&&height<=parseFloat(u.book.style.height)+.001,'wide and narrow scans both stay inside their page bounds');
+  }
+  a.reader.dispose();
 });
 
 test('Switching reading layouts cancels pending pages and discards their late results',async()=>{
