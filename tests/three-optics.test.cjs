@@ -35,6 +35,7 @@ test('Acrylic refracts printed details at molded edges without shadows, bleachin
   assert.ok(result.indirectEdgePixels>100,`folds remain visible without direct lights or environment reflections (${result.indirectEdgePixels} pixels)`);
   assert.ok(result.layeredEdgePixels>100,`two nearby acrylic layers accumulate the milky edge cue (${result.layeredEdgePixels} pixels)`);
   assert.ok(result.print.every((value,i)=>Math.abs(value-[153,26,51][i])<25),`flat acrylic preserves print colors (${result.print})`);
+  assert.ok(result.scaledDifference<1,`changing model units must not magnify artwork or produce displaced copies (${result.scaledDifference})`);
   assert.ok(result.glErrors.every(error=>error===0));assert.deepEqual(errors,[]);
   t.diagnostic(JSON.stringify(result));
 });

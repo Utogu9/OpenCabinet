@@ -63,17 +63,24 @@ export function createContactShadows(renderer,light,{rear,lidShell,paper,manualB
   };
 }
 
-export function configureAcrylicOptics(material) {
+export function configureAcrylicOptics(material,{normalAxis='z',millimetersPerUnit=1,reliefStrength=1}={}) {
+  if(!['x','y','z'].includes(normalAxis))throw Error('Invalid acrylic normal axis');
+  if(!Number.isFinite(millimetersPerUnit)||millimetersPerUnit<=0)throw Error('Invalid acrylic model units');
+  if(!Number.isFinite(reliefStrength)||reliefStrength<0||reliefStrength>1)throw Error('Invalid acrylic relief strength');
   // Transmission supplies Three.js's opaque-scene buffer. Blend the thin
   // sheets lightly, but refract through the thicker molded walls instead of
   // painting a brighter outline over them. Keep the printed artwork unlit.
-  Object.assign(material,{transmission:1,opacity:1,thickness:.65,ior:1.49,
+  // Three.js multiplies thickness by modelMatrix scale. glTF stores meters;
+  // our prepared Dreamcast mesh stores millimeters. Keep the optical path and
+  // scattering density equivalent instead of magnifying glTF refraction 1000x.
+  Object.assign(material,{transmission:1,opacity:1,thickness:.65/millimetersPerUnit,ior:1.49,
     attenuationDistance:120,roughness:.08,clearcoat:0,toneMapped:false});
   material.color.set(0xffffff);material.attenuationColor.set(0xe4eff6);
   material.onBeforeCompile=shader=>{
-    shader.uniforms.acrylicScatterDensity={value:.06};
-    shader.vertexShader=`varying float vAcrylicRelief;\n${shader.vertexShader}`.replace('#include <begin_vertex>',`
-      vAcrylicRelief = smoothstep(0.04, 0.8, 1.0 - abs(normalize(normal).z));
+    shader.uniforms.acrylicScatterDensity={value:.06*millimetersPerUnit};
+    shader.uniforms.acrylicReliefStrength={value:reliefStrength};
+    shader.vertexShader=`uniform float acrylicReliefStrength;\nvarying float vAcrylicRelief;\n${shader.vertexShader}`.replace('#include <begin_vertex>',`
+      vAcrylicRelief = acrylicReliefStrength * smoothstep(0.04, 0.8, 1.0 - abs(normalize(normal).${normalAxis}));
       #include <begin_vertex>
     `);
     shader.fragmentShader=`uniform float acrylicScatterDensity;\nvarying float vAcrylicRelief;\n${shader.fragmentShader}`;
@@ -120,5 +127,5 @@ export function configureAcrylicOptics(material) {
       #include <opaque_fragment>
     `);
   };
-  material.customProgramCacheKey=()=> 'opencabinet-acrylic-refraction-v2';
+  material.customProgramCacheKey=()=> 'opencabinet-acrylic-refraction-v2:'+normalAxis;
 }

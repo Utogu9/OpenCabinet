@@ -143,9 +143,20 @@ function validateRuntime(directory) {
 }
 
 export function prepare({projectRoot=root,dependencyRoot=path.join(projectRoot,'node_modules/three')}={}) {
+  // Optional locally supplied models are never downloaded or required by builds.
+  const switchModel=path.join(projectRoot,'src/models/switch');
+  const localModels={switch:['case.json','case.glb'].every(file=>fs.existsSync(path.join(switchModel,file)))};
+  writeChanged(path.join(projectRoot,'src/local-models.js'),'// Generated locally by prepare:three.\nglobalThis.OpenCabinetLocalModels = '+JSON.stringify(localModels)+';\n');
   const vendor=path.join(projectRoot,'src/vendor/three');fs.mkdirSync(vendor,{recursive:true});
   for (const file of ['three.module.js','three.core.js']) writeChanged(path.join(vendor,file),fs.readFileSync(path.join(dependencyRoot,'build',file)));
   writeChanged(path.join(vendor,'RoomEnvironment.js'),fs.readFileSync(path.join(dependencyRoot,'examples/jsm/environments/RoomEnvironment.js'),'utf8').replace("from 'three'","from './three.module.js'"));
+  for(const [source,target] of [['loaders/GLTFLoader.js','GLTFLoader.js'],['utils/BufferGeometryUtils.js','BufferGeometryUtils.js'],['utils/SkeletonUtils.js','SkeletonUtils.js']]) {
+    const content=fs.readFileSync(path.join(dependencyRoot,'examples/jsm',source),'utf8')
+      .replaceAll("from 'three'","from './three.module.js'")
+      .replaceAll("from '../utils/BufferGeometryUtils.js'","from './BufferGeometryUtils.js'")
+      .replaceAll("from '../utils/SkeletonUtils.js'","from './SkeletonUtils.js'");
+    writeChanged(path.join(vendor,target),content);
+  }
   writeChanged(path.join(vendor,'LICENSE'),fs.readFileSync(path.join(dependencyRoot,'LICENSE')));
   const source=path.join(projectRoot,'_modelos/Dreamcast'),destination=path.join(projectRoot,'src/models/dreamcast');
   fs.mkdirSync(destination,{recursive:true});

@@ -41,7 +41,18 @@ for(let i=0;i<scattered.length;i+=4)if(layered[i]+layered[i+1]+layered[i+2]-scat
 const probe=new THREE.Vector3(-30,-24,1).project(camera),x=Math.floor((probe.x+1)*320),y=Math.floor((probe.y+1)*256);
 const print=Array.from(refracted.slice((y*640+x)*4,(y*640+x)*4+3));
 glass.rotation.y=.5;pixels();
-window.opticsResult={displacedPixels,indirectEdgePixels,layeredEdgePixels,print,glErrors};
+// A meter-based glTF mesh enlarged 1000x must have the same optics as the
+// equivalent millimeter-based mesh, including the layered relief scattering.
+glass.rotation.y=0;const reference=pixels();
+const scaledMaterial=new THREE.MeshPhysicalMaterial({transparent:true,depthWrite:false,side:THREE.DoubleSide});
+configureAcrylicOptics(scaledMaterial,{millimetersPerUnit:1000});scaledMaterial.envMap=environment.texture;scaledMaterial.envMapIntensity=0;
+const scaledGlass=new THREE.Group();scaledGlass.scale.setScalar(1000);scene.add(scaledGlass);
+for(const original of glass.children){const mesh=new THREE.Mesh(original.geometry.clone().scale(.001,.001,.001),scaledMaterial);mesh.position.copy(original.position).multiplyScalar(.001);scaledGlass.add(mesh);}
+glass.visible=false;const scaled=pixels();let scaledDifference=0;
+for(let i=0;i<reference.length;i+=4)for(let c=0;c<3;c++)scaledDifference+=Math.abs(reference[i+c]-scaled[i+c]);
+scaledDifference/=640*512*3;
+window.opticsResult={displacedPixels,indirectEdgePixels,layeredEdgePixels,print,glErrors,scaledDifference};
+scaledGlass.children.forEach(mesh=>mesh.geometry.dispose());scaledMaterial.dispose();
 new Set(glass.children.map(mesh=>mesh.geometry)).forEach(geometry=>geometry.dispose());paper.geometry.dispose();paper.material.dispose();
 material.dispose();texture.dispose();environment.dispose();renderer.dispose();renderer.forceContextLoss();
 </script>

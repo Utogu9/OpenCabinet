@@ -37,6 +37,13 @@ src/vendor/three/
 src/models/dreamcast/.source-hash
 src/models/dreamcast/ribs-height.png
 
+# Optional Switch model assets remain local.
+/src/models/switch/case.glb
+/src/models/switch/case.json
+
+# Generated model availability flags.
+/src/local-models.js
+
 # Generated from the editable language catalogs.
 src/locales/catalogs.js
 

@@ -27,6 +27,7 @@ test('A fresh distribution prepares Three.js without authoring files and preserv
   assert.deepEqual(assets.map(app.digest),original);
   assert.equal(fs.existsSync(path.join(app.projectRoot,'_modelos')),false);
   assert.equal(fs.existsSync(path.join(app.model,'.source-hash')),false);
+  assert.match(fs.readFileSync(path.join(app.projectRoot,'src/local-models.js'),'utf8'),/"switch":false/);
   const vendor=path.join(app.projectRoot,'src/vendor/three');
   assert.ok(fs.statSync(path.join(vendor,'three.module.js')).size>0);
   assert.match(fs.readFileSync(path.join(vendor,'RoomEnvironment.js'),'utf8'),/from '\.\/three\.module\.js'/);

@@ -5,8 +5,8 @@ const path=require('node:path');
 const vm=require('node:vm');
 const tick=()=>new Promise(resolve=>setImmediate(resolve));
 const hasOriginals=directory=>[0,1,2,3,4,5,6,7,8,11].every(id=>fs.existsSync(path.join(directory,`model_${id}.obj`)));
-function router(load) {
-  const context=vm.createContext({console});
+function router(load,{switchModel=false}={}) {
+  const context=vm.createContext({console,OpenCabinetLocalModels:{switch:switchModel}});
   vm.runInContext(fs.readFileSync(path.join(__dirname,'../src/three-box-router.js'),'utf8'),context);
   const viewers=[];
   function make(type) {
@@ -16,8 +16,8 @@ function router(load) {
     viewers.push(viewer);return viewer;
   }
   const api=context.OpenCabinetThreeBoxes.createRouter({classList:{remove(){}},dataset:{}},{},()=>make('css'),
-    platform=>({variant:platform==='Dreamcast'?'dreamcast':'ps2',id:platform==='Dreamcast'?'jewel':'dvd'}),settings=>settings,
-    ()=>load(make));
+    platform=>platform==='Switch'?{variant:'switch',id:'switch'}:{variant:platform==='Dreamcast'?'dreamcast':'ps2',id:platform==='Dreamcast'?'jewel':'dvd'},settings=>settings,
+    model=>load(make,model));
   return {api,viewers};
 }
 test('Only Dreamcast switches to Three.js; other platforms keep the existing viewer',async()=>{
@@ -26,6 +26,21 @@ test('Only Dreamcast switches to Three.js; other platforms keep the existing vie
   app.api.update({id:2,platform:'Dreamcast'},[]);await tick();
   assert.equal(imports,1);assert.equal(app.viewers[0].disposed,true);assert.equal(app.viewers[1].type,'three');
   app.api.update({id:3,platform:'PS2'},[]);assert.equal(app.viewers[1].disposed,true);assert.equal(app.viewers[2].type,'css');
+});
+
+test('Switch keeps the CSS viewer unless a local model is explicitly available',async()=>{
+  let imports=0;const app=router(async make=>{imports++;return {createViewer:()=>make('three')};});
+  app.api.update({id:1,platform:'Switch'},[]);await tick();
+  assert.equal(imports,0);assert.equal(app.viewers[0].type,'css');
+});
+
+test('Local Switch and bundled Dreamcast models use separate viewers and preserve controls while loading',async()=>{
+  const models=[];const app=router(async(make,model)=>{models.push(model);return {createViewer:()=>make(model)};},{switchModel:true});
+  app.api.update({id:1,platform:'Switch'},[]);app.api.setOpen(true);await tick();
+  assert.equal(app.viewers[0].type,'switch');assert.equal(app.viewers[0].isOpen,true);
+  app.api.update({id:2,platform:'Dreamcast'},[]);await tick();
+  assert.equal(app.viewers[0].disposed,true);assert.equal(app.viewers[1].type,'dreamcast');
+  assert.deepEqual(models,['switch','dreamcast']);
 });
 test('Late module responses cannot replace a newly selected platform',async()=>{
   let resolve;const app=router(make=>new Promise(done=>{resolve=()=>done({createViewer:()=>make('three')});}));
