@@ -9,7 +9,29 @@ let selectedGameId = null;
 let focusedGameId = null;
 let fileAvailabilityRequest = 0;
 let selectedFileAvailability = null;
-let libraryTools = null, savedFolderImport = null;
+let libraryTools = null, savedFolderImport = null, savedFolderScan = null;
+function createSavedFolderScan() {
+  return {
+    cancelled:false,committing:false,cancelStep:null,
+    cancel(){if(this.committing)return;this.cancelled=true;return this.cancelStep?.();},
+    async wait(promise){
+      let abort;
+      const cancelled=new Promise((_,reject)=>{abort=()=>reject(this);});
+      this.cancelStep=abort;
+      if(this.cancelled)abort();
+      try{return await Promise.race([promise,cancelled]);}
+      finally{if(this.cancelStep===abort)this.cancelStep=null;}
+    },
+  };
+}
+function closeSavedFolderScan() {
+  if(!savedFolderScan)return false;
+  if(savedFolderScan.committing)return true;
+  void savedFolderScan.cancel();
+  document.getElementById('scanner-modal').classList.add('hidden');
+  if(!scanInProgress){savedFolderScan=null;++singleFileRequest;chooseImportMode(null);}
+  return true;
+}
 function getLibraryTools() {
   return libraryTools ??= window.OpenCabinetLibraryTools?.create({document,invoke,
     onChanged:loadGames,formatDate:formatLastPlayed,
@@ -4094,8 +4116,10 @@ function setupScannerModal() {
     platformSelect.dispatchEvent(new Event("change"));
     modal.classList.remove("hidden");
     document.getElementById('scan-save-folder').checked=false;
+    savedFolderScan=null;
     if(savedFolderImport){
       const {platform,folder}=savedFolderImport;savedFolderImport=null;
+      savedFolderScan=createSavedFolderScan();
       chooseImportMode('folder');platformSelect.value=platform.name;platformSelect.dispatchEvent(new Event('change'));
       scanFolderInput.value=folder.directory;document.getElementById('scan-extensions-input').value=folder.extensions.join(', ');
       if(allEmulators.some(emu=>emu.platform.toLowerCase()===platform.name.toLowerCase())){
@@ -4110,6 +4134,7 @@ function setupScannerModal() {
       if (retroarchProgressTask?.modalId === "scanner-modal") retroarchProgressTask.minimize();
       return;
     }
+    if(closeSavedFolderScan())return;
     if (scanInProgress) { importProgressTask?.minimize(); return; }
     inlineRetroarchSetup?.reset();
     inlineEmulatorArgumentDefaults?.reset();
@@ -4336,7 +4361,7 @@ function updateScannerEmulatorCheck() {
   }
 }
 
-function reviewScannedGames(preview) {
+function reviewScannedGames(preview,operation=null) {
   const platform = getSelectedPlatformName();
   const direct = importRunsDirectly() || isPcPlatform(platform);
   const addFile = document.getElementById("btn-review-add-file");
@@ -4484,6 +4509,8 @@ function reviewScannedGames(preview) {
     addFile.onclick = () => addGames(false);
     addFolder.onclick = () => { if (canAddFolder) return addGames(true); };
     function finish(confirmed) {
+      if(!alive)return;
+      if(operation){if(!confirmed)operation.cancelled=true;operation.cancelStep=null;}
       alive = false; activeProgress = null; addFile.onclick = null; addFolder.onclick = null;
       proceed.onclick = null;
       cancel.onclick = null;
@@ -4509,6 +4536,7 @@ function reviewScannedGames(preview) {
       finish(true);
     };
     cancel.onclick = () => finish(false);
+    if(operation)operation.cancelStep=()=>finish(false);
   });
 }
 
@@ -4797,7 +4825,7 @@ function createImportMediaRecovery(preview, platform, onChange) {
   };
 }
 
-function reviewMetadataImport(preview, platform, task) {
+function reviewMetadataImport(preview, platform, task, operation=null) {
   const initialGameCount = preview.games.length;
   const container = document.getElementById("scan-metadata-container");
   const progress = document.getElementById("scan-progress-container");
@@ -4900,6 +4928,7 @@ function reviewMetadataImport(preview, platform, task) {
 
     async function close(value, keepSession = false) {
       if (!alive) return;
+      if(operation){if(value===false)operation.cancelled=true;operation.cancelStep=null;}
       alive = false; cancelling = true; ++generation; ++availabilityVersion; controls();
       recovery.dispose();
       if (!keepSession && jobId) {
@@ -5197,6 +5226,7 @@ function reviewMetadataImport(preview, platform, task) {
     });
     skip.onclick = () => { if (preview.games.length > 0) return close({ mediaSelections: recovery.selections() }); };
     cancel.onclick = () => { message.textContent = globalThis.OpenCabinetI18n.t("msg.f23a2c4893"); return close(false); };
+    if(operation)operation.cancelStep=()=>close(false);
     task.setCancel(() => cancel.onclick?.());
     controls();
     if (metadataCatalogSummary) renderCatalog(metadataCatalogSummary);
@@ -5268,6 +5298,8 @@ async function handleExecuteScan() {
     : null;
 
   scanInProgress = true;
+  const savedScan=savedFolderScan;
+  const waitForScan=promise=>savedScan?savedScan.wait(promise):promise;
   const form = document.getElementById("scanner-form");
   form.classList.add("hidden");
   const controls = [...form.querySelectorAll("input, select, button")].map((element) => [element, element.disabled]);
@@ -5316,26 +5348,27 @@ async function handleExecuteScan() {
       const warnings = document.getElementById(`scan-${source}-warning-list`); warnings.replaceChildren();
       (report.warnings || []).forEach(warning => { const item = document.createElement("li"); item.textContent = warning; warnings.appendChild(item); });
       document.getElementById(`scan-${source}-warnings`).classList.toggle("hidden", !report.warnings?.length);
-    } else preview = single ? await invoke("preview_single_game", { filePath, platform, title, launchDirectly: importRunsDirectly() }) : await invoke("scan_roms_folder", {
+    } else preview = single ? await invoke("preview_single_game", { filePath, platform, title, launchDirectly: importRunsDirectly() }) : await waitForScan(invoke("scan_roms_folder", {
       folderPath,
       customExtensions,
       platform,
       onProgress: progressChannel(),
-    });
+    }));
     activeChannel = null;
+    if(savedScan?.cancelled)throw savedScan;
     if(!single&&!store&&document.getElementById('scan-save-folder')?.checked){
       const platformRecord=allPlatforms.find(item=>item.name.toLowerCase()===platform.toLowerCase());
       await invoke('save_library_folder',{platformId:platformRecord.id,directory:folderPath,extensions:customExtensions||extRaw.split(',').map(value=>value.trim()).filter(Boolean)});
     }
     if (!store && !pc && preview.games.some(g => g.discs?.length)) {
-      preview = await invoke("prepare_disc_import", { preview, platform });
+      preview = await waitForScan(invoke("prepare_disc_import", { preview, platform }));
     }
     if (preview.games.length > 0) {
       task.waiting?.(globalThis.OpenCabinetI18n.t("msg.b15f195dc5"), globalThis.OpenCabinetI18n.t("msg.1671c8200e"));
       progressContainer.classList.add("hidden");
       form.removeAttribute("aria-busy");
       submit.textContent = globalThis.OpenCabinetI18n.t("msg.82c39c4ea1");
-      if (!await reviewScannedGames(preview)) {
+      if (!await reviewScannedGames(preview,savedScan)) {
         task.finish(globalThis.OpenCabinetI18n.t("msg.1a044e0769"), globalThis.OpenCabinetI18n.t("msg.4cb81b1462"), true);
         resultContainer.classList.remove("hidden");
         resultContainer.textContent = globalThis.OpenCabinetI18n.t("msg.5602b9780b");
@@ -5343,11 +5376,12 @@ async function handleExecuteScan() {
       }
       form.setAttribute("aria-busy", "true");
     }
+    if(savedScan?.cancelled)throw savedScan;
     if (preview.games.length > 0) {
       progressContainer.classList.add("hidden");
       form.removeAttribute("aria-busy");
       submit.textContent = globalThis.OpenCabinetI18n.t("msg.352b552c96");
-      const metadata = await reviewMetadataImport(preview, platform, task);
+      const metadata = await reviewMetadataImport(preview, platform, task,savedScan);
       if (metadata === false) {
         task.finish(globalThis.OpenCabinetI18n.t("msg.1a044e0769"), globalThis.OpenCabinetI18n.t("msg.4cb81b1462"), true);
         resultContainer.classList.remove("hidden");
@@ -5359,6 +5393,8 @@ async function handleExecuteScan() {
       form.setAttribute("aria-busy", "true");
     }
     submit.textContent = globalThis.OpenCabinetI18n.t("msg.dd167ec760");
+    if(savedScan?.cancelled)throw savedScan;
+    if(savedScan)savedScan.committing=true;
     task.committing();
     progressContainer.classList.remove("hidden");
     const res = preview.games.length === 0
@@ -5395,6 +5431,7 @@ async function handleExecuteScan() {
     if (res.enrichment) platformDetailsCache.clear();
     await loadGames();
   } catch (error) {
+    if(savedScan?.cancelled)return;
     task.finish(globalThis.OpenCabinetI18n.t("msg.1b0c3b796a"), String(error), true);
     console.error("Error al escanear carpeta:", error);
     progressContainer.classList.add("hidden");
@@ -5412,6 +5449,17 @@ async function handleExecuteScan() {
     controls.forEach(([element, disabled]) => { element.disabled = disabled; });
     submit.textContent = submitLabel;
     form.classList.remove("hidden");
+    if(savedScan&&savedFolderScan===savedScan){
+      savedFolderScan=null;
+      if(savedScan.cancelled){
+        task.finish(globalThis.OpenCabinetI18n.t('msg.1a044e0769'),globalThis.OpenCabinetI18n.t('msg.4cb81b1462'),true);
+        document.getElementById('import-task').classList.add('hidden');
+        if(importProgressTask===task)importProgressTask=null;
+        document.getElementById('scanner-modal').classList.add('hidden');
+        progressContainer.classList.add('hidden');resultContainer.classList.add('hidden');
+        ++singleFileRequest;chooseImportMode(null);
+      }
+    }
   }
 }
 

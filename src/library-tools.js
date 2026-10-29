@@ -38,13 +38,14 @@
         }
       }catch(reason){error.textContent=String(reason);}
     }
-    function mountHistory(container,game,{combine=true,regionId=game.id,isCurrent=()=>true}={}){
+    function mountHistory(container,game,{combine=true,regionId=game.id,isCurrent=()=>true,footerRefresh=false}={}){
       let disposed=false;
       const current=()=>!disposed&&isCurrent();
       const list=el('div',null,'session-history-list'),status=el('p',t('sessions.loading'),'help-text');
       const more=button(t('sessions.more'),load);let offset=0,busy=false;
       const refresh=button(t('sessions.refresh'),()=>{if(busy)return;offset=0;list.replaceChildren();void load();});
-      more.hidden=true;container.replaceChildren(refresh,list,status,more);
+      const actions=el('div',null,footerRefresh?'session-history-actions session-history-actions-bottom':'session-history-actions');actions.appendChild(refresh);
+      more.hidden=true;container.replaceChildren(...(footerRefresh?[list,status,more,actions]:[actions,list,status,more]));
       async function load(){
         if(busy||!current())return;busy=true;more.disabled=refresh.disabled=true;
         try{
@@ -63,7 +64,7 @@
     }
     function history(game,options={}){
       const dialog=modal(t('sessions.title',game.title)),content=el('div');dialog.appendChild(content);dialog.showModal();
-      const view=mountHistory(content,game,{...options,isCurrent:()=>dialog.open});
+      const view=mountHistory(content,game,{...options,isCurrent:()=>dialog.open,footerRefresh:true});
       dialog.addEventListener('close',()=>view.dispose(),{once:true});return dialog;
     }
     async function addFolder(platform,isCurrent=()=>true){

@@ -28,6 +28,9 @@ La selección de consola y emulador conserva su funcionamiento habitual.
 una carpeta guardada. Si hay varias, permite elegir. Los juegos nuevos pasan
 por la revisión e importación normales; los duplicados se omiten. Si falta un
 emulador, se muestra la configuración antes de continuar.
+Al entrar por **Buscar juegos nuevos**, cerrar con la X o cancelar la revisión
+cancela esa importación y cierra la ventana. Una búsqueda posterior empieza
+de nuevo; las carpetas guardadas se conservan.
 
 **Editar consola → Carpetas de biblioteca** muestra los directorios guardados,
 con acciones para buscar juegos nuevos o quitar el directorio de la lista.

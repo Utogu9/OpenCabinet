@@ -102,6 +102,66 @@ test("A single game searches automatically but can still be imported without enr
   assert.equal(app.calls.at(-1).args.jobId, null); assert.equal(app.busy(), false); assert.equal(app.loaded(), 1);
 });
 
+function savedFolderRun(app){
+  app.evaluate(`savedFolderScan=createSavedFolderScan();importMode='folder';
+    chooseImportMode=mode=>{importMode=mode;};
+    document.getElementById('scanner-modal').classList.remove('hidden');`);
+  return app.start();
+}
+
+test('Saved-directory X cancels title review, closes the window and allows a fresh scan',async()=>{
+  const app=importer({count:2});let pending=savedFolderRun(app);await turn();
+  assert.equal(app.get('scan-review-container').classList.contains('hidden'),false);
+  app.evaluate('closeSavedFolderScan()');await pending;
+  assert.equal(app.busy(),false);assert.equal(app.get('scanner-modal').classList.contains('hidden'),true);
+  assert.equal(app.get('scan-review-container').classList.contains('hidden'),true);
+  assert.equal(app.evaluate('savedFolderScan'),null);assert.equal(app.evaluate('importProgressTask'),null);
+  assert.equal(app.commands().includes('import_scanned_roms'),false);
+  pending=savedFolderRun(app);await turn();assert.equal(app.get('scan-review-container').classList.contains('hidden'),false);
+  await app.get('btn-cancel-scan-review').click();await pending;
+  assert.equal(app.busy(),false);assert.equal(app.get('scanner-modal').classList.contains('hidden'),true);
+  assert.equal(app.commands().filter(command=>command==='scan_roms_folder').length,2);
+});
+
+test('Saved-directory metadata Cancel and X close the import instead of returning to configuration',async()=>{
+  for(const action of ['cancel','close']){
+    const app=importer();const pending=savedFolderRun(app);await turn();
+    assert.equal(app.get('scan-metadata-container').classList.contains('hidden'),false);
+    if(action==='cancel')await app.get('btn-lb-cancel').click();else app.evaluate('closeSavedFolderScan()');
+    await pending;assert.equal(app.busy(),false);
+    assert.equal(app.get('scanner-modal').classList.contains('hidden'),true);
+    assert.equal(app.get('scan-metadata-container').classList.contains('hidden'),true);
+    assert.equal(app.get('import-task').classList.contains('hidden'),true);
+    assert.equal(app.evaluate('importMode'),null);
+    assert.equal(app.commands().filter(command=>command==='end_metadata_import').length,1);
+    assert.equal(app.commands().includes('import_scanned_roms'),false);
+  }
+});
+
+test('Cancelling discovery frees the saved-folder importer and discards late results and progress',async()=>{
+  const waiting=deferred();let progress;
+  const app=importer({handlers:{scan_roms_folder:args=>{progress=args.onProgress;return waiting.promise;}}});
+  const pending=savedFolderRun(app);await turn();app.evaluate('closeSavedFolderScan()');await pending;
+  assert.equal(app.busy(),false);assert.equal(app.evaluate('savedFolderScan'),null);
+  waiting.resolve(app.preview);progress.onmessage({phase:'discovering',processed:400,current_file:'late.rom'});await turn();
+  assert.equal(app.get('scanner-modal').classList.contains('hidden'),true);
+  assert.equal(app.get('scan-review-container').classList.contains('hidden'),true);
+  assert.equal(app.get('scan-current-file').textContent,'');
+  assert.equal(app.commands().includes('start_metadata_import'),false);
+});
+
+test('Saved-directory cancellation during image staging ends the session and ignores late downloads',async()=>{
+  const waiting=deferred();const app=importer({handlers:{stage_metadata_import:()=>waiting.promise}});
+  const pending=savedFolderRun(app);await turn();
+  const downloading=app.get('btn-lb-import').click();await turn();
+  app.evaluate('closeSavedFolderScan()');await pending;
+  assert.equal(app.busy(),false);assert.equal(app.get('scanner-modal').classList.contains('hidden'),true);
+  assert.equal(app.commands().filter(command=>command==='end_metadata_import').length,1);
+  waiting.resolve({metadata_count:1,image_count:3,failures:[]});await downloading;await turn();
+  assert.equal(app.commands().includes('import_scanned_roms'),false);
+  assert.equal(app.get('import-task').classList.contains('hidden'),true);
+});
+
 test("Invalid import session IDs never reach catalog preparation and retry creates a valid session",async()=>{
   for(const invalid of [null,undefined,7,' ']) {
     let attempts=0;let app;
