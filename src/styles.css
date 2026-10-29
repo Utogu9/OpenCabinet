@@ -664,7 +664,7 @@ body.resizing-details * {
 #game-box-preview { height: 250px; }
 #game-edit-panel-box .platform-box-settings > summary { display: none; }
 #game-box-custom-options { margin-top: 14px; }
-#game-data-retention-dialog .form-actions { flex-wrap: wrap; }
+#game-data-retention-dialog .form-actions { flex-wrap: wrap; padding: 0 24px 24px; }
 
 .game-box-stage {
   position: relative;
