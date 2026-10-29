@@ -1867,6 +1867,16 @@ function formatPlayTime(game) {
   return t("time.sessions", time, game.session_count || 0);
 }
 
+function gameVariantLabel(game) {
+  const versions = game.regions?.length ? game.regions.map(region => region.game) : [game];
+  const counts = versions.map(version => Math.max(1, version?.discs?.length || 0));
+  const discs = Math.max(...counts), labels = [];
+  if (versions.length > 1) labels.push(globalThis.OpenCabinetI18n.t("play.regions", versions.length));
+  if (discs > 1) labels.push(globalThis.OpenCabinetI18n.t(
+    new Set(counts).size > 1 ? "play.discsUpTo" : "play.discs", discs));
+  return labels.join(" · ");
+}
+
 function updatePlayStatus(game) {
   const time = document.getElementById("details-play-time");
   time.textContent = formatPlayTime(game);
@@ -1884,6 +1894,15 @@ function updatePlayStatus(game) {
     : launchingGames.has(game.id) ? '<span class="play-icon-shape">▶</span> INICIANDO...'
     : globalThis.OpenCabinetI18n.t("msg.aa6ae9fe63");
   play.title = unavailable ? globalThis.OpenCabinetI18n.t('library.replaceSource')+'\n'+(availability.missing_paths?.join("\n") || globalThis.OpenCabinetI18n.t("availability.missing")) : "";
+  if (!play.disabled && !unavailable) {
+    const label = gameVariantLabel(game);
+    if (label) {
+      const badge = document.createElement("span");
+      badge.className = "play-variants-badge";
+      badge.textContent = label;
+      play.appendChild(badge);
+    }
+  }
 }
 
 async function checkSelectedGameFiles(game) {
@@ -2515,7 +2534,7 @@ function setupGameImageDownloader({ getGame, getImages, onImages, onBusy, onSour
   const downloadAll = document.getElementById("editor-artwork-download-all");
   const typeChoices = new Map();
   const typesBox = document.getElementById("editor-artwork-options");
-  let typesReady = false;
+  let typesReady = false, downloadStarted = false;
   let alive = false, busy = false, generation = 0, operation = 0, artworkOpened = false;
   let jobId = null, initializing = null, catalog = null, savedPlatform = null, preferredId = null;
   let candidates = [], retryAvailable = false;
@@ -2526,10 +2545,11 @@ function setupGameImageDownloader({ getGame, getImages, onImages, onBusy, onSour
     panel.querySelectorAll("input, select, button").forEach((element) => { element.disabled = busy; });
     download.disabled = busy || !typesReady || !quantities.size || !result.value || !platform.value || !jobId;
     retry.disabled = busy || !retryAvailable;
-    onState({ visible: artworkOpened && !panel.classList.contains("hidden"), disabled: download.disabled });
+    onState({ visible: artworkOpened && !panel.classList.contains("hidden") && !downloadStarted, disabled: download.disabled || downloadStarted });
   }
   function setBusy(value) { busy = value; onBusy(value); controls(); }
   function clearResults() {
+    downloadStarted = false;
     typesReady = false;
     renderImageTypeChoices(typesBox, {}, quantities, typeChoices, "game-artwork-form");
     candidates = []; result.replaceChildren(); result.value = "";
@@ -2621,6 +2641,7 @@ function setupGameImageDownloader({ getGame, getImages, onImages, onBusy, onSour
     await loadTypes(current);
   }
   async function loadTypes(current) {
+    downloadStarted = false;
     typesReady = false;
     renderImageTypeChoices(typesBox, {}, quantities, typeChoices, "game-artwork-form");
     const selected = candidates.find((game) => String(game.id) === result.value);
@@ -2664,6 +2685,7 @@ function setupGameImageDownloader({ getGame, getImages, onImages, onBusy, onSour
       const selected = candidates.find((game) => String(game.id) === result.value);
       if (!selected) return;
       const options = readOptions(); retryAvailable = false; retry.classList.add("hidden");
+      downloadStarted = true; controls();
       const report = await invoke("download_editor_game_images", { jobId, gameId: getGame().id, sourceId: selected.id,
         sourcePlatform: platform.value, options, existingImages: getImages(), onProgress: channel(current, "images") });
       if (current()) { acceptReport(report); if (report.images.length) onSource(selected.id); }

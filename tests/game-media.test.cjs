@@ -29,6 +29,8 @@ function mediaApp(options = {}) {
     }
     set textContent(text) { this._text = text; this.children = []; }
     get textContent() { return this._text; }
+    set innerHTML(html) { this._html = html; this.children = []; }
+    get innerHTML() { return this._html || ""; }
     replaceChildren(...items) { this.children = []; this._text = ""; this.append(...items); }
     appendChild(item) {
       if (item.parentNode) item.parentNode.children = item.parentNode.children.filter((child) => child !== item);
@@ -589,6 +591,8 @@ test("The editor footer offers Save then Download while downloading remains a se
   assert.equal(save.classList.contains("secondary-btn"), true);
   const checkbox = app.quantity("cover"); checkbox.checked = false; await checkbox.trigger("change");
   await download.trigger("click");
+  assert.equal(download.classList.contains("hidden"), true);
+  assert.equal(save.classList.contains("primary-btn"), true);
   assert.equal(app.calls.filter(call => call.command === "download_editor_game_images").length, 1);
   assert.equal(app.calls.some(call => call.command === "update_game"), false);
   assert.equal(app.get("game-image-list").children.length, 4);
@@ -600,6 +604,35 @@ test("The editor footer offers Save then Download while downloading remains a se
   assert.equal(download.classList.contains("hidden"), true);
   await app.save();
   assert.equal(app.calls.find(call => call.command === "update_game").args.details.images.length, 4);
+});
+
+test("Starting an image download from either button hides the footer action and prevents duplicate clicks", async () => {
+  for (const origin of ["btn-editor-artwork-download", "btn-download-game-edit"]) {
+    let finish;
+    const app = mediaApp({ handlers: {
+      download_editor_game_images: () => new Promise(resolve => { finish = resolve; }),
+    } });
+    await app.open(); await app.get("game-edit-tab-images").trigger("click");
+    await app.get("btn-download-game-images").trigger("click");
+    const footer = app.get("btn-download-game-edit"), inline = app.get("btn-editor-artwork-download"), save = app.get("btn-save-game-edit");
+    const pending = app.get(origin).trigger("click");
+    assert.equal(footer.classList.contains("hidden"), true);
+    assert.equal(footer.disabled, true);
+    assert.equal(inline.disabled, true);
+    assert.equal(save.disabled, true);
+    await footer.trigger("click"); await inline.trigger("click");
+    assert.equal(app.calls.filter(call => call.command === "download_editor_game_images").length, 1);
+    finish({ images: [{ path: "C:/temp/extra.png", kind: "screenshot" }], image_count: 1, available_count: 1, failures: [] });
+    await pending;
+    assert.equal(footer.classList.contains("hidden"), true);
+    assert.equal(save.classList.contains("primary-btn"), true);
+    assert.equal(save.disabled, false);
+    assert.equal(app.calls.some(call => call.command === "update_game"), false);
+    // A new search prepares a separate batch and can offer the footer again.
+    await app.get("btn-editor-artwork-search").trigger("click");
+    assert.equal(footer.classList.contains("hidden"), false);
+    await app.get("btn-cancel-game-edit").trigger("click");
+  }
 });
 
 test("Image choices follow the selected source and preserve checks for types still available", async () => {
@@ -1202,6 +1235,33 @@ test("Invalid player counts block saving and empty values clear optional fields"
   assert.equal(details.genre, null);
   assert.equal(details.gameMode, null);
   assert.equal(details.description, null);
+});
+
+test("Play indicates multidisc games and regional variants without adding discs from different regions", () => {
+  const app = mediaApp();
+  for (const [game, expected] of [
+    [{}, ""],
+    [{ discs: [{}] }, ""],
+    [{ discs: [{}, {}] }, "2 discos"],
+    [{ regions: [{ game: { discs: [{}] } }, { game: { discs: [{}] } }] }, "2 regiones"],
+    [{ regions: [{ game: { discs: [{}, {}] } }, { game: { discs: [{}, {}] } }] }, "2 regiones · 2 discos"],
+    [{ regions: [{ game: { discs: [{}] } }, { game: { discs: [{}, {}, {}] } }] }, "2 regiones · hasta 3 discos"],
+  ]) assert.equal(app.evaluate(`gameVariantLabel(${JSON.stringify(game)})`), expected);
+  app.evaluate("globalThis.OpenCabinetI18n.setLocale('en-US')");
+  assert.equal(app.evaluate("gameVariantLabel({regions:[{game:{discs:[{}]}},{game:{discs:[{},{}]}}]})"), "2 regions · up to 2 discs");
+});
+
+test("The Play variant badge refreshes with the game and never replaces missing-file or running states", () => {
+  const app = mediaApp(), play = app.get("btn-play-game");
+  app.evaluate("allGames[0].discs=[{},{}]; updatePlayStatus(allGames[0])");
+  assert.equal(play.children[0].textContent, "2 discos");
+  app.evaluate("updatePlayStatus(allGames[0])"); assert.equal(play.children.length, 1);
+  app.evaluate("allGames[0].is_running=true; updatePlayStatus(allGames[0])");
+  assert.equal(play.children.length, 0); assert.equal(play.disabled, true);
+  app.evaluate("allGames[0].is_running=false; selectedFileAvailability={id:1,available:false,missing_paths:['missing.chd']}; updatePlayStatus(allGames[0])");
+  assert.equal(play.children.length, 0); assert.match(play.innerHTML,/archivo/i);
+  app.evaluate("selectedFileAvailability=null;allGames[0].discs=[{}];updatePlayStatus(allGames[0])");
+  assert.equal(play.children.length, 0);
 });
 
 test("Launching a game updates last-played immediately in the selected panel", async () => {

@@ -1535,6 +1535,9 @@
     "themes.field.lastGame": "Último juego",
     "themes.field.sessions": "Cantidad de sesiones",
     "themes.field.totalTime": "Tiempo total",
-    "themes.field.mostPlayed": "Juego más jugado"
+    "themes.field.mostPlayed": "Juego más jugado",
+    "play.regions": "{0} regiones",
+    "play.discs": "{0} discos",
+    "play.discsUpTo": "hasta {0} discos"
   }
 }
