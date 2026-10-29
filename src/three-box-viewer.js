@@ -94,7 +94,7 @@ export async function createViewer(host, options={}) {
   const textures=new Set(),manualTextures=new Set(),listeners=[];
   let insertTheme='black';
   const insertTextures={};
-  for(const [theme,file] of [['black','insert.webp'],['white','insert2.webp']]) {
+  for(const [theme,file] of [['black','insert.webp'],['white','insert2.webp'],['ps1','ps1-insert.svg']]) {
     insertTextures[theme]=new THREE.TextureLoader().load(new URL(`./models/dreamcast/${file}`,import.meta.url).href,texture=>{
       if(disposed){texture.dispose();return;}
       // These assets are already the complete narrow strip, not a crop of an inlay.
@@ -179,14 +179,16 @@ export async function createViewer(host, options={}) {
     insertMesh.position.x=insertBounds.min.x*(1-scale);
   }
   function selectInsert(theme='black') {
+    if(globalThis.OpenCabinet3D.jewelFamily(game?.platform)==='ps1')theme='ps1';
     insertTheme=theme;
-    const texture=insertTextures[theme]?.image?insertTextures[theme]:insertTextures.black?.image?insertTextures.black:null;
+    const texture=insertTextures[theme]?.image?insertTextures[theme]:theme!=='ps1'&&insertTextures.black?.image?insertTextures.black:null;
     assign('insert',texture);if(!texture)materials.insert.color.set(0x151515);
     if(!materials.paper.map)for(const kind of ['paper_spine_left','paper_spine_right']) {
       if(!materials[kind].map)materials[kind].color.set(theme==='white'?0xe7e4db:0x151515);
     }
   }
   function selectInsertForCover(image,full=false) {
+    if(globalThis.OpenCabinet3D.jewelFamily(game?.platform)==='ps1'){selectInsert();return;}
     try {
       const width=image.naturalWidth||image.width,height=image.naturalHeight||image.height;
       if(!width||!height)return;
@@ -449,9 +451,10 @@ export async function createViewer(host, options={}) {
       const nextProfile=globalThis.OpenCabinet3D.profileFor(nextGame.platform,null,nextGame.rom_path,globalThis.OpenCabinet3D.resolveSettings(settings,nextGame.box_3d));
       const nextKey=JSON.stringify([nextGame.id,nextGame.title,images,nextProfile]);if(disposed||nextKey===key)return;
       const changed=game?.id!==nextGame.id;api.clear();key=nextKey;game=nextGame;profile=nextProfile;
+      selectInsert();
       fitInsert(materials.insert.map);
       if(changed){rotation=initialRotation();side='front';zoom=1;opened=0;openTarget=false;animation=null;}
-      host.dataset.format=profile.id;host.dataset.variant='dreamcast';host.dataset.rotationLock=rotationLock;
+      host.dataset.format=profile.id;host.dataset.variant=globalThis.OpenCabinet3D.jewelFamily(game.platform);host.dataset.rotationLock=rotationLock;
       host.setAttribute('aria-label',globalThis.OpenCabinetI18n.t('msg.c8c86a39c7',game.title));
       const resolved=globalThis.OpenCabinet3D.resolveSettings(settings,game.box_3d);
       const style=resolved?.regions?.[globalThis.OpenCabinet3D.regionFor(game.rom_path)]||resolved?.base;

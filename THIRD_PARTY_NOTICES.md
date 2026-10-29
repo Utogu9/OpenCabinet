@@ -55,9 +55,9 @@ repository does not include the generated vendor directory.
 
 ## Bundled 3D models
 
-### Dreamcast CD case
+### Dreamcast and PlayStation CD case
 
-The bundled Dreamcast case geometry in `src/models/dreamcast/case.bin` and
+The shared Dreamcast and PlayStation case geometry in `src/models/dreamcast/case.bin` and
 `case.json` is adapted from **Compact disc and case** by **effe**, released
 under **Creative Commons Zero (CC0 / Public Domain)**. The original source
 reference is <http://www.blendswap.com/blends/view/2841>. The supplied licensing

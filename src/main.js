@@ -128,7 +128,7 @@ let catalogCoverCache = null;
 let catalogFullCoverPaths = new Set();
 let catalogInlayPaths = new Set();
 let manualCoverCache = null;
-const isDreamcastGame = game => /^(sega)?dreamcast$/.test(String(game?.platform||'').toLowerCase().replace(/[^a-z0-9]/g,''));
+const isJewelManualGame = game => !!window.OpenCabinet3D?.jewelFamily(game?.platform);
 const pauseManualPrefetchForScroll=()=>manualCoverCache?.pauseForScroll();
 const PREFERENCES_KEY = "opencabinet.preferences";
 const DEFAULT_PREFERENCES = { language: globalThis.OpenCabinetI18n.defaultLocale, maxCachedCovers: 400, cacheMode: "disk", cacheDirectory: "", startMaximized: true, coversOnly: false, timeFormat: "24h", combineRegionStatistics: true, useCatalogTitles: true };
@@ -701,8 +701,8 @@ function mediaImage(path, alt, className = "", onError = null) {
 function createCatalogCoverLoader(root) {
   if (!root || !window.IntersectionObserver || !window.OpenCabinetCovers) return null;
   catalogFullCoverPaths = new Set(allGames.flatMap(game => [game, ...(game.regions || []).map(region => region.game)]).flatMap(game => gameImages(game).filter(image => image.kind === "box_full").map(image => image.path)));
-  const dreamcastGames=allGames.flatMap(game=>[game,...(game.regions||[]).map(region=>region.game)]).filter(isDreamcastGame);
-  catalogInlayPaths=new Set(dreamcastGames.flatMap(game=>gameImages(game).filter(image=>image.kind==='inlay').map(image=>image.path)));
+  const jewelGames=allGames.flatMap(game=>[game,...(game.regions||[]).map(region=>region.game)]).filter(isJewelManualGame);
+  catalogInlayPaths=new Set(jewelGames.flatMap(game=>gameImages(game).filter(image=>image.kind==='inlay').map(image=>image.path)));
   if (!catalogCoverCache) {
     const decode = window.OpenCabinetCovers.createDecoder();
     const cacheDirectory = preferences.cacheDirectory || null;
@@ -728,13 +728,13 @@ function createCatalogCoverLoader(root) {
       });
     }
   }
-  manualCoverCache?.warm(dreamcastGames.map(game=>game.id));
+  manualCoverCache?.warm(jewelGames.map(game=>game.id));
   root.addEventListener?.('scroll',pauseManualPrefetchForScroll,{passive:true});
   const paths = preferences.cacheMode === "disk" ? [...allGames].sort((a, b) => a.title.localeCompare(b.title)).flatMap(game => {
     return [game, ...(game.regions || []).map(region => region.game)].flatMap(source => {
       const images = gameImages(source);
       return [images.find(image => image.kind === "cover")?.path, images.find(image => image.kind === "box_full")?.path,
-        ...(isDreamcastGame(source)?images.filter(image=>image.kind==='inlay').map(image=>image.path):[])].filter(Boolean);
+        ...(isJewelManualGame(source)?images.filter(image=>image.kind==='inlay').map(image=>image.path):[])].filter(Boolean);
     });
   }) : [];
   return window.OpenCabinetCovers.createLoader(root, catalogCoverCache, { prefetchAll: preferences.cacheMode === "disk", paths });
@@ -1034,13 +1034,13 @@ function createDetailsGameBox() {
     },
     async loadManual(game, signal, onPreview) {
       if (signal.aborted || game.id !== gameId) throw new DOMException(globalThis.OpenCabinetI18n.t("msg.92a2872d72"), "AbortError");
-      if(isDreamcastGame(game)) {
+      if(isJewelManualGame(game)) {
         const knownPath=manualCoverCache?.showGamePreview(game.id,{path:manualPath,signal,onPreview});
         if(knownPath)manualPath=knownPath;
       }
       const paths = await invoke("get_game_manuals", { id: game.id });
       if (signal.aborted || game.id !== gameId) throw new DOMException(globalThis.OpenCabinetI18n.t("msg.92a2872d72"), "AbortError");
-      if(isDreamcastGame(game))manualCoverCache?.trackGame(game.id,paths);
+      if(isJewelManualGame(game))manualCoverCache?.trackGame(game.id,paths);
       manualPaths = paths; manualSelect.replaceChildren();
       paths.forEach(path => {
         const option = document.createElement("option"); option.value = path;
@@ -1049,7 +1049,7 @@ function createDetailsGameBox() {
       if (!paths.includes(manualPath)) manualPath = paths[0] || null;
       manualSelect.value = manualPath || ""; manualUI();
       if (!manualPath) return null;
-      if(isDreamcastGame(game)&&manualCoverCache)return manualCoverCache.render(manualPath,{imageSource,signal,coverMode:manualCoverModes[manualPath]||'auto',onPreview});
+      if(isJewelManualGame(game)&&manualCoverCache)return manualCoverCache.render(manualPath,{imageSource,signal,coverMode:manualCoverModes[manualPath]||'auto',onPreview});
       return window.OpenCabinetManualPDF.render(manualPath, { imageSource, signal, platform:game.platform, coverMode: manualCoverModes[manualPath] || "auto" });
     },
     onManualState(state) { manualState = state; manualUI(); },

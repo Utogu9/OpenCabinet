@@ -1,4 +1,4 @@
-# Dreamcast case assets
+# Dreamcast and PlayStation jewel-case assets
 
 `case.bin` and `case.json` contain the prepared geometry used by the WebGL
 viewer. They are adapted from **Compact disc and case** by **effe**, released
@@ -15,6 +15,9 @@ use them directly and do not load or convert the original authoring files.
 
 `ribs-height.svg` is generated from OpenCabinet's original ridge pattern in
 `src/assets/textures/cd-case-ribs.svg`, covered by the project's MIT license.
+The original `ps1-insert.svg` black grille is also covered by the MIT license.
+PlayStation uses it as its fallback insert while sharing the case geometry,
+inlay mapping, booklet and controls with Dreamcast.
 
 `insert.webp` and `insert2.webp` are replacement fallback strip images supplied
 separately for OpenCabinet. They are not part of the original model's CC0

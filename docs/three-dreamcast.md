@@ -1,9 +1,28 @@
-# Caja de Dreamcast con Three.js
+# Cajas de Dreamcast y PlayStation con Three.js
 
-El visor usa WebGL para Dreamcast. Los otros formatos
+El visor usa WebGL para las cajas de CD de Dreamcast y PlayStation. Los otros formatos
 conservan el visor anterior. El lateral, la pantalla completa y las vistas
 previas comparten la selección del visor. Si WebGL o el modelo no están
 disponibles, se utiliza el visor anterior.
+
+## PlayStation
+
+PS1 reutiliza la misma geometría, apertura y controles de Dreamcast, tanto en
+el lateral como en pantalla completa. Conserva las medidas de su formato de
+caja y las configuraciones de la consola o del juego. Elegir un formato
+distinto de CD, por ejemplo una caja larga, conserva su visor correspondiente.
+
+Sin inlay se utiliza `src/models/dreamcast/ps1-insert.svg`, una grilla negra
+propia, en lugar de los insertos con la marca Dreamcast. Los lomos interiores
+también quedan negros. No se aplica a PS1 la detección de franja blanca o negra
+de Dreamcast. Un inlay válido reemplaza el inserto y el fondo de la bandeja.
+
+La contraportada desplegada aporta ambos lomos; si no los incluye se utiliza
+la imagen de lomo separada. El manual sustituye la portada y permite abrir el
+lector, con su reverso visible al abrir la caja. PS1 utiliza también la caché
+de inlays y de la primera página del manual, con reemplazo por los originales
+cuando están disponibles. No se duplica la geometría al cambiar entre PS1 y
+Dreamcast.
 
 `src/models/dreamcast/case.json` y `case.bin` contienen la geometría preparada
 y versionada. Proviene de **Compact disc and case**, de **effe**, con licencia
@@ -49,7 +68,7 @@ está lista. Las texturas del visor se limitan a 2048 píxeles por lado.
 **Inlay (interior de la cubierta)** es una categoría de imágenes disponible en
 Editar juego, galería, biblioteca y manifiestos. También puede descargarse si
 la fuente ofrece ese tipo. Se conserva para cualquier consola; su aplicación
-al modelo 3D está implementada aquí para Dreamcast.
+al modelo 3D está implementada aquí para Dreamcast y PS1.
 
 En Dreamcast, el inlay cubre la cara interior del mismo papel de la contraportada,
 incluido el fondo bajo el disco y el inserto debajo del acrílico fijo izquierdo.

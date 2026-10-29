@@ -173,6 +173,8 @@ function mediaApp(options = {}) {
     },
     console,
   });
+  vm.runInContext(fs.readFileSync(path.join(__dirname, "../src/game-box.js"), "utf8"), context);
+  if (options.box3D) context.window.OpenCabinet3D.jewelFamily = context.OpenCabinet3D.jewelFamily;
   vm.runInContext(fs.readFileSync(path.join(__dirname, "../src/window-fullscreen.js"), "utf8"), context);
   if (options.variables) vm.runInContext(fs.readFileSync(path.join(__dirname, "../src/entity-variables.js"), "utf8"), context);
   if (options.order) vm.runInContext(fs.readFileSync(path.join(__dirname, "../src/game-order.js"), "utf8"), context);
@@ -1342,12 +1344,12 @@ test('Wide manual previews offer a per-PDF cover override and restore the choice
   app.boxConfig().onManualCoverChange('auto');await start();assert.equal(rendered.at(-1).mode,'auto');
 });
 
-test('Selecting a Dreamcast game presents its prepared manual before waiting for the folder scan',async()=>{
+for(const platform of ['Sega Dreamcast','Sony PlayStation'])test(`Selecting a ${platform} game presents its prepared manual before waiting for the folder scan`,async()=>{
   let finishScan;const order=[];
   const app=mediaApp({box3D:true,manualPDF:{supportsGame:()=>true},handlers:{
     get_box_brand_images:()=>({}),get_game_manuals:()=>{order.push('scan');return new Promise(resolve=>{finishScan=resolve;});},
   }});
-  app.evaluate(`allGames[0].platform='Sega Dreamcast';
+  app.evaluate(`allGames[0].platform=${JSON.stringify(platform)};
     manualCoverCache={showGamePreview(id,{onPreview}){onPreview({width:800});return 'C:/manual.pdf';},
       trackGame(){},render:async path=>({path})};renderGameMedia(allGames[0]);`);
   const result=app.boxConfig().loadManual(app.evaluate('allGames[0]'),new AbortController().signal,image=>{assert.equal(image.width,800);order.push('preview');});

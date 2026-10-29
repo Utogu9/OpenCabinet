@@ -19,7 +19,7 @@
         if(disposed)return;
         pending=[game,images,settings];
         const profile=profileFor(game.platform,null,game.rom_path,resolveSettings(settings,game.box_3d));
-        const model=profile.variant==='dreamcast' && ['jewel','jewelPal'].includes(profile.id) ? 'dreamcast'
+        const model=globalThis.OpenCabinet3D.jewelFamily(game.platform) && ['jewel','jewelPal'].includes(profile.id) ? 'dreamcast'
           : ['switch','psp'].includes(profile.id) && globalThis.OpenCabinetLocalModels?.[profile.id] ? profile.id : null;
         const desired=model ? `three:${model}` : 'css';
         if(backend===desired) {viewer?.update(...pending);return;}

@@ -15,8 +15,10 @@ window.viewer=await createViewer(document.querySelector('#stage'),{
   },
   getCoverPreview:()=>coverPreview,
   loadManual:(game,signal,onPreview)=>new Promise((resolve,reject)=>requests.set(game.id,{signal,onPreview,resolve,reject})),
+  onManualActivate:()=>true,
 });
-window.select=id=>{selected=id;viewer.update({id,title:`Game ${id}`,platform:'Sega Dreamcast'},[{kind:'cover',path:original},{kind:'back_cover',path:original}]);};
-window.finishManual=id=>requests.get(id).resolve({path:`${id}.pdf`,front:manualFront,pageCount:4,coverMode:'auto',dispose:()=>disposals.push(id)});
+window.select=(id,platform='Sega Dreamcast',images=[{kind:'cover',path:original},{kind:'back_cover',path:original}])=>{selected=id;viewer.update({id,title:`Game ${id}`,platform},images);};
+window.finishManual=id=>requests.get(id).resolve({path:`${id}.pdf`,front:manualFront,loadBack:async()=>manualPreview,pageCount:4,coverMode:'auto',dispose:()=>disposals.push(id)});
+window.scan=(width,height,color)=>{const canvas=image(width,color);canvas.height=height;const ctx=canvas.getContext('2d');ctx.fillStyle=color;ctx.fillRect(0,0,width,height);return canvas.toDataURL();};
 window.fixtureReady=true;
 </script>

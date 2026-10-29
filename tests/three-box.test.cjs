@@ -9,7 +9,8 @@ function dreamcastModel() {
   return {manifest:JSON.parse(fs.readFileSync(path.join(directory,'case.json'),'utf8')),binary:fs.readFileSync(path.join(directory,'case.bin'))};
 }
 function router(load,{switchModel=false,pspModel=false}={}) {
-  const context=vm.createContext({console,OpenCabinetLocalModels:{switch:switchModel,psp:pspModel}});
+  const context=vm.createContext({console,OpenCabinetI18n:{t:key=>key},OpenCabinetLocalModels:{switch:switchModel,psp:pspModel}});
+  vm.runInContext(fs.readFileSync(path.join(__dirname,'../src/game-box.js'),'utf8'),context);
   vm.runInContext(fs.readFileSync(path.join(__dirname,'../src/three-box-router.js'),'utf8'),context);
   const viewers=[];
   function make(type) {
@@ -19,16 +20,31 @@ function router(load,{switchModel=false,pspModel=false}={}) {
     viewers.push(viewer);return viewer;
   }
   const api=context.OpenCabinetThreeBoxes.createRouter({classList:{remove(){}},dataset:{}},{},()=>make('css'),
-    platform=>['Switch','PSP'].includes(platform)?{variant:platform.toLowerCase(),id:platform.toLowerCase()}:{variant:platform==='Dreamcast'?'dreamcast':'ps2',id:platform==='Dreamcast'?'jewel':'dvd'},settings=>settings,
+    context.OpenCabinet3D.profileFor,context.OpenCabinet3D.resolveSettings,
     model=>load(make,model));
   return {api,viewers};
 }
-test('Only Dreamcast switches to Three.js; other platforms keep the existing viewer',async()=>{
+test('Dreamcast switches to Three.js; PS2 keeps the existing viewer',async()=>{
   let imports=0;const app=router(async make=>{imports++;return {createViewer:()=>make('three')};});
   app.api.update({id:1,platform:'PS2'},[]);assert.equal(imports,0);assert.equal(app.viewers[0].type,'css');
   app.api.update({id:2,platform:'Dreamcast'},[]);await tick();
   assert.equal(imports,1);assert.equal(app.viewers[0].disposed,true);assert.equal(app.viewers[1].type,'three');
   app.api.update({id:3,platform:'PS2'},[]);assert.equal(app.viewers[1].disposed,true);assert.equal(app.viewers[2].type,'css');
+});
+
+test('PlayStation jewel cases share the bundled Dreamcast viewer and respect explicit case overrides',async()=>{
+  const models=[],app=router(async(make,model)=>{models.push(model);return {createViewer:()=>make(model)};});
+  for(const [id,platform,rom_path] of [[1,'Sony PlayStation','Game (USA).chd'],[2,'PS1','Game (Europe).chd'],
+    [3,'Sony PlayStation 1','Game (Japan).chd'],[4,'PSX','Game.chd'],[5,'Sega Dreamcast','Game.chd']]) {
+    app.api.update({id,platform,rom_path},[]);await tick();
+    assert.equal(app.viewers.length,1,'both consoles reuse the same viewer and geometry');
+    assert.equal(app.viewers[0].calls.filter(call=>call[0]==='update').at(-1)[1].id,id);
+  }
+  assert.deepEqual(models,['dreamcast']);
+  app.api.update({id:6,platform:'Sony PlayStation'},[],{base:{model:'longbox'}});await tick();
+  assert.equal(app.viewers[0].disposed,true);assert.equal(app.viewers[1].type,'css');
+  app.api.update({id:7,platform:'Sega Saturn'},[]);assert.equal(app.viewers.length,2);
+  app.api.dispose();
 });
 
 test('Switch keeps the CSS viewer unless a local model is explicitly available',async()=>{

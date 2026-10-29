@@ -25,6 +25,13 @@
   };
 
 
+  function jewelFamily(platform) {
+    const name = String(platform || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+    if (/^(sega)?dreamcast$/.test(name)) return "dreamcast";
+    if (/^(sony)?(playstation1?|ps1?|psx)$/.test(name)) return "ps1";
+    return null;
+  }
+
   function regionFor(romPath = "") {
     // Use filename tags, never a parent directory's name. Preserve their order
     // for multi-region releases, just as image selection prioritizes ROM regions.
@@ -70,7 +77,7 @@
       if (/wii/.test(name)) color = /wiiu/.test(name) ? "#1686ac" : "#d5d7d9";
       else if (/xbox/.test(name)) color = /360/.test(name) ? "#78b83e" : "#99b936";
       else if (/playstation2|ps2/.test(name) && europe) color = "#163c78";
-    } else if (/playstation|^ps1?$|dreamcast|segacd|megacd|saturn/.test(name)) {
+    } else if (jewelFamily(platform) || /playstation|^ps1?$|dreamcast|segacd|megacd|saturn/.test(name)) {
       id = /segacd|megacd|saturn/.test(name) ? "longbox" : europe ? "jewelPal" : "jewel";
       if (/dreamcast/.test(name)) color = europe ? "#204b85" : "#b8c2c9";
     }
@@ -1106,7 +1113,7 @@
   globalThis.OpenCabinet3D = { resolveSettings,
     createViewer: (host, options = {}) => globalThis.OpenCabinetThreeBoxes
       ? globalThis.OpenCabinetThreeBoxes.createRouter(host, options, createViewer, profileFor, resolveSettings)
-      : createViewer(host, options), profileFor, regionFor,
+      : createViewer(host, options), profileFor, regionFor, jewelFamily,
     formats: Object.entries(formats).map(([id, [width, height, depth, label]]) => ({ id, width, height, depth, label })),
     math: { multiply, axisAngle, between, matrix, rotate } };
 })();

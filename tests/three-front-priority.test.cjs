@@ -1,5 +1,5 @@
 const {test}=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path'),http=require('node:http');
-test('The Dreamcast front goes straight to its manual, with cover fallback only for absent or failed manuals',async t=>{
+test('Dreamcast and PS1 share manual priority, folded inlays and separate-spine fallback without leaking inserts',async t=>{
   let chromium;try{({chromium}=require('playwright-core'));}catch{t.skip('Optional browser test requires playwright-core.');return;}
   const executable=process.env.OPENCABINET_CHROMIUM||(process.platform==='win32'?'C:/Program Files/Google/Chrome/Application/chrome.exe':chromium.executablePath());
   const root=path.resolve(__dirname,'..');
@@ -28,6 +28,34 @@ test('The Dreamcast front goes straight to its manual, with cover fallback only 
   await page.evaluate(()=>{requests.get(4).onPreview(manualPreview);finishManual(4);});await page.waitForTimeout(100);
   assert.equal(await page.evaluate(()=>debug.materials.cover.map.image.width),512);
   assert.equal(await page.evaluate(()=>disposals.includes(4)),true);
+
+  await page.evaluate(()=>select(6,'Sony PlayStation'));await page.waitForFunction(()=>debug.materials.insert.map?.image.src.endsWith('/ps1-insert.svg'));
+  assert.equal(await page.evaluate(()=>document.querySelector('#stage').dataset.variant),'ps1');
+  assert.equal(await page.evaluate(()=>debug.materials.paper_spine_left.color.getHex()),0x151515);
+  await page.evaluate(()=>requests.get(6).onPreview(manualPreview));await page.waitForFunction(()=>debug.materials.cover.map?.image.width===128);
+  await page.evaluate(()=>finishManual(6));await page.waitForFunction(()=>debug.materials.cover.map?.image.width===256);
+  assert.equal(await page.evaluate(()=>frontHistory.some(frame=>frame.game===6&&[64,512].includes(frame.width))),false);
+  await page.evaluate(()=>viewer.setOpen(true,false));await page.waitForFunction(()=>debug.materials.manualBack.map?.image.width===128);
+  assert.equal(await page.evaluate(()=>viewer.readManual()),true);
+  assert.equal(await page.evaluate(()=>debug.meshes.filter(mesh=>['cover','manualBack','pages'].some(kind=>mesh.material===debug.materials[kind])).every(mesh=>!mesh.visible)),true);
+  await page.evaluate(()=>viewer.returnManual());
+
+  await page.evaluate(()=>{
+    window.folded=scan(252,200,'#226633');window.separateSpine=scan(20,200,'#cc8822');
+    select(7,'PS1',[{kind:'back_cover',path:folded},{kind:'inlay',path:folded},{kind:'spine',path:separateSpine}]);requests.get(7).resolve(null);
+  });
+  await page.waitForFunction(()=>debug.materials.paper.map?.image.width===252&&debug.materials.back_cover.map?.image.width===252);
+  assert.equal(await page.evaluate(()=>debug.meshes.find(mesh=>mesh.name==='dreamcast-insert').visible),false);
+  assert.equal(await page.evaluate(()=>debug.materials.spine_left.map.image.src===folded&&debug.materials.spine_right.map.image.src===folded),true);
+  assert.equal(await page.evaluate(()=>debug.materials.paper_spine_left.map.image.src===folded&&debug.materials.paper_spine_right.map.image.src===folded),true);
+  assert.equal(await page.evaluate(()=>debug.materials.paper.map.repeat.x<1&&debug.materials.paper_spine_left.map.offset.x<debug.materials.paper_spine_right.map.offset.x),true);
+
+  await page.evaluate(()=>{select(8,'PS1',[{kind:'back_cover',path:scan(232,200,'#226633')},{kind:'spine',path:separateSpine}]);requests.get(8).resolve(null);});
+  await page.waitForFunction(()=>debug.materials.spine_left.map?.image.src===separateSpine);
+  assert.equal(await page.evaluate(()=>debug.materials.spine_right.map.image.src===separateSpine),true);
+  assert.equal(await page.evaluate(()=>debug.meshes.find(mesh=>mesh.name==='dreamcast-insert').visible),true);
+  assert.equal(await page.evaluate(()=>debug.materials.insert.map.image.src.endsWith('/ps1-insert.svg')),true);
+  await page.evaluate(()=>{select(9);requests.get(9).resolve(null);});await page.waitForFunction(()=>debug.materials.insert.map?.image.src.endsWith('/insert.webp'));
   assert.equal(await page.evaluate(()=>debug.renderer.getContext().getError()),0);assert.deepEqual(errors,[]);
   await page.evaluate(()=>viewer.dispose());
 });
