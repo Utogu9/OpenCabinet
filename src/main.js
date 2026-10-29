@@ -90,7 +90,7 @@ let manualCoverCache = null;
 const isDreamcastGame = game => /^(sega)?dreamcast$/.test(String(game?.platform||'').toLowerCase().replace(/[^a-z0-9]/g,''));
 const pauseManualPrefetchForScroll=()=>manualCoverCache?.pauseForScroll();
 const PREFERENCES_KEY = "opencabinet.preferences";
-const DEFAULT_PREFERENCES = { language: globalThis.OpenCabinetI18n.defaultLocale, maxCachedCovers: 400, cacheMode: "disk", cacheDirectory: "", startMaximized: true, coversOnly: false, timeFormat: "24h", combineRegionStatistics: true };
+const DEFAULT_PREFERENCES = { language: globalThis.OpenCabinetI18n.defaultLocale, maxCachedCovers: 400, cacheMode: "disk", cacheDirectory: "", startMaximized: true, coversOnly: false, timeFormat: "24h", combineRegionStatistics: true, useCatalogTitles: true };
 let preferences = readPreferences();
 const launchingGames = new Set();
 let deletingGames = false;
@@ -115,6 +115,7 @@ function readPreferences() {
       coversOnly: typeof saved?.coversOnly === "boolean" ? saved.coversOnly : DEFAULT_PREFERENCES.coversOnly,
       timeFormat: ["12h", "24h"].includes(saved?.timeFormat) ? saved.timeFormat : DEFAULT_PREFERENCES.timeFormat,
       combineRegionStatistics: typeof saved?.combineRegionStatistics === "boolean" ? saved.combineRegionStatistics : true,
+      useCatalogTitles: typeof saved?.useCatalogTitles === "boolean" ? saved.useCatalogTitles : true,
     };
   } catch { /* Use defaults if preferences are missing or unreadable. */ }
   return { ...DEFAULT_PREFERENCES };
@@ -150,6 +151,7 @@ function setupPreferences() {
   const metadataCatalog=document.getElementById('preference-metadata-catalog');
   const metadataImport=document.getElementById('btn-import-metadata-catalog');
   const metadataReset=document.getElementById('btn-reset-metadata-catalog');
+  const catalogTitles=document.getElementById('preference-catalog-titles');
   let metadataSource=null,draftCatalog=undefined;
   let location = null, draftDirectory = "", request = 0, saving = false, choosing = false;
   let selection = null;
@@ -201,6 +203,7 @@ function setupPreferences() {
     const busy = saving || choosing || !!backupsPanel?.busy;
     tabs.forEach(tab => { tab.button.disabled = busy; });
     metadataImport.disabled=metadataReset.disabled=busy;
+    catalogTitles.disabled=busy;
     metadataCatalog.value=draftCatalog===undefined?(metadataSource?.label||globalThis.OpenCabinetI18n.t('source.default')):draftCatalog===null?globalThis.OpenCabinetI18n.t('source.default'):draftCatalog;
     browse.disabled = reset.disabled = save.disabled = !location || busy;
     undo.disabled = !location || busy || draftDirectory === location.active_directory;
@@ -244,6 +247,7 @@ function setupPreferences() {
     coversOnly.checked = preferences.coversOnly;
     languageSelect.value = preferences.language;
     combineRegions.checked = preferences.combineRegionStatistics;
+    catalogTitles.checked = preferences.useCatalogTitles;
     timeFormat.value = preferences.timeFormat;
     error.classList.add("hidden");
     location = null;
@@ -338,7 +342,7 @@ function setupPreferences() {
     const next = { ...preferences, language: languageSelect.value, maxCachedCovers: value,
       cacheMode: cacheMode.value === "ram" ? "ram" : "disk", cacheDirectory: draftCacheDirectory,
       startMaximized: startMaximized.checked, coversOnly: coversOnly.checked, timeFormat: timeFormat.value,
-      combineRegionStatistics: combineRegions.checked };
+      combineRegionStatistics: combineRegions.checked, useCatalogTitles: catalogTitles.checked };
     let previous;
     saving = true; update();
     try {
@@ -423,6 +427,7 @@ function setupPreferences() {
       || timeFormat.value !== preferences.timeFormat
       || languageSelect.value !== preferences.language
       || combineRegions.checked !== preferences.combineRegionStatistics
+      || catalogTitles.checked !== preferences.useCatalogTitles
       || (selection && selection.action !== (location.pending_action || "move"))) {
       showError(globalThis.OpenCabinetI18n.t("msg.39ef2ccc28"));
       return;
@@ -4924,6 +4929,7 @@ function reviewMetadataImport(preview, platform, task) {
             body.textContent = status.textContent; return;
           }
           const chosen = row.candidates.find((game) => game.id === row.selected_id);
+          heading.textContent = preferences.useCatalogTitles && chosen?.title?.trim() ? chosen.title : game.title;
           if (chosen) card.classList.remove("metadata-match-unmatched");
           else card.classList.add("metadata-match-unmatched");
           status.textContent = chosen ? `${chosen.exact ? globalThis.OpenCabinetI18n.t("msg.c6aba42fdd") : globalThis.OpenCabinetI18n.t("msg.331570c2ec")} · ${chosen.platform}`
@@ -5091,6 +5097,7 @@ function reviewMetadataImport(preview, platform, task) {
         detached = true;
         task.start(() => cancel.onclick?.());
         const result = await invoke("stage_metadata_import", { jobId, preview, platform, sourcePlatform: matchedPlatform,
+          useCatalogTitles: preferences.useCatalogTitles,
           selections: rows.map((row) => ({ rom_path: row.rom_path, id: row.selected_id })), mediaSelections: recovery.selections(), options, onProgress: channel("images") });
         if (alive) await showReport(result);
       });

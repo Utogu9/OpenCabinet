@@ -1320,6 +1320,8 @@
     "source.import.validating": "Validando catálogo…",
     "source.import.publishing": "Guardando catálogo…",
     "source.default": "OpenCabinet-BDD (predeterminado)",
+    "source.useCatalogTitles": "Usar los títulos del catálogo al importar juegos",
+    "source.useCatalogTitlesHelp": "Los juegos con coincidencia usan el título del registro elegido. Desactivá esta opción para conservar los títulos de la revisión. Los juegos sin coincidencia mantienen su título revisado.",
     "source.help": "OpenCabinet-BDD proporciona datos e imágenes de juegos y consolas cuando están disponibles. Opcionalmente, puedes importar un catálogo personal compatible.",
     "source.browse": "Importar catálogo…",
     "source.reset": "Usar OpenCabinet-BDD",

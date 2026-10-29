@@ -83,6 +83,7 @@ function importer(options = {}) {
     getSelectedPlatformName = () => 'My Genesis'; showToast = () => {}; loadGames = async () => markLoaded();
   `, context);
   // Single-game metadata tests begin after title review; review itself is covered separately.
+  if (options.useCatalogTitles === false) vm.runInContext("preferences.useCatalogTitles = false", context);
   if (count === 1) vm.runInContext("reviewScannedGames = async () => true", context);
   return { get, calls, preview, catalog, game, matches, start: () => vm.runInContext("handleExecuteScan()", context),
     evaluate: (code) => vm.runInContext(code, context),
@@ -298,7 +299,7 @@ test("A corrected match is accepted while availability is pending and stale coun
 });
 
 test("Multiple games retain edited titles through match selection, download and final import", async () => {
-  const app = importer({ count: 2 }); const pending = app.start(); await turn();
+  const app = importer({ count: 2, useCatalogTitles: false }); const pending = app.start(); await turn();
   app.get("scan-review-list").children[0].children[0].value = "User's <corrected title>";
   app.get("btn-confirm-scan-review").onclick(); await turn();
   await app.get("btn-lb-search").click();
@@ -313,6 +314,7 @@ test("Multiple games retain edited titles through match selection, download and 
   app.media("cover").checked = false;
   await app.get("btn-lb-import").click(); await pending;
   const stage = app.calls.find((call) => call.command === "stage_metadata_import");
+  assert.equal(stage.args.useCatalogTitles, false);
   assert.equal(stage.args.options.download_all, false);
   assert.equal(stage.args.selections[0].id, 2); assert.equal(stage.args.options.selected_types.includes("cover"), false);
   assert.ok(stage.args.options.selected_types.includes("spine"));
@@ -392,10 +394,31 @@ test("Manual searches can change the source record without changing the reviewed
   assert.equal(app.calls.find((call) => call.command === "stage_metadata_import").args.selections[0].id, 2);
 });
 
+test('Catalog titles are shown by default, follow manual matches and do not mutate the source review', async () => {
+  for(const count of [1,2]) {
+    const app=importer({count});const pending=app.start();await turn();
+    if(count>1){app.get('btn-confirm-scan-review').onclick();await turn();}
+    const card=app.get('lb-match-list').children[0];
+    assert.equal(card.children[0].textContent,'Catalog title 1');
+    const select=card.children[2];select.value='';await select.onchange();
+    assert.equal(card.children[0].textContent,'Reviewed 0');
+    card.children[3].children[0].value='Another search';await card.children[3].children[1].click();
+    await turn();
+    assert.equal(card.children[0].textContent,'Catalog title 2');
+    assert.equal(app.preview.games[0].title,'Reviewed 0');
+    assert.equal(app.get('btn-lb-import').disabled,false);
+    await app.get('btn-lb-import').click();await pending;
+    const staged=app.calls.find(call=>call.command==='stage_metadata_import').args;
+    assert.equal(staged.useCatalogTitles,true);assert.equal(staged.selections[0].id,2);
+    assert.equal(app.calls.find(call=>call.command==='import_scanned_roms').args.preview.games[0].title,'Reviewed 0');
+  }
+});
+
 test("Unmatched games can continue without source metadata", async () => {
   let app;
   app = importer({ handlers: { match_metadata_games: () => app.preview.games.map((game) => ({ rom_path: game.rom_path, selected_id: null, candidates: [] })) } });
   const pending = app.start(); await turn(); await app.get("btn-lb-search").click();
+  assert.equal(app.get('lb-match-list').children[0].children[0].textContent,'Reviewed 0');
   assert.equal(app.get("btn-lb-import").disabled, false);
   await app.get("btn-lb-import").click(); await pending;
   assert.equal(app.calls.find((call) => call.command === "stage_metadata_import").args.selections[0].id, null);
@@ -422,7 +445,7 @@ test("Removing an unmatched game excludes its ROM from downloads and commit whil
 });
 
 test("Removed games stay excluded after searching again and when importing without external data", async () => {
-  const app = importer({ count: 2 }); const pending = app.start(); await turn();
+  const app = importer({ count: 2, useCatalogTitles: false }); const pending = app.start(); await turn();
   app.get('btn-confirm-scan-review').onclick(); await turn(); await app.get('btn-lb-search').click();
   const retained = app.preview.games[1];
   await app.get('lb-match-list').children[0].children[5].click();
@@ -466,7 +489,7 @@ test("Removal is blocked while an alternative search is active or an image batch
 
 test("Unselected matches are highlighted and ordered first without changing title or ROM associations", async () => {
   let app;
-  app = importer({ count: 4, handlers: {
+  app = importer({ count: 4, useCatalogTitles: false, handlers: {
     match_metadata_games: () => app.preview.games.map((game, index) => ({
       rom_path: game.rom_path, selected_id: index === 0 || index === 3 ? 1 : null,
       candidates: index === 1 ? [] : [app.game(1, index !== 2)],

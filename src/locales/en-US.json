@@ -1320,6 +1320,8 @@
     "source.import.validating": "Validating catalog…",
     "source.import.publishing": "Saving catalog…",
     "source.default": "OpenCabinet-BDD (default)",
+    "source.useCatalogTitles": "Use catalog titles when importing games",
+    "source.useCatalogTitlesHelp": "Matched games use the selected catalog title. Disable this to keep the titles from the game review. Games without a match keep their reviewed titles.",
     "source.help": "OpenCabinet-BDD provides game and platform metadata and artwork when available. You can optionally import a compatible personal catalog.",
     "source.browse": "Import catalog…",
     "source.reset": "Use OpenCabinet-BDD",

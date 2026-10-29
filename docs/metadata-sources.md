@@ -14,7 +14,12 @@ idiomas, revisión y disco, y quitando las extensiones conocidas. Si no coincide
 se busca por el título revisado. Los resultados muestran su ID comercial;
 si varios IDs coinciden exactamente con el nombre original, se prefiere el más
 corto, manteniendo las demás opciones disponibles. Este comportamiento es
-exclusivo de OpenCabinet-BDD y no cambia la búsqueda de los catálogos personales.
+exclusivo de OpenCabinet-BDD. Los catálogos personales prueban primero el título
+revisado y, si no hay una coincidencia exacta, el nombre original del archivo.
+Ambas fuentes prueban también identificadores con variantes de separadores
+(por ejemplo, `SLUS_209.98` y `SLUS-20998`) y el nombre original sin etiquetas.
+Estas consultas exactas usan el índice local antes de buscar resultados
+aproximados; estos últimos siguen requiriendo una selección manual.
 
 Completar datos utiliza los desarrolladores, editores, géneros, modos, cantidades
 de jugadores, fechas y descripciones breves disponibles. Se prefiere el idioma
@@ -23,7 +28,12 @@ Los campos ausentes conservan los valores del editor. Las fechas sin día precis
 no se convierten en fechas inventadas. Se descartan afirmaciones obsoletas y de
 otras plataformas y se prioriza la región de la edición cuando está indicada.
 Los recuentos de jugadores no se deducen de los modos de juego. En la importación
-se conservan el título revisado y la plataforma local.
+se usa por defecto el título del registro seleccionado del catálogo y se
+conserva la plataforma local. **Preferencias → Datos de juegos → Usar los
+títulos del catálogo al importar juegos** permite mantener los títulos
+revisados. Los juegos sin coincidencia mantienen esos títulos en ambos modos;
+la preferencia no cambia los juegos ya importados. La revisión de coincidencias
+muestra el título que se guardará y conserva la búsqueda original separadamente.
 
 `console_metadata` completa fecha, desarrollador y fabricante de las consolas.
 Sus imágenes se consultan en `console_artwork.json`; los logos SVG se conservan

@@ -1162,6 +1162,11 @@
         <section id="preferences-panel-metadata" class="preferences-section hidden" role="tabpanel" aria-labelledby="preferences-tab-metadata">
           <h3 data-i18n="source.title"></h3>
           <p class="preference-help" data-i18n="source.help"></p>
+          <label class="preference-toggle" for="preference-catalog-titles">
+            <input id="preference-catalog-titles" type="checkbox" aria-describedby="preference-catalog-titles-help" />
+            <span data-i18n="source.useCatalogTitles"></span>
+          </label>
+          <p class="preference-help" id="preference-catalog-titles-help" data-i18n="source.useCatalogTitlesHelp"></p>
           <div class="form-group">
             <label for="preference-metadata-catalog" data-i18n="source.catalog"></label>
             <input id="preference-metadata-catalog" type="text" readonly>

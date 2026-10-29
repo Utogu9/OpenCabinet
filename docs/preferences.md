@@ -18,6 +18,14 @@ La caché conserva miniaturas decodificadas de hasta 320 × 400 píxeles en memo
 
 Al cambiar de vista se cancela el trabajo pendiente y se conservan las miniaturas ya preparadas. Al disminuir el límite se liberan las sobrantes. Los lienzos de las tarjetas fuera de vista se vacían; al regresar se dibujan desde la caché sin volver a leer el original, salvo que la miniatura haya sido reemplazada por el límite.
 
+## Títulos del catálogo
+
+En **Datos de juegos**, **Usar los títulos del catálogo al importar juegos**
+está activado por defecto. Al desactivarlo se conserva el título de la revisión
+de importación. Los juegos sin coincidencia siempre mantienen el título
+revisado. Esta elección se guarda al pulsar Guardar y no renombra juegos
+existentes.
+
 ## Ubicación de los datos de usuario
 
 En la sección **Datos de usuario**, **Examinar...** permite seleccionar una carpeta vacía o una biblioteca existente, como una copia de seguridad. La app comprueba la carpeta y muestra qué hará antes de guardar:

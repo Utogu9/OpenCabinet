@@ -24,6 +24,11 @@ Sin coincidencia se utiliza `"%ROM%"`.
 | Cemu | `-f -g "%ROM%"` | [Opciones oficiales](https://github.com/cemu-project/Cemu/blob/main/src/config/LaunchSettings.cpp) |
 | melonDS actual | `--fullscreen "%ROM%"` | [CLI oficial](https://github.com/melonDS-emu/melonDS/blob/master/src/frontend/qt_sdl/CLI.cpp) |
 
+Al elegir un ejecutable conocido se completa también el nombre oficial del
+emulador, tanto en Configurar emuladores como durante la importación. Un nombre
+escrito manualmente o ya guardado se conserva. El nombre y los argumentos
+pueden personalizarse por separado, sin desactivar la recomendación del otro campo.
+
 Las recomendaciones funcionan tanto en Configurar emuladores como al crear uno
 durante una importación. Al editar parámetros manualmente deja de aplicarse la
 sugerencia automática. Los emuladores ya guardados conservan sus parámetros;

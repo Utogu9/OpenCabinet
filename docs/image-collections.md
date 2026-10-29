@@ -80,7 +80,8 @@ Los casos ambiguos o archivos renombrados requieren selección manual: un títul
 parecido no alcanza para asociar imágenes automáticamente.
 
 El botón **Importar sin buscar datos** también utiliza las colecciones locales
-elegidas. Al buscar en el catálogo, el juego conserva sus títulos revisados y puede
+elegidas. Al buscar en el catálogo, el juego usa por defecto el título elegido
+del catálogo (o el revisado si se desactiva esa preferencia) y puede
 obtener metadatos, pero no descarga nuevas imágenes si la colección elegida ya
 contiene imágenes. Las descargas posteriores siguen disponibles desde Editar juego.
 

@@ -19,7 +19,10 @@ comprados de una cuenta. Epic verifica el acceso al abrir cada juego.
 La revisión aparece incluso para un solo resultado: puedes corregir títulos o
 quitar juegos. Después se ofrece la búsqueda habitual de datos e imágenes del
 catálogo, con Windows como equivalencia sugerida. También puedes importar sin
-datos externos. El título revisado y la plataforma local se conservan siempre.
+datos externos. La plataforma local se conserva; el título procede de la
+coincidencia elegida por defecto. La opción de usar títulos del catálogo en
+Preferencias permite conservar el título revisado, que también se mantiene
+cuando no hay una coincidencia.
 
 Cada juego se guarda con su URI oficial
 `com.epicgames.launcher://apps/<Namespace>%3A<CatalogItemId>%3A<AppName>?action=launch&silent=true`.

@@ -987,7 +987,7 @@ fn prepare_platform_search(conn: &Connection, platform: &str) -> Result<()> {
     Ok(())
 }
 
-fn search_catalog_scope(
+fn exact_catalog_matches(
     conn: &Connection,
     query: &str,
     platform: Option<&str>,
@@ -997,7 +997,6 @@ fn search_catalog_scope(
         return Ok(Vec::new());
     }
     let mut results = Vec::new();
-    let mut seen = HashSet::new();
     let limit = if platform.is_some() { 21 } else { 100 };
     let mut exact = conn
         .prepare(
@@ -1012,15 +1011,26 @@ fn search_catalog_scope(
         .map_err(err)?
     {
         let game = repository_metadata::read_game(&json.map_err(err)?)?;
-        seen.insert(game.id);
         results.push(SearchResult { game, exact: true, source_key: None });
     }
+    repository::finish_search_results(conn, results)
+}
+
+fn search_catalog_scope(
+    conn: &Connection,
+    query: &str,
+    platform: Option<&str>,
+) -> Result<Vec<SearchResult>> {
+    let mut results = exact_catalog_matches(conn, query, platform)?;
     // Most imports match exactly. Avoid a broad full-text search for every
     // already identified game; alternative titles can still be searched manually.
     if !results.is_empty() {
-        return repository::finish_search_results(conn, results);
+        return Ok(results);
     }
-    drop(exact);
+    let normalized = normalize(query);
+    if normalized.is_empty() { return Ok(results); }
+    let mut seen = HashSet::new();
+    let limit = if platform.is_some() { 21 } else { 100 };
     let words = normalized
         .split_whitespace()
         .take(20)
@@ -1703,6 +1713,7 @@ pub async fn stage_metadata_import(
     selections: Vec<MatchSelection>,
     media_selections: Option<Vec<crate::media_library::RecoverySelection>>,
     options: MediaOptions,
+    use_catalog_titles: Option<bool>,
     on_progress: Channel<MetadataProgress>,
     jobs: tauri::State<'_, MetadataJobs>,
 ) -> Result<DownloadReport> {
@@ -1730,6 +1741,7 @@ pub async fn stage_metadata_import(
             selections,
             &options,
         )?;
+        apply_catalog_titles(&mut batch, use_catalog_titles.unwrap_or(true));
         apply_media_recovery(&mut batch,&conn,&job.root,&media_selections.unwrap_or_default())?;
         let platform_import = platforms::prepare_auto(&conn, &batch.platform, &source_platform)?;
         drop(conn);
@@ -1772,6 +1784,15 @@ pub async fn retry_metadata_images(
     })
     .await
     .map_err(err)?
+}
+
+fn apply_catalog_titles(batch: &mut StagedBatch, enabled: bool) {
+    if !enabled { return; }
+    for game in &mut batch.games {
+        if let Some(title) = game.metadata.as_ref().map(|data| data.title.trim()).filter(|title| !title.is_empty()) {
+            game.candidate.title = title.to_owned();
+        }
+    }
 }
 
 fn apply_media_recovery(batch: &mut StagedBatch, conn: &Connection, root: &Path, selections: &[crate::media_library::RecoverySelection]) -> Result<()> {
@@ -3195,6 +3216,31 @@ mod tests {
                 .all(|image| sandbox.root.join(&image.path).is_file())
         );
         assert!(commit_import(&mut conn, &sandbox.job, preview, "My Genesis", |_| ()).is_err());
+    }
+
+    #[test]
+    fn import_uses_selected_catalog_titles_when_enabled_and_keeps_unmatched_titles() {
+        for enabled in [true,false] {
+            let sandbox=Sandbox::new();
+            let mut conn=library();
+            let catalog=sandbox.catalog();
+            let mut batch=sandbox.batch(&conn,&catalog,2,MediaOptions::default());
+            batch.games[1].metadata=None;
+            let preview=batch.preview.clone();
+            apply_catalog_titles(&mut batch,enabled);
+            assert_eq!(batch.preview,preview,"retain the original review for commit validation");
+            *sandbox.job.staged.lock().unwrap()=Some(batch);
+            let result=commit_import(&mut conn,&sandbox.job,preview,"My Genesis",|_|()).unwrap();
+            assert_eq!(result.added_count,2);
+            let rows:Vec<(String,String,i64,i64)>=conn.prepare("SELECT title,platform,play_time_seconds,session_count FROM games ORDER BY id").unwrap()
+                .query_map([],|r|Ok((r.get(0)?,r.get(1)?,r.get(2)?,r.get(3)?))).unwrap().collect::<rusqlite::Result<_>>().unwrap();
+            assert_eq!(rows[0],(if enabled {"Sonic the Hedgehog"}else{"My reviewed title 0"}.into(),"My Genesis".into(),0,0));
+            assert_eq!(rows[1].0,"My reviewed title 1");
+        }
+        let sandbox=Sandbox::new();let conn=library();let catalog=sandbox.catalog();
+        let mut batch=sandbox.batch(&conn,&catalog,1,MediaOptions::default());
+        batch.games[0].metadata.as_mut().unwrap().title="  ".into();
+        apply_catalog_titles(&mut batch,true);assert_eq!(batch.games[0].candidate.title,"My reviewed title 0");
     }
 
     #[test]

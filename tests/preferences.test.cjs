@@ -260,6 +260,19 @@ test("Language selection is a saved draft and applies on the next startup",async
   assert.equal(restarted.get('language-restart-dialog').open,false);
 });
 
+test('Catalog titles default on for existing preferences, respect Cancel and persist only on Save',async()=>{
+  const stored=new Map([['opencabinet.preferences',JSON.stringify({maxCachedCovers:500})]]);
+  const instance=app(stored);await instance.open();
+  assert.equal(instance.get('preference-catalog-titles').checked,true);
+  instance.get('preference-catalog-titles').checked=false;instance.get('btn-cancel-preferences').handlers.click();
+  await instance.open();assert.equal(instance.get('preference-catalog-titles').checked,true);
+  instance.get('preference-catalog-titles').checked=false;await instance.save(500);
+  assert.equal(instance.evaluate('preferences.useCatalogTitles'),false);
+  const restarted=app(stored);await restarted.open();assert.equal(restarted.get('preference-catalog-titles').checked,false);
+  const failure=app(new Map(),true);await failure.open();failure.get('preference-catalog-titles').checked=false;await failure.save(400);
+  assert.equal(failure.evaluate('preferences.useCatalogTitles'),true);assert.equal(failure.get('preferences-dialog').open,true);
+});
+
 test('Preferences follow the system language until a language is saved explicitly', async () => {
   for (const language of ['es-ES','es-MX','es','en-GB','pt-BR']) {
     const instance=app(new Map(),false,{systemLanguage:language}); await instance.open();

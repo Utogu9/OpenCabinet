@@ -38,3 +38,25 @@ test('Editing and late preset loads never overwrite stored arguments; applying d
   app.path.value='rpcs3.exe';app.path.fire('input');await turn();assert.match(app.args.value,/-fullscreen -batch/);
   const late=ui();late.args.value='manual';late.args.fire('input');late.finish(presets);await turn();assert.equal(late.args.value,'manual');
 });
+
+test('Executable selection fills the canonical emulator name and fullscreen arguments in either form',async()=>{
+  for(const preset of presets) {
+    const app=ui();app.name.value='Platform Emulator';app.path.value=`C:/Emulators/${preset.id}.exe`;
+    app.path.fire('input');app.path.fire('change');app.finish(presets);await turn();
+    assert.equal(app.name.value,preset.name);assert.equal(app.args.value,preset.arguments);
+    app.path.value='PPSSPPWindows64.exe';app.path.fire('change');await turn();assert.equal(app.name.value,'PPSSPP');
+  }
+});
+
+test('Names and arguments can be customized independently and saved emulator names are preserved',async()=>{
+  const app=ui();app.finish(presets);await turn();app.path.value='pcsx2-qt.exe';app.path.fire('change');await turn();
+  app.name.value='My PCSX2 profile';app.name.fire('input');await turn();
+  app.path.value='rpcs3.exe';app.path.fire('change');await turn();
+  assert.equal(app.name.value,'My PCSX2 profile');assert.match(app.args.value,/--no-gui/);
+  app.name.value='';app.path.value='pcsx2.exe';app.controller.reset();assert.equal(app.name.value,'PCSX2');
+  app.args.value='--custom "%ROM%"';app.args.fire('input');app.path.value='dolphin.exe';app.path.fire('change');await turn();
+  assert.equal(app.name.value,'Dolphin');assert.equal(app.args.value,'--custom "%ROM%"');
+  const existing=ui('7');existing.name.value='PCSX2 (personal)';existing.path.value='pcsx2.exe';existing.finish(presets);await turn();
+  assert.equal(existing.name.value,'PCSX2 (personal)');
+  const unknown=ui();unknown.path.value='unknown.exe';unknown.finish(presets);await turn();assert.equal(unknown.name.value,'');
+});

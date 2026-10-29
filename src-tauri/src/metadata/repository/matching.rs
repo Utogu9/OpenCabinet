@@ -1,4 +1,4 @@
-//! Repository-only matching. Keep distinct serials and prefer the original ROM name.
+//! Import matching uses indexed title, filename and serial lookups before fuzzy search.
 use super::*;
 
 pub(super) fn rom_name(path: &str) -> String {
@@ -12,7 +12,10 @@ pub(super) fn rom_name(path: &str) -> String {
             "iso", "bin", "cue", "chd", "cso", "pbp", "gcm", "rvz", "wbfs", "nkit", "md", "gen",
             "smd", "sfc", "smc", "nes", "gba", "gbc", "gb", "n64", "z64", "v64", "nds", "3ds",
             "cia", "nsp", "xci", "xbe", "xex", "god", "cdi", "gdi", "v40", "zip", "7z", "gz",
-            "bz2", "xz", "zst", "rar", "xiso", "zcci", "cci", "cxi", "pkg", "exe",
+            "bz2", "xz", "zst", "rar", "xiso", "zcci", "cci", "cxi", "pkg", "exe", "rom",
+            "a26", "a52", "a78", "j64", "jag", "abs", "cof", "lnx", "ws", "wsc", "col",
+            "int", "xvd", "xvc", "pce", "sgx", "wud", "wux", "wua", "rpx", "vb", "vboy",
+            "fds", "sg", "sms", "32x", "gg", "ngp", "ngc", "vpk",
         ]
         .iter()
         .any(|known| extension.eq_ignore_ascii_case(known))
@@ -34,33 +37,34 @@ pub(in crate::metadata) fn search_candidate(
     platform: &str,
     path: &str,
 ) -> Result<Vec<SearchResult>> {
-    if catalog_is_repository(conn) {
-        let name = rom_name(path);
-        let normalized = normalize(&name);
-        if !normalized.is_empty() {
-            let mut statement = conn
-                .prepare(
-                    "SELECT DISTINCT g.details FROM names n JOIN games g ON g.id=n.game_id
-                 WHERE n.normalized=?1 AND g.platform=?2 ORDER BY g.id",
-                )
-                .map_err(err)?;
-            let mut results = Vec::new();
-            for json in statement
-                .query_map(params![normalized, platform], |row| row.get::<_, String>(0))
-                .map_err(err)?
-            {
-                results.push(SearchResult {
-                    game: repository_metadata::read_game(&json.map_err(err)?)?,
-                    exact: true,
-                    source_key: None,
-                });
-            }
-            if !results.is_empty() {
-                return finish_search_results(conn, results);
-            }
+    let original = rom_name(path);
+    let mut queries = if catalog_is_repository(conn) {
+        // The repository indexes regional filenames; keep their disambiguation.
+        vec![original.clone(), title.to_owned()]
+    } else {
+        vec![title.to_owned(), original.clone()]
+    };
+    // Serial filenames may use SLUS_209.98 instead of SLUS-20998.
+    let serial: String = original.chars().filter(char::is_ascii_alphanumeric).collect();
+    if let Some(index) = serial.find(|c: char| c.is_ascii_digit()) {
+        let (prefix, number) = serial.split_at(index);
+        if (2..=6).contains(&prefix.len()) && (4..=9).contains(&number.len()) && number.chars().all(|c| c.is_ascii_digit()) {
+            queries.extend([serial.clone(), format!("{prefix} {number}")]);
         }
     }
-    search_catalog(conn, title, platform)
+    if !original.is_empty() { queries.push(crate::clean_rom_title(&original)); }
+    let mut seen = HashSet::new();
+    for query in &queries {
+        let key = normalize(query);
+        if key.is_empty() || !seen.insert(key) { continue; }
+        let results = exact_catalog_matches(conn, query, Some(platform))?;
+        if !results.is_empty() { return Ok(results); }
+    }
+    let results = search_catalog(conn, title, platform)?;
+    if !results.is_empty() || original.is_empty() || normalize(&original) == normalize(title) {
+        return Ok(results);
+    }
+    search_catalog(conn, &original, platform)
 }
 
 pub(in crate::metadata) fn finish_search_results(
@@ -98,4 +102,23 @@ pub(super) fn shortest_match(candidates: &[SearchResult], ids: &[i64]) -> Option
                 .then_with(|| id_a.cmp(id_b))
         })
         .map(|(id, _)| id)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn original_names_preserve_tags_and_title_dots_while_removing_rom_extensions() {
+        for (path, expected) in [
+            ("C:/ROMs/Vol. 2 (USA) (En,Es).iso.gz", "Vol. 2 (USA) (En,Es)"),
+            ("C:/ROMs/Example (Japan).pce.zip", "Example (Japan)"),
+            ("C:/ROMs/Example (Europe).wua", "Example (Europe)"),
+            ("C:/ROMs/SLUS_209.98.chd", "SLUS_209.98"),
+            ("C:/Game/PS3_GAME/USRDIR/EBOOT.BIN", ""),
+            ("steam://run/123", ""),
+        ] {
+            assert_eq!(rom_name(path), expected);
+        }
+    }
 }

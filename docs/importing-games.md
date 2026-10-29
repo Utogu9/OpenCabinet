@@ -48,7 +48,10 @@ siendo plataformas emuladas. Los juegos de PC fuera de Steam y Epic se eligen in
 Los juegos individuales pasan por la misma búsqueda, selección de coincidencias
 y descarga de imágenes del catálogo que una importación por carpeta. PC sugiere
 Windows como plataforma equivalente. Puedes importar sin datos externos. Se
-conservan el título revisado y la plataforma local, y los duplicados se omiten.
+usa el título de la coincidencia elegida por defecto y conserva la plataforma
+local; los duplicados se omiten. En **Preferencias → Datos de juegos** se puede
+desactivar **Usar los títulos del catálogo al importar juegos** para conservar
+los títulos revisados. Sin coincidencia se mantiene el título revisado.
 
 Importar registra la ubicación del archivo: no ejecuta ni copia el juego. Al
 pulsar Jugar, un juego de PC abre su ejecutable directamente, sin argumentos y

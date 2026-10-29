@@ -1053,6 +1053,9 @@ mod tests {
             ("Dragon Ball Z - Budokai 3 (USA) (Rev 1).iso", "SLUS-20998R1"),
             ("Dragon Ball Z - Budokai 3 (USA) (Greatest Hits).iso", "SLUS-20998GH"),
             ("Dragon Ball Z - Budokai 2 (USA).iso", "SLUS-21000"),
+            ("SLUS-21000.iso", "SLUS-21000"),
+            ("SLUS_210.00.iso", "SLUS-21000"),
+            ("SLUS21000.chd", "SLUS-21000"),
         ] {
             let found = search_candidate(&conn, "Wrong title", platform, name).unwrap();
             assert_eq!(found.len(), 1);
@@ -1072,7 +1075,7 @@ mod tests {
     fn personal_catalogs_keep_title_matching_and_do_not_expose_repository_serials() {
         let conn = Connection::open_in_memory().unwrap();
         catalog_schema(&conn).unwrap();
-        for (id, title) in [(1, "Reviewed title"), (2, "Original filename (USA)")] {
+        for (id, title) in [(1, "Reviewed title"), (2, "Original filename (USA)"), (3,"Serial game"), (4,"Regional alias game")] {
             let json = serde_json::json!({"id":id,"title":title,"platform":"PS2"}).to_string();
             conn.execute("INSERT INTO games VALUES(?1,?2,'PS2',?3)",params![id,title,json]).unwrap();
             conn.execute("INSERT INTO names VALUES(?1,?2,?3)",params![id,title,normalize(title)]).unwrap();
@@ -1081,6 +1084,19 @@ mod tests {
         assert_eq!(found.len(),1);
         assert_eq!(found[0].game.id,1);
         assert!(found[0].source_key.is_none());
+        conn.execute("INSERT INTO names VALUES(3,'SLUS-21000',?1)",[normalize("SLUS-21000")]).unwrap();
+        conn.execute("INSERT INTO names VALUES(4,'Alias (Europe) (En,Es)',?1)",[normalize("Alias (Europe) (En,Es)")]).unwrap();
+        for (path,id) in [
+            ("C:/ROMs/Original filename (USA).iso.gz",2),
+            ("C:/ROMs/SLUS_210.00.chd",3),
+            ("C:/ROMs/Alias (Europe) (En,Es).iso",4),
+            ("C:/ROMs/Reviewed title (Japan).chd",1),
+        ] {
+            let matches=search_candidate(&conn,"Unrecognized title","PS2",path).unwrap();
+            assert_eq!(matches.len(),1);assert!(matches[0].exact);assert_eq!(matches[0].game.id,id);
+        }
+        let temporary:i64=conn.query_row("SELECT count(*) FROM sqlite_temp_master",[],|r|r.get(0)).unwrap();
+        assert_eq!(temporary,0,"filename fallbacks must use exact indexed lookups before preparing fuzzy search");
     }
 
     #[test]
