@@ -63,7 +63,20 @@ export function createContactShadows(renderer,light,{rear,lidShell,paper,manualB
   };
 }
 
-export function configureAcrylicOptics(material,{normalAxis='z',millimetersPerUnit=1,reliefStrength=1,bodyHaze=0}={}) {
+// Flat windows over folded paper are not thick molded reliefs, even though
+// their normals point sideways. Keep the mask local to the printed panels.
+export function maskClearPanels(geometry,panels,offset=new THREE.Vector3()) {
+  const position=geometry.attributes.position,normal=geometry.attributes.normal;
+  const mask=new Float32Array(position.count).fill(1),point=new THREE.Vector3();
+  for(let i=0;i<position.count;i++) {
+    if(Math.abs(normal.getX(i))<.95)continue;
+    point.fromBufferAttribute(position,i).add(offset);
+    if(panels.some(panel=>panel.containsPoint(point)))mask[i]=0;
+  }
+  geometry.setAttribute('acrylicReliefMask',new THREE.BufferAttribute(mask,1));
+}
+
+export function configureAcrylicOptics(material,{normalAxis='z',millimetersPerUnit=1,reliefStrength=1,bodyHaze=0,reliefMask=false}={}) {
   if(!['x','y','z'].includes(normalAxis))throw Error('Invalid acrylic normal axis');
   if(!Number.isFinite(millimetersPerUnit)||millimetersPerUnit<=0)throw Error('Invalid acrylic model units');
   if(!Number.isFinite(reliefStrength)||reliefStrength<0||reliefStrength>1)throw Error('Invalid acrylic relief strength');
@@ -81,8 +94,9 @@ export function configureAcrylicOptics(material,{normalAxis='z',millimetersPerUn
     shader.uniforms.acrylicScatterDensity={value:.06*millimetersPerUnit};
     shader.uniforms.acrylicReliefStrength={value:reliefStrength};
     shader.uniforms.acrylicBodyHaze={value:bodyHaze};
-    shader.vertexShader=`uniform float acrylicReliefStrength;\nvarying float vAcrylicRelief;\n${shader.vertexShader}`.replace('#include <begin_vertex>',`
+    shader.vertexShader=`${reliefMask?'attribute float acrylicReliefMask;\n':''}uniform float acrylicReliefStrength;\nvarying float vAcrylicRelief;\n${shader.vertexShader}`.replace('#include <begin_vertex>',`
       vAcrylicRelief = acrylicReliefStrength * smoothstep(0.04, 0.8, 1.0 - abs(normalize(normal).${normalAxis}));
+      ${reliefMask?'vAcrylicRelief *= acrylicReliefMask;':''}
       #include <begin_vertex>
     `);
     shader.fragmentShader=`uniform float acrylicScatterDensity;\nuniform float acrylicBodyHaze;\nvarying float vAcrylicRelief;\n${shader.fragmentShader}`;
@@ -131,5 +145,5 @@ export function configureAcrylicOptics(material,{normalAxis='z',millimetersPerUn
       #include <opaque_fragment>
     `);
   };
-  material.customProgramCacheKey=()=> 'opencabinet-acrylic-refraction-v3:'+normalAxis;
+  material.customProgramCacheKey=()=> 'opencabinet-acrylic-refraction-v4:'+normalAxis+':'+reliefMask;
 }

@@ -2,7 +2,7 @@
 <script type="module">
 import * as THREE from '/src/vendor/three/three.module.js';
 import {RoomEnvironment} from '/src/vendor/three/RoomEnvironment.js';
-import {configureAcrylicOptics} from '/src/three-box-relief.js';
+import {configureAcrylicOptics,maskClearPanels} from '/src/three-box-relief.js';
 
 const renderer=new THREE.WebGLRenderer({antialias:true,preserveDrawingBuffer:true});
 renderer.setSize(640,512);renderer.setClearColor(0,0);renderer.outputColorSpace=THREE.SRGBColorSpace;
@@ -58,7 +58,21 @@ const sample=data=>Array.from(data.slice((y*640+x)*4,(y*640+x)*4+3));
 hazeUniform.value=.16;const hazyPrint=sample(pixels());
 paper.position.z=5;hazeUniform.value=0;const outsideClear=sample(pixels());
 hazeUniform.value=.16;const outsideHazy=sample(pixels());
-window.opticsResult={displacedPixels,indirectEdgePixels,layeredEdgePixels,print,glErrors,scaledDifference,hazyPrint,outsideClear,outsideHazy};
+// A folded paper spine is behind a flat side wall, not a molded raised edge.
+// Keep the production half-resolution transmission buffer to catch its blur.
+scaledGlass.visible=false;paper.position.z=0;renderer.transmissionResolutionScale=.5;
+const sideMaterial=new THREE.MeshPhysicalMaterial({transparent:true,depthWrite:false,side:THREE.DoubleSide});
+configureAcrylicOptics(sideMaterial,{reliefMask:true});sideMaterial.envMap=environment.texture;sideMaterial.envMapIntensity=0;
+const sideGeometry=new THREE.BoxGeometry(.6,84,100);
+maskClearPanels(sideGeometry,[new THREE.Box3(new THREE.Vector3(-2,-50,-60),new THREE.Vector3(2,50,60))]);
+const side=new THREE.Mesh(sideGeometry,sideMaterial);side.rotation.y=Math.PI/2;side.position.z=1;scene.add(side);
+const clearSidePixels=pixels(),sideClear=sample(clearSidePixels);
+sideGeometry.attributes.acrylicReliefMask.array.fill(1);sideGeometry.attributes.acrylicReliefMask.needsUpdate=true;
+const raisedSidePixels=pixels(),sideRelief=sample(raisedSidePixels);
+const contrast=data=>{let sum=0;for(let py=180;py<330;py++)for(let px=350;px<480;px++)for(let c=0;c<3;c++)sum+=Math.abs(data[(py*640+px)*4+c]-data[(py*640+px+1)*4+c]);return sum;};
+window.opticsResult={displacedPixels,indirectEdgePixels,layeredEdgePixels,print,glErrors,scaledDifference,hazyPrint,outsideClear,outsideHazy,
+  sideClear,sideRelief,sideClearContrast:contrast(clearSidePixels),sideReliefContrast:contrast(raisedSidePixels)};
+sideGeometry.dispose();sideMaterial.dispose();
 scaledGlass.children.forEach(mesh=>mesh.geometry.dispose());scaledMaterial.dispose();
 new Set(glass.children.map(mesh=>mesh.geometry)).forEach(geometry=>geometry.dispose());paper.geometry.dispose();paper.material.dispose();
 material.dispose();texture.dispose();environment.dispose();renderer.dispose();renderer.forceContextLoss();

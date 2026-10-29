@@ -193,6 +193,38 @@ test('Contact shadows include raised walls rather than turning transparent sheet
   outside.dispose();inside.dispose();geometry.dispose();
 });
 
+test('Both printed spine windows stay optically flat without suppressing the other acrylic reliefs',async()=>{
+  const THREE=await import('../src/vendor/three/three.module.js');
+  const {maskClearPanels}=await import('../src/three-box-relief.js');
+  const {manifest,binary}=dreamcastModel();
+  function geometryFor(spec) {
+    const data=new Float32Array(binary.buffer,binary.byteOffset+spec.vertexOffset,spec.vertexCount*8);
+    const geometry=new THREE.BufferGeometry(),positions=[],normals=[];
+    for(let i=0;i<data.length;i+=8){positions.push(...data.slice(i,i+3));normals.push(...data.slice(i+3,i+6));}
+    geometry.setAttribute('position',new THREE.Float32BufferAttribute(positions,3));
+    geometry.setAttribute('normal',new THREE.Float32BufferAttribute(normals,3));geometry.computeBoundingBox();return geometry;
+  }
+  const panels=['spine_left','spine_right'].map(kind=>{
+    const geometry=geometryFor(manifest.meshes.find(mesh=>mesh.material===kind));
+    const box=geometry.boundingBox.clone().expandByScalar(1.5);geometry.dispose();return box;
+  });
+  for(const part of ['base','lid']) {
+    const geometry=geometryFor(manifest.meshes.find(mesh=>mesh.part===part&&mesh.material==='acrylic'));
+    const pivot=new THREE.Vector3(...manifest.hinge);
+    if(part==='lid')geometry.translate(-pivot.x,-pivot.y,-pivot.z);
+    maskClearPanels(geometry,panels,part==='lid'?pivot:undefined);
+    const mask=geometry.attributes.acrylicReliefMask,position=geometry.attributes.position;
+    const sideCounts=[0,0];let relief=0;
+    for(let i=0;i<mask.count;i++) {
+      if(mask.getX(i)===1){relief++;continue;}
+      sideCounts[position.getX(i)+(part==='lid'?pivot.x:0)<0?0:1]++;
+    }
+    assert.ok(sideCounts.every(count=>count>10),'both outer spine walls have clear windows, including on the hinged shell');
+    assert.ok(relief>mask.count*.7,'the remaining molded acrylic keeps its relief and edge scattering');
+    geometry.dispose();
+  }
+});
+
 test('Pointer movement follows the mouse in Three.js world space and the lid opens toward the front',async()=>{
   const {arcballPoint,lidAngle}=await import('../src/three-box-motion.js');
   const {Vector3,Quaternion}=await import('three');

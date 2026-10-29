@@ -2,7 +2,7 @@ import * as THREE from './vendor/three/three.module.js';
 import { RoomEnvironment } from './vendor/three/RoomEnvironment.js';
 import { artworkWindow, chooseArtwork, dreamcastInsertWindows, dreamcastInsertTheme, dreamcastInsertProbes } from './three-box-artwork.js';
 import { arcballPoint, lidAngle } from './three-box-motion.js';
-import { createContactShadows, configureAcrylicOptics } from './three-box-relief.js';
+import { createContactShadows, configureAcrylicOptics, maskClearPanels } from './three-box-relief.js';
 
 let caseTask;
 async function caseData() {
@@ -42,7 +42,7 @@ export async function createViewer(host, options={}) {
     side:THREE.DoubleSide,envMapIntensity:.8});
   const ribs=acrylic.clone();
   ribs.opacity=.22;ribs.roughness=.22;ribs.clearcoat=.35;ribs.bumpScale=.18;
-  configureAcrylicOptics(acrylic);acrylic.envMap=scene.environment;acrylic.envMapIntensity=.45;
+  configureAcrylicOptics(acrylic,{reliefMask:true});acrylic.envMap=scene.environment;acrylic.envMapIntensity=.45;
   // Printed paper retains the scan's sRGB colors. The clear shell supplies the
   // view-dependent highlights; it must not bleach the print with diffuse light.
   const print=(color=0xe7e4db)=>new THREE.MeshBasicMaterial({color,side:THREE.FrontSide,toneMapped:false});
@@ -74,6 +74,10 @@ export async function createViewer(host, options={}) {
     const mesh=new THREE.Mesh(geometry,materials[spec.material]);mesh.name=spec.name;
     (spec.part==='lid'?lid:base).add(mesh);meshes.push(mesh);
     if(['cover','manualBack','pages'].includes(spec.material))manualMeshes.push(mesh);
+  }
+  const spineWindows=['spine_left','spine_right'].map(kind=>meshes.find(mesh=>mesh.material===materials[kind]).geometry.boundingBox.clone().expandByScalar(1.5));
+  for(const mesh of meshes.filter(mesh=>mesh.material===acrylic)) {
+    maskClearPanels(mesh.geometry,spineWindows,mesh.parent===lid?pivot:undefined);
   }
   const insertMesh=meshes.find(mesh=>mesh.name==='dreamcast-insert');
   const insertBounds=insertMesh.geometry.boundingBox;

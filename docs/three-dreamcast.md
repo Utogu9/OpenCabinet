@@ -128,6 +128,12 @@ y los colores de la impresión original. Los colores de caja personalizados
 se aplican como absorción del material. El cálculo se hace en el shader de la
 GPU, sin recorrer caras en JavaScript ni modificar el modelo.
 
+Las ventanas planas sobre ambos lomos reciben el mismo acabado transparente
+que las caras grandes. Una máscara de vértices, preparada al crear el visor,
+las distingue de los relieves moldeados: evita que su orientación lateral
+active la refracción gruesa y el blanqueado de los cantos. La máscara también
+acompaña la geometría de la tapa al abrirse y no añade pasadas de renderizado.
+
 Algunas caras interiores del OBJ tienen normales opuestas a su orientación
 geométrica. Orientar la normal de la interfaz óptica hacia la cámara antes de
 calcular Fresnel y refracción; de lo contrario se vuelven completamente

@@ -38,6 +38,9 @@ test('Plastic optics preserve clear artwork, support milky bodies and leave exte
   assert.ok(result.scaledDifference<1,`changing model units must not magnify artwork or produce displaced copies (${result.scaledDifference})`);
   assert.ok(result.hazyPrint.reduce((a,b)=>a+b,0)>result.print.reduce((a,b)=>a+b,0)+40,`milky bodies lighten the inside scan (${result.hazyPrint})`);
   assert.ok(result.outsideClear.every((value,i)=>Math.abs(value-result.outsideHazy[i])<=1),`body haze must not affect an exterior print (${result.outsideClear}, ${result.outsideHazy})`);
+  assert.ok(result.sideClear.every((value,i)=>Math.abs(value-[153,26,51][i])<15),`flat spine windows preserve the scan colors (${result.sideClear})`);
+  assert.ok(result.sideRelief.reduce((a,b)=>a+b,0)>result.sideClear.reduce((a,b)=>a+b,0)+40,`spine windows must not receive thick-relief whitening (${result.sideClear}, ${result.sideRelief})`);
+  assert.ok(result.sideClearContrast>result.sideReliefContrast*1.1,`flat spine windows retain more fine printed detail (${result.sideClearContrast}, ${result.sideReliefContrast})`);
   assert.ok(result.glErrors.every(error=>error===0));assert.deepEqual(errors,[]);
   t.diagnostic(JSON.stringify(result));
 });
