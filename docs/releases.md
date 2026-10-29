@@ -43,7 +43,6 @@ git tag v0.2.0
 git push origin v0.2.0
 ```
 
-Para la primera publicación, la versión actual corresponde a `v0.1.0`.
 Actualizá `.github/release-notes.md` con los cambios antes de crear la etiqueta;
 su texto se usa en la Release y en el visor de novedades de la app.
 

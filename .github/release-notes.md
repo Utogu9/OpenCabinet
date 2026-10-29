@@ -1,20 +1,24 @@
-## What's new in v0.1.2
+## What's new in v0.1.3
 
-- Dreamcast boxes now use Three.js with a detailed 3D model, interactive opening and improved acrylic rendering.
-- Support unfolded back covers and inlays, with black or white fallback inserts matched to the cover.
-- Cache Dreamcast inlays and manual cover previews for faster display without flashing the game cover first.
-- Improve dialog spacing and the About layout, with a link to the project on GitHub.
-- Raise the configurable RAM thumbnail limit to 99999.
-- Show available updates in a draggable floating notification with a shortcut to About.
+- Read CBZ manuals alongside PDFs, with on-demand image loading and numerical page ordering.
+- Display manuals inside Xbox, Xbox 360, Nintendo DS, GameCube, Wii, Wii U and PS3 cases; improve the legacy PSP manual and inlay support.
+- Improve manual sizing, retaining clips, folded scans and reading order, including square DS booklets.
+- Relocate missing ROMs from the Play button, game editor or region/disc selectors without losing game data.
+- Save library folders and find new games directly from a platform's context menu or editor.
+- View individual play sessions from the playtime icon, context menu or the game editor's dedicated history category.
+- Improve RetroArch launch diagnostics, emulator name and argument detection, and catalog matching using original ROM filenames.
+- Offer catalog titles as an import preference and Restart now / Later after changing the language.
 
-## Novedades de v0.1.2
+## Novedades de v0.1.3
 
-- Las cajas de Dreamcast ahora usan Three.js con un modelo 3D detallado, apertura interactiva y mejoras en el acrílico.
-- Soporte para contraportadas desplegadas e inlays, con insertos negros o blancos elegidos según la portada.
-- Caché de inlays y vistas previas de manuales de Dreamcast para mostrarlos más rápido, sin mostrar primero la portada del juego.
-- Mejoras en los márgenes de las ventanas y en Acerca de, con un enlace al proyecto en GitHub.
-- El límite configurable de miniaturas en RAM aumenta a 99999.
-- Aviso flotante arrastrable de actualizaciones disponibles, con acceso a Acerca de.
+- Lectura de manuales CBZ además de PDF, con carga de imágenes bajo demanda y orden numérico de páginas.
+- Manuales dentro de las cajas de Xbox, Xbox 360, Nintendo DS, GameCube, Wii, Wii U y PS3; mejoras en manuales e inlays del visor clásico de PSP.
+- Ajustes de tamaño, pestañas, escaneos desplegados y orden de lectura, incluidos los manuales cuadrados de DS.
+- Reubicación de ROMs ausentes desde Jugar, Editar juego o los selectores de región y disco, conservando los datos del juego.
+- Carpetas de biblioteca guardadas y búsqueda de juegos nuevos desde el menú contextual o la edición de consola.
+- Historial de partidas desde el icono junto al tiempo jugado, el menú contextual o su categoría en Editar juego.
+- Mejores diagnósticos de RetroArch, detección del nombre y argumentos del emulador y coincidencias mediante el nombre original de la ROM.
+- Preferencia para usar los títulos del catálogo al importar y botones Reiniciar ahora / Más tarde al cambiar de idioma.
 
 ## Downloads / Descargas
 
