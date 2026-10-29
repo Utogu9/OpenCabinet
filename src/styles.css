@@ -2129,7 +2129,7 @@ button:disabled {
 #game-edit-panel-execution { display: flex; flex-direction: column; gap: 18px; }
 #game-edit-panel-execution .form-group { margin: 0; }
 #game-edit-rom-path { resize: vertical; overflow-wrap: anywhere; }
-#game-edit-form > .form-actions { padding: 16px 24px; border-top: 1px solid var(--border-color); margin: 0; flex-shrink: 0; }
+#game-edit-form > .form-actions { padding: 16px 24px; border-top: 1px solid var(--border-color); margin: 0; flex-shrink: 0; flex-wrap: wrap; }
 @media (max-width: 650px) {
   .game-editor-layout { grid-template-columns: 125px minmax(0, 1fr); }
   .game-editor-panels { padding: 16px; }

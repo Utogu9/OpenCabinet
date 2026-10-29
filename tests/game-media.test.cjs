@@ -39,15 +39,20 @@ function mediaApp(options = {}) {
       const index = this.parentNode.children.indexOf(this);
       this.parentNode.children[index] = item;
     }
+    remove() { if (this.parentNode) this.parentNode.children = this.parentNode.children.filter(child => child !== this); }
+    contains(element) { return this === element || this.children.some(child => child.contains(element)); }
+    get nextElementSibling() { return this.parentNode?.children[this.parentNode.children.indexOf(this) + 1]; }
+    get previousElementSibling() { return this.parentNode?.children[this.parentNode.children.indexOf(this) - 1]; }
+    querySelector(selector) { return this.querySelectorAll(selector)[0] || null; }
     setAttribute(name, value) { this.attributes[name] = value; }
     addEventListener(name, handler) { this.handlers[name] = handler; }
-    focus() { document.activeElement = this; }
+    focus(options) { document.activeElement = this; this.focusOptions = options; }
     showModal() { this.open = true; }
     close() { this.open = false; this.handlers.close?.(); }
     querySelectorAll(selector) {
       const tags = selector.split(",").map((tag) => tag.trim());
       const descendants = (element) => element.children.flatMap((child) => [...(tags.includes(child.tag) ? [child] : []), ...descendants(child)]);
-      if (["game-image-list", "game-manual-list"].includes(this.id)) return descendants(this);
+      if (["game-image-list", "game-manual-list"].includes(this.id) || this.dataset.imagePath) return descendants(this);
       if (this.id === "editor-artwork-panel") {
         const controls = ["editor-artwork-platform", "editor-artwork-query", "editor-artwork-result", "btn-editor-artwork-search",
           "btn-editor-artwork-download", "btn-editor-artwork-retry"].map(get);
@@ -549,6 +554,52 @@ test("Editor downloads missing image types into a draft and only persists them o
   assert.equal(saved.args.details.images.length, 4); assert.equal(saved.args.details.title, "Test Game");
   assert.equal(saved.args.details.catalogId, 42, 'saving downloaded artwork also remembers its confirmed source');
   assert.equal(app.calls.at(-1).command, "end_metadata_import");
+});
+
+test("Image reclassification and removal retain surviving controls, focus and editor scroll", async () => {
+  const app = mediaApp(); await app.open();
+  await app.get("game-edit-tab-images").trigger("click");
+  const panels = app.get("game-editor-panels"), cover = app.rowFor("cover.png"), logo = app.rowFor("logo.png");
+  const kind = logo.children[1].children[1];
+  panels.scrollTop = 730; kind.focus(); kind.value = "cover";
+  await kind.trigger("change");
+  assert.equal(app.rowFor("logo.png"), logo);
+  assert.equal(app.rowFor("cover.png"), cover);
+  assert.equal(cover.children[1].children[1].value, "artwork");
+  assert.equal(app.document.activeElement, kind);
+  assert.equal(panels.scrollTop, 730);
+  const remove = logo.children[2]; remove.focus(); await remove.trigger("click");
+  assert.equal(app.rowFor("logo.png"), undefined);
+  assert.equal(app.rowFor("cover.png"), cover);
+  assert.equal(app.document.activeElement, app.rowFor("screen.png").children[1].children[1]);
+  assert.equal(app.document.activeElement.focusOptions.preventScroll, true);
+  assert.equal(panels.scrollTop, 730);
+  await app.save();
+  assert.equal(app.calls.find(call => call.command === "update_game").args.details.images.length, 2);
+});
+
+test("The editor footer offers Save then Download while downloading remains a separate draft action", async () => {
+  const app = mediaApp(); await app.open();
+  const save = app.get("btn-save-game-edit"), download = app.get("btn-download-game-edit");
+  assert.equal(download.classList.contains("hidden"), true);
+  await app.get("game-edit-tab-images").trigger("click");
+  await app.get("btn-download-game-images").trigger("click");
+  assert.equal(download.classList.contains("hidden"), false);
+  assert.equal(download.disabled, false);
+  assert.equal(save.classList.contains("secondary-btn"), true);
+  const checkbox = app.quantity("cover"); checkbox.checked = false; await checkbox.trigger("change");
+  await download.trigger("click");
+  assert.equal(app.calls.filter(call => call.command === "download_editor_game_images").length, 1);
+  assert.equal(app.calls.some(call => call.command === "update_game"), false);
+  assert.equal(app.get("game-image-list").children.length, 4);
+  await app.get("game-edit-tab-details").trigger("click");
+  assert.equal(download.classList.contains("hidden"), true);
+  assert.equal(save.classList.contains("primary-btn"), true);
+  await app.get("game-edit-tab-images").trigger("click");
+  await app.get("btn-download-game-images").trigger("click");
+  assert.equal(download.classList.contains("hidden"), true);
+  await app.save();
+  assert.equal(app.calls.find(call => call.command === "update_game").args.details.images.length, 4);
 });
 
 test("Image choices follow the selected source and preserve checks for types still available", async () => {

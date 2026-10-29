@@ -24,6 +24,13 @@ function importer(options = {}) {
       this.children.push(...children); return item;
     }
     remove() { if (this.parent) this.parent.children = this.parent.children.filter((child) => child !== this); }
+    contains(element) { return this === element || this.children.some(child => child.contains(element)); }
+    get nextElementSibling() { return this.parent?.children[this.parent.children.indexOf(this) + 1]; }
+    get previousElementSibling() { return this.parent?.children[this.parent.children.indexOf(this) - 1]; }
+    querySelector(selector) {
+      return this.children.find(child => selector.startsWith('.') ? child.className?.split(' ').includes(selector.slice(1)) : child.tag === selector)
+        || this.children.map(child => child.querySelector(selector)).find(Boolean) || null;
+    }
     append(...items) { items.forEach((item) => this.appendChild(item)); }
     replaceChildren(...items) { this.children = []; this.append(...items); }
     setAttribute(name, value) { this.attributes[name] = value; }
@@ -33,7 +40,7 @@ function importer(options = {}) {
       return this.children.flatMap((child) => [...(tags.includes(child.tag) ? [child] : []), ...child.querySelectorAll(selector)]);
     }
     scrollIntoView() {}
-    focus() { this.focused = true; }
+    focus(options) { this.focused = true; this.focusOptions = options; context.document.activeElement = this; }
     setCustomValidity(message) { this.validationMessage = message; }
     reportValidity() { this.validityReported = true; }
     async click() { if (!this.disabled) return this.onclick?.(); }
@@ -525,6 +532,19 @@ test("Removed games stay excluded after searching again and when importing witho
   const final = app.calls.find(call => call.command === 'import_scanned_roms').args;
   assert.equal(final.preview.games.length, 1); assert.equal(final.preview.games[0].rom_path, retained.rom_path);
   assert.equal(final.jobId, null);
+});
+
+test("Removing a metadata candidate preserves the list position and focuses the next remove action", async () => {
+  const app = importer({ count: 3 }); const pending = app.start(); await turn();
+  await app.get("btn-confirm-scan-review").click(); await turn();
+  const list = app.get("lb-match-list"), next = list.children[2];
+  list.scrollTop = 420;
+  const remove = list.children[1].children[5]; remove.focus(); await remove.click();
+  assert.equal(list.scrollTop, 420);
+  assert.equal(list.children[1], next);
+  assert.equal(app.evaluate("document.activeElement"), next.children[5]);
+  assert.equal(next.children[5].focusOptions.preventScroll, true);
+  await app.get("btn-lb-cancel").click(); await pending;
 });
 
 test("Removing the only remaining game disables all import paths and cancelling never commits", async () => {

@@ -2484,7 +2484,7 @@ function preferredMetadataMatch(games) {
     || (a.source_key < b.source_key ? -1 : a.source_key > b.source_key ? 1 : 0))[0].id;
 }
 
-function setupGameImageDownloader({ getGame, getImages, onImages, onBusy, onSource = () => {} }) {
+function setupGameImageDownloader({ getGame, getImages, onImages, onBusy, onSource = () => {}, onState = () => {} }) {
   const panel = document.getElementById("editor-artwork-panel");
   const platform = document.getElementById("editor-artwork-platform");
   const query = document.getElementById("editor-artwork-query");
@@ -2509,6 +2509,7 @@ function setupGameImageDownloader({ getGame, getImages, onImages, onBusy, onSour
     panel.querySelectorAll("input, select, button").forEach((element) => { element.disabled = busy; });
     download.disabled = busy || !typesReady || !quantities.size || !result.value || !platform.value || !jobId;
     retry.disabled = busy || !retryAvailable;
+    onState({ visible: artworkOpened && !panel.classList.contains("hidden"), disabled: download.disabled });
   }
   function setBusy(value) { busy = value; onBusy(value); controls(); }
   function clearResults() {
@@ -2640,14 +2641,18 @@ function setupGameImageDownloader({ getGame, getImages, onImages, onBusy, onSour
   query.addEventListener("keydown", (event) => { if (event.key === "Enter") { event.preventDefault(); perform((current) => find(current)); } });
   platform.addEventListener("change", () => { clearResults(); controls(); message.textContent = globalThis.OpenCabinetI18n.t("msg.a2e7badbf4"); });
   result.addEventListener("change", () => { retryAvailable = false; retry.classList.add("hidden"); return perform(loadTypes); });
-  download.addEventListener("click", () => perform(async (current) => {
-    const selected = candidates.find((game) => String(game.id) === result.value);
-    if (!selected) return;
-    const options = readOptions(); retryAvailable = false; retry.classList.add("hidden");
-    const report = await invoke("download_editor_game_images", { jobId, gameId: getGame().id, sourceId: selected.id,
-      sourcePlatform: platform.value, options, existingImages: getImages(), onProgress: channel(current, "images") });
-    if (current()) { acceptReport(report); if (report.images.length) onSource(selected.id); }
-  }));
+  function downloadSelected() {
+    if (download.disabled) return;
+    return perform(async (current) => {
+      const selected = candidates.find((game) => String(game.id) === result.value);
+      if (!selected) return;
+      const options = readOptions(); retryAvailable = false; retry.classList.add("hidden");
+      const report = await invoke("download_editor_game_images", { jobId, gameId: getGame().id, sourceId: selected.id,
+        sourcePlatform: platform.value, options, existingImages: getImages(), onProgress: channel(current, "images") });
+      if (current()) { acceptReport(report); if (report.images.length) onSource(selected.id); }
+    });
+  }
+  download.addEventListener("click", downloadSelected);
   retry.addEventListener("click", () => perform(async (current) => {
     const report = await invoke("retry_editor_game_images", { jobId, existingImages: getImages(), onProgress: channel(current, "images") });
     if (current()) {
@@ -2658,6 +2663,7 @@ function setupGameImageDownloader({ getGame, getImages, onImages, onBusy, onSour
   }));
 
   return {
+    download: downloadSelected,
     async lookupMetadata(title, onProgress) {
       if (busy) throw new Error(globalThis.OpenCabinetI18n.t("msg.38f2332774"));
       if (!alive) { alive = true; ++generation; }
@@ -2692,7 +2698,7 @@ function setupGameImageDownloader({ getGame, getImages, onImages, onBusy, onSour
     },
     async open() {
       if (busy) return;
-      if (artworkOpened) { panel.classList.toggle("hidden"); return; }
+      if (artworkOpened) { panel.classList.toggle("hidden"); controls(); return; }
       artworkOpened = true;
       alive = true; ++generation; clearResults(); platform.replaceChildren(); platform.value = "";
       query.value = getGame().title; message.textContent = "";
@@ -2725,6 +2731,15 @@ function setupGameEditor() {
   const form = document.getElementById("game-edit-form");
   const openButton = document.getElementById("btn-edit-game");
   const saveButton = document.getElementById("btn-save-game-edit");
+  const downloadButton = document.getElementById("btn-download-game-edit");
+  let activeEditorTab = "details", artworkState = { visible: false, disabled: true };
+  function updateEditorActions() {
+    const downloading = activeEditorTab === "images" && artworkState.visible;
+    downloadButton.classList.toggle("hidden", !downloading);
+    downloadButton.disabled = artworkState.disabled || networkBusy || saving || choosingImages || closing;
+    saveButton.classList.toggle("primary-btn", !downloading);
+    saveButton.classList.toggle("secondary-btn", downloading);
+  }
   const platformSelect = document.getElementById("game-edit-platform");
   const imageKind = document.getElementById("game-image-kind");
   imageKind.replaceChildren();
@@ -2764,6 +2779,8 @@ function setupGameEditor() {
     panel: document.getElementById(name === "discs" ? "game-discs-section" : `game-edit-panel-${name}`),
   }));
   function showEditorTab(name, focus = false) {
+    activeEditorTab = name;
+    updateEditorActions();
     document.getElementById("game-editor-panels").scrollTop = 0;
     sessionHistoryView?.dispose();sessionHistoryView=null;
     if(name==='history'&&editingId!==null){
@@ -2901,6 +2918,7 @@ function setupGameEditor() {
   const metadataMessage = document.getElementById("editor-metadata-message");
   const metadataProgress = document.getElementById("editor-metadata-progress");
   function metadataControls() {
+    updateEditorActions();
     const disabled = saving || choosingImages || closing || networkBusy;
     document.getElementById("btn-add-game-manuals").disabled = disabled;
     document.getElementById("btn-open-game-manuals").disabled = disabled;
@@ -2925,6 +2943,7 @@ function setupGameEditor() {
   const addImages = document.getElementById("btn-add-game-images");
   const downloadImages = document.getElementById("btn-download-game-images");
   const downloader = setupGameImageDownloader({
+    onState: state => { artworkState = state; updateEditorActions(); },
     onSource: id => { draftCatalogId = id; },
     getGame: () => ({ id: editingId, title: document.getElementById("game-edit-name").value.trim(), platform: platformSelect.value }),
     getImages: () => draftImages.map((image) => ({ ...image })),
@@ -2944,6 +2963,9 @@ function setupGameEditor() {
   });
   downloadImages.addEventListener("click", () => {
     if (!saving && !choosingImages && !closing && editingId !== null) return downloader.open();
+  });
+  downloadButton.addEventListener("click", () => {
+    if (!saving && !choosingImages && !closing && editingId !== null) return downloader.download();
   });
 
   metadataSearch.addEventListener("click", async () => {
@@ -3004,14 +3026,35 @@ function setupGameEditor() {
 
   function renderImageEditor() {
     const list = document.getElementById("game-image-list");
-    list.replaceChildren();
+    const panels = document.getElementById("game-editor-panels");
+    const scrollTop = panels.scrollTop;
+    // Keep the surviving controls mounted so category changes and removals do
+    // not lose focus or collapse the scroll container while rebuilding a list.
+    const existing = new Map([...list.children].map(item => [item.dataset.imagePath, item]));
+    const paths = new Set(draftImages.map(image => image.path));
+    for (const [path, item] of existing) {
+      if (paths.has(path)) continue;
+      if (item.contains(document.activeElement)) {
+        const next = item.nextElementSibling || item.previousElementSibling;
+        (next?.querySelector("select") || addImages).focus({ preventScroll: true });
+      }
+      item.remove();
+    }
     if (!draftImages.length) {
       list.textContent = globalThis.OpenCabinetI18n.t("msg.2c1c83e3fa");
+      panels.scrollTop = scrollTop;
       return;
     }
+    if (!existing.size) list.replaceChildren();
     draftImages.forEach((image) => {
+      const previous = existing.get(image.path);
+      if (previous) {
+        previous.querySelector("select").value = image.kind;
+        return;
+      }
       const item = document.createElement("div");
       item.className = "game-image-item";
+      item.dataset.imagePath = image.path;
       const thumbnail = document.createElement("div");
       thumbnail.className = "image-editor-thumbnail";
       thumbnail.appendChild(mediaImage(image.path, globalThis.OpenCabinetI18n.t("msg.c5341f198f")));
@@ -3049,6 +3092,7 @@ function setupGameEditor() {
       item.append(thumbnail, fields, remove);
       list.appendChild(item);
     });
+    panels.scrollTop = scrollTop;
   }
 
   function renderManuals() {
@@ -5031,11 +5075,17 @@ function reviewMetadataImport(preview, platform, task, operation=null) {
         remove.setAttribute("aria-label", globalThis.OpenCabinetI18n.t("msg.53e7b659e2", game.title, game.rom_path.split(/[\\/]/).pop()));
         remove.onclick = () => {
           if (!alive || busy || cancelling || report || pendingRows.has(row) || !rows.includes(row)) return;
+          const scrollTop = list.scrollTop;
+          const next = card.nextElementSibling || card.previousElementSibling;
+          if (card.contains(document.activeElement)) {
+            (next?.querySelector(".metadata-match-remove") || cancel).focus({ preventScroll: true });
+          }
           preview.games = preview.games.filter(candidate => candidate.rom_path !== row.rom_path);
           rows = rows.filter(candidate => candidate !== row);
           cards = cards.filter(entry => entry.row !== row);
           const hadMatches = rows.some(row => row.selected_id !== null);
           card.remove(); refreshOrder(); matchesChanged(hadMatches); controls();
+          list.scrollTop = scrollTop;
         };
         const status = document.createElement("p"); status.className = "help-text";
         const select = document.createElement("select"); select.autocomplete = "off";

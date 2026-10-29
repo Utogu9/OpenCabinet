@@ -57,8 +57,8 @@
     function firstFocus(root) {
       const controls = focusables(root);
       const preferred = controls.find(el => el.hasAttribute('autofocus')) || controls.find(el => el.matches('input, select, textarea')) || controls[0];
-      if (preferred) preferred.focus();
-      else { root.tabIndex = -1; root.focus(); }
+      if (preferred) preferred.focus({ preventScroll: true });
+      else { root.tabIndex = -1; root.focus({ preventScroll: true }); }
     }
     function closeMenu(restore = false) {
       if (!menuState) return;

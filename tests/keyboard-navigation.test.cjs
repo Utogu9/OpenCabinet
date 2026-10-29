@@ -32,7 +32,7 @@ function environment() {
   getAttribute(key){return this.attributes[key]??null;}
   hasAttribute(key){return this.attributes[key]!==undefined;}
   addEventListener(type,callback){(this.events??={})[type]=callback;}
-  focus(){document.activeElement=this;listeners.focusin?.({target:this});}
+  focus(options){this.focusOptions=options;document.activeElement=this;listeners.focusin?.({target:this});}
   click(){this.events?.click?.({stopPropagation(){}});this.onClick?.();}
   scrollIntoView(){}
   select(){this.textSelected=true;}
@@ -88,6 +88,13 @@ test('Menus open from the keyboard, skip disabled commands and return focus on E
  e.key(e.item1,'ArrowDown');assert.equal(e.document.activeElement,e.item3);
  e.key(e.item3,'Escape');assert.equal(e.document.activeElement,e.title);assert.equal(e.menu.classList.contains('show'),false);
  assert.equal(e.title.getAttribute('aria-expanded'),'false');
+});
+
+test('Recovering focus after a modal control disappears never scrolls back to the first field',()=>{
+ const e=environment();e.overlay.classList.remove('hidden');e.sync();e.end.focus();
+ e.document.activeElement=e.document.body;e.sync();
+ assert.equal(e.document.activeElement,e.field);
+ assert.equal(e.field.focusOptions.preventScroll,true);
 });
 test('Shortcuts respect text editing and open help without changing the library',()=>{
  const e=environment();e.search.focus();e.key(e.search,'f',{ctrlKey:true});assert.equal(e.search.textSelected,true);
