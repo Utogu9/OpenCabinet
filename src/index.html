@@ -1132,6 +1132,8 @@
           <nav class="game-editor-nav" role="tablist" aria-label="" data-i18n-aria-label="msg.745e968437" aria-orientation="vertical">
             <button id="preferences-tab-startup" type="button" role="tab" aria-controls="preferences-panel-startup" aria-selected="true"><span data-i18n="msg.58fcc9468f"></span></button>
             <button id="preferences-tab-library" type="button" role="tab" aria-controls="preferences-panel-library" aria-selected="false" tabindex="-1"><span data-i18n="msg.c9169c12cb"></span></button>
+            <button id="preferences-tab-themes" type="button" role="tab" aria-controls="preferences-panel-themes" aria-selected="false" tabindex="-1" data-i18n="themes.title"></button>
+            <button id="preferences-tab-theme-editor" class="hidden" type="button" role="tab" aria-controls="preferences-panel-theme-editor" aria-selected="false" tabindex="-1" data-i18n="themes.editor"></button>
             <button id="preferences-tab-metadata" type="button" role="tab" aria-controls="preferences-panel-metadata" aria-selected="false" tabindex="-1"><span data-i18n="source.title"></span></button>
             <button id="preferences-tab-data" type="button" role="tab" aria-controls="preferences-panel-data" aria-selected="false" tabindex="-1"><span data-i18n="msg.cf6371762e"></span></button>
             <div class="preferences-subcategory-row" role="presentation">
@@ -1167,6 +1169,34 @@
             <span><span data-i18n="msg.88cf1841f9"></span></span>
           </label>
           <p class="preference-help" id="preference-covers-only-help"><span data-i18n="msg.89db0e1704"></span></p>
+        </section>
+        <section id="preferences-panel-themes" class="preferences-section hidden" role="tabpanel" aria-labelledby="preferences-tab-themes">
+          <h3 data-i18n="themes.title"></h3>
+          <p class="preference-help" data-i18n="themes.help"></p>
+          <div class="theme-manager-actions">
+            <button id="btn-new-theme" type="button" class="primary-btn" data-i18n="themes.new"></button>
+            <button id="btn-import-theme" type="button" class="secondary-btn" data-i18n="themes.import"></button>
+          </div>
+          <div id="theme-list" class="theme-list"></div>
+          <p id="themes-status" role="status" aria-live="polite"></p>
+        </section>
+        <section id="preferences-panel-theme-editor" class="preferences-section hidden" role="tabpanel" aria-labelledby="preferences-tab-theme-editor">
+          <h3 data-i18n="themes.editor"></h3>
+          <p class="preference-help" data-i18n="themes.previewHelp"></p>
+          <div class="theme-editor-identity">
+            <label><span data-i18n="themes.name"></span><input id="theme-name" type="text" maxlength="100" autocomplete="off"></label>
+            <label><span data-i18n="themes.author"></span><input id="theme-author" type="text" maxlength="100" autocomplete="off"></label>
+          </div>
+          <div id="theme-layout-preview" class="theme-layout-preview" role="img" data-i18n-aria-label="themes.preview"></div>
+          <fieldset class="theme-editor-group"><legend data-i18n="themes.colors"></legend><div id="theme-colors" class="theme-colors"></div></fieldset>
+          <fieldset class="theme-editor-group"><legend data-i18n="themes.layout"></legend><div id="theme-panel-order"></div><div id="theme-sizes" class="theme-sizes"></div></fieldset>
+          <fieldset class="theme-editor-group"><legend data-i18n="themes.sections"></legend><div id="theme-section-order"></div></fieldset>
+          <fieldset class="theme-editor-group"><legend data-i18n="themes.fields"></legend><div id="theme-detail-fields" class="theme-detail-fields"></div></fieldset>
+          <p id="theme-editor-status" role="status" aria-live="polite"></p>
+          <div class="theme-manager-actions">
+            <button id="btn-cancel-theme" type="button" class="secondary-btn" data-i18n="themes.cancel"></button>
+            <button id="btn-save-theme" type="button" class="primary-btn" data-i18n="themes.save"></button>
+          </div>
         </section>
         <section id="preferences-panel-metadata" class="preferences-section hidden" role="tabpanel" aria-labelledby="preferences-tab-metadata">
           <h3 data-i18n="source.title"></h3>
@@ -1375,6 +1405,7 @@
     <script src="app-updates.js"></script>
     <script src="locales/catalogs.js"></script>
     <script src="i18n.js"></script>
+    <script src="themes.js"></script>
     <script src="image-fallbacks.js"></script>
     <script src="entity-variables.js"></script>
     <script src="library-navigation.js"></script>

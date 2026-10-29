@@ -1,0 +1,68 @@
+{
+  "format": "OpenCabinet Theme",
+  "version": 1,
+  "id": "user-example",
+  "name": "Example",
+  "author": "",
+  "colors": {
+    "background": "#0f1115",
+    "surface": "#181c24",
+    "hover": "#222733",
+    "dialog": "#151820",
+    "sidebar": "#13161c",
+    "titlebar": "#0b0d11",
+    "accent": "#3b82f6",
+    "accentHover": "#2563eb",
+    "text": "#f3f4f6",
+    "muted": "#9ca3af",
+    "border": "#292d35",
+    "danger": "#ef4444",
+    "dangerHover": "#dc2626",
+    "success": "#10b981",
+    "warning": "#f59e0b",
+    "buttonText": "#ffffff"
+  },
+  "layout": {
+    "panels": [
+      "library",
+      "catalog",
+      "details"
+    ],
+    "libraryWidth": 220,
+    "detailsWidth": 420,
+    "coverSize": 160,
+    "gap": 20,
+    "radius": 8,
+    "sections": [
+      {
+        "id": "logo",
+        "visible": true
+      },
+      {
+        "id": "identity",
+        "visible": true
+      },
+      {
+        "id": "media",
+        "visible": true
+      },
+      {
+        "id": "play",
+        "visible": true
+      },
+      {
+        "id": "summary",
+        "visible": true
+      },
+      {
+        "id": "information",
+        "visible": true
+      },
+      {
+        "id": "description",
+        "visible": true
+      }
+    ],
+    "hiddenFields": []
+  }
+}

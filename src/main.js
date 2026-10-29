@@ -133,6 +133,7 @@ const pauseManualPrefetchForScroll=()=>manualCoverCache?.pauseForScroll();
 const PREFERENCES_KEY = "opencabinet.preferences";
 const DEFAULT_PREFERENCES = { language: globalThis.OpenCabinetI18n.defaultLocale, maxCachedCovers: 400, cacheMode: "disk", cacheDirectory: "", startMaximized: true, coversOnly: false, timeFormat: "24h", combineRegionStatistics: true, useCatalogTitles: true };
 let preferences = readPreferences();
+let appThemes = null;
 const launchingGames = new Set();
 let deletingGames = false;
 let bulkImageDownloader = null;
@@ -210,13 +211,15 @@ function setupPreferences() {
   let selection = null;
   let reading = null;
   let backupsPanel = null, preferenceCategory = "startup";
-  function updateSaveVisibility() { save.classList.toggle("hidden", preferenceCategory === "backups"); }
-  const tabs = ["startup", "library", "metadata", "data", "backups"].map(name => ({
+  const themesPanel = appThemes;
+  document.getElementById("preferences-tab-theme-editor").classList.add("hidden");
+  function updateSaveVisibility() { save.classList.toggle("hidden", ["backups", "themes", "theme-editor"].includes(preferenceCategory)); }
+  const tabs = ["startup", "library", "themes", "theme-editor", "metadata", "data", "backups"].map(name => ({
     name, button: document.getElementById(`preferences-tab-${name}`),
     panel: document.getElementById(`preferences-panel-${name}`),
   }));
-  function showCategory(name, focus = false) {
-    if (backupsPanel?.busy) return;
+  function showCategory(name, focus = false, internal = false) {
+    if (!internal && (backupsPanel?.busy || themesPanel?.busy)) return;
     preferenceCategory = name; updateSaveVisibility();
     document.getElementById("preferences-tab-data").classList.toggle("has-active-subcategory", name === "backups");
     if (name === "backups") void backupsPanel?.open();
@@ -229,14 +232,16 @@ function setupPreferences() {
       if (active && focus) tab.button.focus();
     });
   }
-  tabs.forEach((tab, index) => {
+  tabs.forEach(tab => {
     tab.button.addEventListener("click", () => showCategory(tab.name));
     tab.button.addEventListener("keydown", event => {
+      const available = tabs.filter(tab => !tab.button.classList.contains("hidden"));
+      const current = available.indexOf(tab);
       let next;
-      if (event.key === "ArrowDown") next = tabs[(index + 1) % tabs.length];
-      if (event.key === "ArrowUp") next = tabs[(index + tabs.length - 1) % tabs.length];
-      if (event.key === "Home") next = tabs[0];
-      if (event.key === "End") next = tabs[tabs.length - 1];
+      if (event.key === "ArrowDown") next = available[(current + 1) % available.length];
+      if (event.key === "ArrowUp") next = available[(current + available.length - 1) % available.length];
+      if (event.key === "Home") next = available[0];
+      if (event.key === "End") next = available[available.length - 1];
       if (next) { event.preventDefault(); showCategory(next.name, true); }
     });
   });
@@ -253,7 +258,7 @@ function setupPreferences() {
     directory.value = draftDirectory;
     document.getElementById("preferences-current-directory").textContent = location
       ? globalThis.OpenCabinetI18n.t("msg.8d1a55bd93", location.active_directory) : globalThis.OpenCabinetI18n.t("msg.cd9c5528d2");
-    const busy = saving || choosing || !!backupsPanel?.busy;
+    const busy = saving || choosing || !!backupsPanel?.busy || !!themesPanel?.busy;
     tabs.forEach(tab => { tab.button.disabled = busy; });
     metadataImport.disabled=metadataReset.disabled=busy;
     catalogTitles.disabled=busy;
@@ -284,11 +289,16 @@ function setupPreferences() {
       status.textContent += `${status.textContent ? "\n" : ""}${message}`;
     }
   }
+  themesPanel?.attachPreferences({
+    onBusyChange: update,
+    openEditor: () => { document.getElementById("preferences-tab-theme-editor").classList.remove("hidden"); showCategory("theme-editor"); },
+    closeEditor: () => { document.getElementById("preferences-tab-theme-editor").classList.add("hidden"); if (preferenceCategory === "theme-editor") showCategory("themes", false, true); },
+  });
   if (globalThis.OpenCabinetBackups) backupsPanel = globalThis.OpenCabinetBackups.setup({ document, invoke,
     Channel: window.__TAURI__.core.Channel, getPreferences: () => preferences, onBusyChange: update,
     onRestored: async () => { location = await readLocation(); draftDirectory = location.pending_directory || location.active_directory; selection = null; update(); },
     canRestart: () => !scanInProgress && !launchingGames.size && !allGames.some(game => game.is_running) });
-  function close() { if (!saving && !choosing && !backupsPanel?.busy) dialog.close(); }
+  function close() { if (!saving && !choosing && !backupsPanel?.busy && !themesPanel?.busy) { themesPanel?.close(); dialog.close(); } }
   openButton.addEventListener("click", async (event) => {
     event.stopPropagation();
     document.getElementById("dropdown-options-menu").classList.remove("show");
@@ -323,8 +333,8 @@ function setupPreferences() {
     }
     if (currentRequest === request) update();
   });
-  dialog.addEventListener("close", () => { request++; });
-  dialog.addEventListener("cancel", (event) => { if (saving || choosing || backupsPanel?.busy) event.preventDefault(); });
+  dialog.addEventListener("close", () => { request++; themesPanel?.close(); });
+  dialog.addEventListener("cancel", (event) => { if (saving || choosing || backupsPanel?.busy || themesPanel?.busy) event.preventDefault(); });
   document.getElementById("btn-close-preferences").addEventListener("click", close);
   document.getElementById("btn-cancel-preferences").addEventListener("click", close);
   async function inspectSelection(selected, currentRequest) {
@@ -374,7 +384,8 @@ function setupPreferences() {
   });
   document.getElementById("preferences-form").addEventListener("submit", async (event) => {
     event.preventDefault();
-    if (saving || choosing || backupsPanel?.busy || !location) return;
+    if (saving || choosing || backupsPanel?.busy || themesPanel?.busy || !location) return;
+    if (["themes", "theme-editor"].includes(preferenceCategory)) return;
     if (preferenceCategory === "backups") { await backupsPanel?.saveSettings(); return; }
     const value = Number(input.value);
     if (!validCoverLimit(value)) {
@@ -5690,7 +5701,7 @@ function setupDetailsResizer() {
   const resizer = document.getElementById("details-resizer");
   const main = panel.parentElement;
   const librarySidebar = document.querySelector(".library-sidebar");
-  let preferredWidth = 420;
+  let preferredWidth = Number.parseFloat(panel.style.width) || 420;
   let drag = null;
 
   function updateWidth() {
@@ -5719,7 +5730,8 @@ function setupDetailsResizer() {
 
   resizer.addEventListener("pointermove", (event) => {
     if (!drag || drag.pointerId !== event.pointerId) return;
-    preferredWidth = drag.startWidth + drag.startX - event.clientX;
+    const direction = resizer.dataset.side === "left" ? -1 : 1;
+    preferredWidth = drag.startWidth + (drag.startX - event.clientX) * direction;
     updateWidth();
     preferredWidth = panel.getBoundingClientRect().width;
   });
@@ -5740,12 +5752,16 @@ function setupDetailsResizer() {
     if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
     event.preventDefault();
     preferredWidth = panel.getBoundingClientRect().width +
-      (event.key === "ArrowLeft" ? 20 : -20);
+      (event.key === "ArrowLeft" ? 20 : -20) * (resizer.dataset.side === "left" ? -1 : 1);
     updateWidth();
     preferredWidth = panel.getBoundingClientRect().width;
   });
 
   new ResizeObserver(updateWidth).observe(main);
+  window.addEventListener("opencabinet:themechange", event => {
+    preferredWidth = event.detail.layout.detailsWidth;
+    updateWidth();
+  });
   updateWidth();
 }
 
@@ -5759,6 +5775,8 @@ window.addEventListener("DOMContentLoaded", async () => {
     }
   } catch (error) { console.error("Could not apply restored preferences", error); }
   globalThis.OpenCabinetI18n.translateDOM();
+  appThemes = window.OpenCabinetThemes?.create({ document, window, invoke, confirm: confirmDeletion });
+  void appThemes?.load();
   const languageReady = invoke("set_ui_language", { language: preferences.language }).catch(error => console.error(error));
   setupGameContextMenu();
   setupPlatformContextMenu();

@@ -37,6 +37,7 @@ mod game_box_settings;
 mod game_order;
 mod temporary_files;
 mod app_updates;
+mod themes;
 #[cfg(windows)]
 mod branding;
 #[cfg(windows)]
@@ -2464,6 +2465,10 @@ pub fn run() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
+            themes::get_theme_library,
+            themes::save_theme_library,
+            themes::import_theme,
+            themes::export_theme,
             backups::get_backup_status,
             backups::save_backup_settings,
             backups::save_backup_preferences,

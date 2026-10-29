@@ -20,6 +20,7 @@ const CONFIGS: &[&str] = &[
     "language.json",
     "frontend_preferences.json",
     "backup_settings.json",
+    "themes.json",
 ];
 fn err(e: impl std::fmt::Display) -> String {
     e.to_string()
@@ -684,7 +685,9 @@ mod tests {
     }
     impl Library {
         fn new() -> Self {
-            let base = std::env::temp_dir().join(format!("opencabinet-backup-tests-{}", token()));
+            // Parallel Windows tests can share the same clock tick.
+            static NEXT_LIBRARY: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+            let base = std::env::temp_dir().join(format!("opencabinet-backup-tests-{}-{}-{}", std::process::id(), token(), NEXT_LIBRARY.fetch_add(1, Ordering::Relaxed)));
             let root = base.join("data");
             fs::create_dir_all(&root).unwrap();
             let db = Connection::open(root.join("opencabinet.db")).unwrap();
@@ -703,6 +706,7 @@ mod tests {
                 &serde_json::json!({"language":"en-US","maxCachedCovers":200}),
             )
             .unwrap();
+            atomic_json(&root.join("themes.json"), &crate::themes::Library::default()).unwrap();
             Self { base, root }
         }
         fn zip(&self, name: &str, entries: &[(&str, &[u8])]) -> PathBuf {
@@ -748,6 +752,7 @@ mod tests {
         let mut zip = ZipArchive::new(fs::File::open(path).unwrap()).unwrap();
         assert!(zip.by_name("images/one/cover.webp").is_err());
         assert!(zip.by_name("frontend_preferences.json").is_ok());
+        assert!(zip.by_name("themes.json").is_ok());
         let destination = prepare_restore(
             &f.root,
             &f.root
@@ -770,6 +775,7 @@ mod tests {
             fs::read(destination.join("images/one/manuals/manual.pdf")).unwrap(),
             b"manual original"
         );
+        assert_eq!(fs::read(destination.join("themes.json")).unwrap(), fs::read(f.root.join("themes.json")).unwrap());
     }
     #[test]
     fn full_restore_recovers_media_statistics_and_preferences_without_touching_current_library() {
