@@ -175,7 +175,7 @@
             </div>
             <div class="meta-item">
               <span class="meta-label"><span data-i18n="msg.a703c4c9fb"></span></span>
-              <span class="meta-value" id="details-play-time"><span data-i18n="msg.ed28aee471"></span></span>
+              <div class="playtime-with-history"><span class="meta-value" id="details-play-time"><span data-i18n="msg.ed28aee471"></span></span><button id="btn-session-history" type="button" class="game-only session-history-button" data-i18n-title="sessions.open" data-i18n-aria-label="sessions.open">◷</button></div>
             </div>
           </div>
           <section class="details-info-box" id="game-information" aria-labelledby="details-info-title">
@@ -278,8 +278,10 @@
             <button type="button" id="platform-edit-tab-boxes" role="tab" aria-controls="platform-edit-panel-boxes" aria-selected="false" tabindex="-1"><span data-i18n="msg.1f9d0c92c3"></span></button>
             <button type="button" id="platform-edit-tab-images" role="tab" aria-controls="platform-edit-panel-images" aria-selected="false" tabindex="-1"><span data-i18n="msg.98f60447c3"></span></button>
             <button type="button" id="platform-edit-tab-variables" role="tab" aria-controls="platform-edit-panel-variables" aria-selected="false" tabindex="-1"><span data-i18n="msg.02db55bac5"></span></button>
+            <button type="button" id="platform-edit-tab-folders" role="tab" aria-controls="platform-edit-panel-folders" aria-selected="false" tabindex="-1" data-i18n="library.folders"></button>
           </nav>
           <div id="platform-editor-panels">
+          <section id="platform-edit-panel-folders" class="hidden" role="tabpanel" aria-labelledby="platform-edit-tab-folders"><h3 data-i18n="library.folders"></h3><div id="platform-folders-list"></div></section>
           <section id="platform-edit-panel-details" role="tabpanel" aria-labelledby="platform-edit-tab-details">
         <div class="form-grid">
           <div class="form-group full-width"><label for="platform-release-date"><span data-i18n="msg.31b614ced2"></span></label><input id="platform-release-date" type="date" /></div>
@@ -457,6 +459,8 @@
             <h3><span data-i18n="msg.a5a290da84"></span></h3>
             <div class="form-group"><label for="game-edit-rom-path"><span data-i18n="msg.b0b830b21a"></span></label><textarea id="game-edit-rom-path" rows="3" readonly></textarea></div>
             <button class="secondary-btn" type="button" id="btn-game-edit-open-files"><span data-i18n="msg.339fbb2a97"></span></button>
+            <div class="form-group"><label for="game-edit-source-select" data-i18n="library.source"></label><select id="game-edit-source-select"></select><button id="btn-game-edit-source" class="secondary-btn" type="button" data-i18n="library.replaceSource"></button></div>
+            <button id="btn-game-edit-history" class="secondary-btn" type="button" data-i18n="sessions.open"></button>
             <div class="form-group"><label for="game-edit-emulator"><span data-i18n="msg.4a812bbe2d"></span></label><select id="game-edit-emulator"></select></div>
             <p class="help-text" id="game-edit-execution-help"></p>
             <label class="preference-toggle"><input type="checkbox" id="game-edit-custom-arguments"><span><span data-i18n="msg.ab0d3e60a8"></span></span></label>
@@ -916,6 +920,7 @@
                     </button>
                   </div>
                   <p id="scan-folder-console-help" class="help-text hidden"><span data-i18n="msg.36da842b5b"></span></p>
+                  <label class="preference-toggle"><input id="scan-save-folder" type="checkbox"><span data-i18n="library.saveFolder"></span></label>
                 </div>
                 <div class="form-group full-width">
                   <label for="scan-extensions-input">
@@ -1072,6 +1077,7 @@
     <div class="game-context-menu hidden" id="game-context-menu" role="menu" aria-label="" data-i18n-aria-label="msg.ab4a89881d">
       <button class="dropdown-item" id="context-play-game" type="button" role="menuitem" tabindex="-1"><span data-i18n="msg.67fa9628c4"></span></button>
       <button class="dropdown-item" id="context-edit-game" type="button" role="menuitem" tabindex="-1"><span data-i18n="msg.02f344eb6e"></span></button>
+      <button class="dropdown-item" id="context-session-history" type="button" role="menuitem" tabindex="-1" data-i18n="sessions.open"></button>
       <button class="dropdown-item" id="context-open-emulator" type="button" role="menuitem" tabindex="-1"><span data-i18n="msg.b3a8ed7ae3"></span></button>
       <button class="dropdown-item" id="context-open-game-files" type="button" role="menuitem" tabindex="-1"><span data-i18n="msg.339fbb2a97"></span></button>
       <button class="dropdown-item" id="context-open-images" type="button" role="menuitem" tabindex="-1"><span data-i18n="msg.4fe8c2a22f"></span></button>
@@ -1084,6 +1090,7 @@
 
     <div class="game-context-menu hidden" id="platform-context-menu" role="menu" aria-label="" data-i18n-aria-label="msg.26f36f6d6e">
       <button class="dropdown-item" id="context-edit-platform" type="button" role="menuitem" tabindex="-1"><span data-i18n="msg.dcdcf57086"></span></button>
+      <button class="dropdown-item" id="context-find-new-games" type="button" role="menuitem" tabindex="-1" data-i18n="library.findNew"></button>
     </div>
 
     <dialog id="bulk-images-dialog" class="confirmation-dialog bulk-images-dialog" aria-labelledby="bulk-images-title">
@@ -1384,6 +1391,7 @@
     <script src="emulator-defaults.js"></script>
     <script src="task-window.js"></script>
     <script src="game-discs.js"></script>
+    <script src="library-tools.js"></script>
     <script src="game-regions.js"></script>
     <script src="game-order.js"></script>
     <script src="keyboard-navigation.js"></script>

@@ -16,14 +16,14 @@ const fixtures = () => [
 test('Console editor sections preserve drafts and reset to Details when reopened', async () => {
   const ui=app();await ui.evaluate('openPlatformDetailsEditor(allPlatforms[0])');
   ui.get('platform-developer').value='Draft developer';
-  for(const name of ['boxes','images','variables','details']){
+  for(const name of ['boxes','images','variables','folders','details']){
     ui.get(`platform-edit-tab-${name}`).handlers.click();
-    for(const other of ['details','boxes','images','variables'])assert.equal(ui.get(`platform-edit-panel-${other}`).classList.contains('hidden'),other!==name);
+    for(const other of ['details','boxes','images','variables','folders'])assert.equal(ui.get(`platform-edit-panel-${other}`).classList.contains('hidden'),other!==name);
     assert.equal(ui.get('platform-developer').value,'Draft developer');
     assert.equal(ui.get('platform-box-settings').open,name==='boxes');
   }
   ui.get('platform-edit-tab-details').handlers.keydown({key:'End',preventDefault(){}});
-  assert.equal(ui.get('platform-edit-tab-variables').focused,true);
+  assert.equal(ui.get('platform-edit-tab-folders').focused,true);
   await ui.get('btn-cancel-platform-details').onclick();await ui.evaluate('openPlatformDetailsEditor(allPlatforms[0])');
   assert.equal(ui.get('platform-edit-panel-details').classList.contains('hidden'),false);
   assert.equal(ui.get('platform-developer').value,'Nintendo R&D');

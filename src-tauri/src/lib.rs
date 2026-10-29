@@ -17,6 +17,8 @@ mod retroarch;
 mod manual_import;
 mod backups;
 mod game_availability;
+mod library_files;
+mod session_history;
 mod steam;
 mod epic;
 mod media_library;
@@ -95,6 +97,8 @@ pub struct Emulator {
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct GameDetails {
+    #[serde(default)]
+    rom_path: Option<String>,
     #[serde(default)]
     order_group: Option<game_order::Patch>,
     #[serde(default, deserialize_with="game_box_settings::deserialize_patch")]
@@ -262,6 +266,8 @@ fn init_database(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     entity_variables::init_schema(&conn)?;
     game_execution::init_schema(&conn)?;
     game_regions::init(&conn)?;
+    library_files::init(&conn)?;
+    session_history::recover(&conn)?;
     metadata::init_library_schema(&conn)?;
     init_game_images(&conn)?;
     media_library::init_schema(&conn)?;
@@ -619,7 +625,7 @@ async fn update_game(details: GameDetails, tracker: tauri::State<'_, PlayTracker
     tauri::async_runtime::spawn_blocking(move || {
         let mut conn = get_db_connection().map_err(|e| e.to_string())?;
         let parent = game_regions::owner(&conn, details.id)?;
-        let reservation = if details.discs.is_some() || details.regions.is_some() { Some(tracker.reserve(parent)?) } else { None };
+        let reservation = if details.discs.is_some() || details.regions.is_some() || details.rom_path.is_some() { Some(tracker.reserve(parent)?) } else { None };
         let root = data_directory().map_err(|e| e.to_string())?;
         let mut game = save_game_with_media(&mut conn, details, &root)?;
         drop(reservation);
@@ -647,6 +653,7 @@ fn valid_release_date(value: &str) -> bool {
 
 #[cfg(test)]
 fn save_game_details(conn: &mut Connection, details: GameDetails) -> Result<Game, String> {
+    if details.rom_path.is_some(){discs::init(conn).map_err(|e|e.to_string())?;}
     let tx = conn.transaction_with_behavior(TransactionBehavior::Immediate).map_err(|e|e.to_string())?;
     let game = save_game_details_in_transaction(&tx, details)?;
     tx.commit().map_err(|e|e.to_string())?;
@@ -654,6 +661,7 @@ fn save_game_details(conn: &mut Connection, details: GameDetails) -> Result<Game
 }
 
 fn save_game_details_in_transaction(conn: &Connection, details: GameDetails) -> Result<Game, String> {
+    if let Some(path)=&details.rom_path { library_files::replace_source(conn,details.id,None,path)?; }
     if let Some(order) = &details.order_group { game_order::save(conn,order)?; }
     if let Some(settings) = &details.box_3d { game_box_settings::save(conn,details.id,settings.as_ref())?; }
     game_regions::validate_platform(conn, details.id, &details.platform)?;
@@ -915,24 +923,38 @@ async fn launch_game(game_id: i32, disc_id: Option<i64>, region_id: Option<i32>,
         let steam_id = conn.query_row("SELECT rom_path FROM games WHERE id=?1", [game_id], |row| row.get::<_, String>(0)).ok().and_then(|path| steam::app_id(&path));
         let game_path: String = conn.query_row("SELECT rom_path FROM games WHERE id=?1", [game_id], |row| row.get(0)).map_err(|e| e.to_string())?;
         let epic_directory = if epic::app_id(&game_path).is_some() { Some(epic::launch_plan(&conn, game_id, &game_path)?.install_directory) } else { None };
-        let (mut result, (mut child, started)) = launch_game_record_with_region(&conn, game_id, region_id, disc_id, |emu_path, args, working_directory| {
+        let (mut result, (mut child, started, diagnostic_log)) = launch_game_record_with_region(&conn, game_id, region_id, disc_id, |emu_path, args, working_directory| {
+            let mut args=args.to_vec();let log=retroarch::diagnostic_log(emu_path,&mut args,game_id);
             let mut command = std::process::Command::new(emu_path);
-            command.args(args);
+            command.args(&args);
             if let Some(parent) = working_directory { command.current_dir(parent); }
             let child = command.spawn()
                 .map_err(|e| crate::i18n::i18n_format!("msg.ebe0ff502e", emu_path, e))?;
-            Ok((child, Instant::now()))
+            Ok((child, Instant::now(),log))
         })?;
         result.stats = game_regions::statistics(&conn,game_id,result.stats)?;
         tauri::async_runtime::spawn_blocking(move || {
             let mut active = Some(active);
+            let mut diagnostic_sent=false;
             let steam_session = std::cell::RefCell::new(steam_id.map(steam::SteamSession::new));
             let epic_session = std::cell::RefCell::new(epic_directory.map(epic::EpicSession::new));
             if let Err(error) = playtime::monitor_session(&conn, source_id,
                 || {
                     if let Some(session) = steam_session.borrow_mut().as_mut() { let _ = child.try_wait(); Ok(session.poll()) }
                     else if let Some(session) = epic_session.borrow_mut().as_mut() { let _ = child.try_wait(); Ok(session.poll()) }
-                    else { child.try_wait().map(|status| status.is_none()).map_err(|e| e.to_string()) }
+                    else {
+                        let status=child.try_wait().map_err(|e|e.to_string())?;
+                        if !diagnostic_sent&&diagnostic_log.is_some()&&started.elapsed()<Duration::from_secs(15) {
+                            let details=retroarch::failure_details(diagnostic_log.as_deref());
+                            if details.is_some()||status.as_ref().is_some_and(|status|!status.success()) {
+                                let message=if let Some(status)=&status {crate::i18n::i18n_format!("launch.earlyExit",status,details.unwrap_or_default())}
+                                    else{crate::i18n::i18n_format!("launch.report",details.unwrap_or_default())};
+                                diagnostic_sent=true;
+                                let _=app.emit("launch-diagnostic",serde_json::json!({"game_id":game_id,"message":message}));
+                            }
+                        }
+                        Ok(status.is_none())
+                    }
                 },
                 || steam_session.borrow().as_ref().map(|session| session.elapsed())
                     .or_else(|| epic_session.borrow().as_ref().map(|session| session.elapsed())).unwrap_or_else(|| started.elapsed()), || std::thread::sleep(Duration::from_secs(1)),
@@ -1034,14 +1056,16 @@ fn launch_game_record_with_region<T>(
         shlex_split(&emu_args_template).into_iter().map(|arg| arg.replace("%ROM%", &rom_path)).collect()
     };
     if let Some(core) = core {
+        if !Path::new(&core).is_file(){return Err(crate::i18n::i18n_format!("launch.coreMissing",core));}
         retroarch::validate_configuration(&emu_path, &emu_args_template, Some(&core))?;
+        retroarch::validate_firmware(&emu_path,&core,&raw_args)?;
         raw_args.splice(0..0, ["-L".to_owned(), core]);
     }
     let working_directory = if Path::new(&emu_path).is_absolute() && Path::new(&emu_path).file_name().is_some_and(|name| name.eq_ignore_ascii_case("retroarch.exe")) {
         Path::new(&emu_path).parent()
     } else { None };
     let process = spawn(&emu_path, &raw_args, working_directory)?;
-    let stats = playtime::start_session(conn, source_id)
+    let stats = playtime::start_session_path(conn, source_id, &rom_path)
         .map_err(|e| crate::i18n::i18n_format!("msg.32e05611f6", e))?;
     Ok((LaunchResult { message: crate::i18n::i18n_format!("msg.32bb8b5556", title, emu_path), stats }, process))
 }
@@ -1807,7 +1831,7 @@ mod game_edit_tests {
     }
 
     fn details() -> GameDetails {
-        GameDetails { order_group:None, box_3d:None, regions:None, variables: None, execution: None, discs: None,
+        GameDetails { rom_path:None, order_group:None, box_3d:None, regions:None, variables: None, execution: None, discs: None,
             id: 1, title: "  New Title  ".into(), platform: "genesis".into(),
             release_date: Some("1992-11-24".into()),
             developer: Some("  Developer  ".into()), publisher: Some("Publisher".into()),
@@ -2449,6 +2473,11 @@ pub fn run() {
             backups::open_backup_directory,
             backups::restore_backup,
             game_availability::get_game_availability,
+            library_files::get_library_folders,
+            library_files::save_library_folder,
+            library_files::remove_library_folder,
+            library_files::replace_game_source,
+            session_history::get_play_sessions,
             app_updates::check_app_update,
             app_updates::install_app_update,
             metadata::repository::get_metadata_source,

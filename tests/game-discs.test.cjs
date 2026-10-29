@@ -45,6 +45,15 @@ test("Disc editor keeps saved values unchanged until edited, reorders, labels, r
   await editor.add(); assert.equal(editor.value().length, 3);
   container.children[0].children[4].onclick(); assert.equal(editor.value().length, 2);
 });
+test('Changing a source in the launch editor preserves labels and other discs until Save',()=>{
+  const {api,Element}=environment();const section=new Element('section'),container=new Element('div');section.append(container);
+  const editor=api.createEditor(container,async()=>[],assert.fail),original=discs();editor.setGame({discs:original});
+  assert.equal(editor.value(),null);editor.replace(1,'C:/Relocated.chd');
+  assert.equal(editor.value()[1].rom_path,'C:/Relocated.chd');assert.equal(editor.value()[1].label,'Disco 2');assert.equal(editor.value()[0].rom_path,original[0].rom_path);
+  assert.equal(original[1].rom_path,'C:/Game (Disc 2).chd');assert.throws(()=>editor.replace(0,'c:\\relocated.CHD'));
+  editor.setGame({discs:original});assert.equal(editor.value(),null);
+});
+
 test("Late file-picker responses cannot alter another game's draft", async () => {
   const { api, Element } = environment(); const section = new Element("section"), container = new Element("div"); section.append(container);
   let complete; const editor = api.createEditor(container, () => new Promise(resolve => { complete = resolve; }), assert.fail);

@@ -441,6 +441,8 @@ pub(crate) fn rebase_library(path: &Path, source: &Path, destination: &Path) -> 
     for (table, column) in [
         ("games", "rom_path"),
         ("game_discs", "rom_path"),
+        ("play_sessions", "rom_path"),
+        ("library_folders", "directory"),
         ("games", "steam_client_path"),
         ("games", "epic_client_path"),
         ("games", "epic_manifest_path"),
@@ -489,7 +491,10 @@ pub(crate) fn rebase_library(path: &Path, source: &Path, destination: &Path) -> 
                     )
                     .map_err(err)?;
                     if table == "game_discs" {
-                        tx.execute("UPDATE game_discs SET path_key=?1 WHERE rowid=?2",(crate::discs::key(&destination.join(relative).to_string_lossy()),id)).map_err(err)?;
+                        tx.execute("UPDATE game_discs SET path_key=?1 WHERE rowid=?2",(crate::discs::key(&destination.join(&relative).to_string_lossy()),id)).map_err(err)?;
+                    }
+                    if table == "library_folders" {
+                        tx.execute("UPDATE library_folders SET path_key=?1 WHERE rowid=?2",(crate::discs::key(&destination.join(&relative).to_string_lossy()),id)).map_err(err)?;
                     }
                 }
             }

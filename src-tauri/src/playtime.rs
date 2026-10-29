@@ -73,7 +73,13 @@ fn statistics(row: &rusqlite::Row<'_>, is_running: bool) -> rusqlite::Result<Pla
 }
 
 pub fn start_session(conn: &Connection, id: i32) -> Result<PlayStatistics, String> {
-    conn.query_row(
+    let path=conn.query_row("SELECT rom_path FROM games WHERE id=?1",[id],|r|r.get::<_,String>(0)).unwrap_or_default();
+    start_session_path(conn,id,&path)
+}
+pub fn start_session_path(conn:&Connection,id:i32,path:&str)->Result<PlayStatistics,String>{
+    crate::session_history::init(conn).map_err(|e|e.to_string())?;
+    crate::session_history::atomic(conn,||{
+    let stats=conn.query_row(
         "UPDATE games SET session_count = session_count + 1,
          last_played = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ?1
          RETURNING id, play_time_seconds, session_count, last_played",
@@ -82,7 +88,10 @@ pub fn start_session(conn: &Connection, id: i32) -> Result<PlayStatistics, Strin
     )
     .optional()
     .map_err(|error| error.to_string())?
-    .ok_or(crate::i18n::text("msg.66087bc5c8").into())
+    .ok_or_else(||crate::i18n::text("msg.66087bc5c8").to_string())?;
+    crate::session_history::begin(conn,id,path,stats.last_played.as_deref().unwrap_or_default()).map_err(|e|e.to_string())?;
+    Ok(stats)
+    })
 }
 
 pub fn save_elapsed(
@@ -94,7 +103,9 @@ pub fn save_elapsed(
 ) -> Result<Option<PlayStatistics>, String> {
     let elapsed_seconds = elapsed_seconds.max(*saved_seconds);
     let delta = elapsed_seconds - *saved_seconds;
-    let result = conn
+    crate::session_history::init(conn).map_err(|e|e.to_string())?;
+    let result = crate::session_history::atomic(conn,||{
+    let result=conn
         .query_row(
             "UPDATE games SET play_time_seconds = play_time_seconds + ?1,
          play_time = (play_time_seconds + ?1) / 60 WHERE id = ?2
@@ -104,6 +115,9 @@ pub fn save_elapsed(
         )
         .optional()
         .map_err(|error| error.to_string())?;
+    crate::session_history::checkpoint(conn,id,elapsed_seconds,is_running).map_err(|e|e.to_string())?;
+    Ok(result)
+    })?;
     *saved_seconds = elapsed_seconds;
     Ok(result)
 }

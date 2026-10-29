@@ -9,6 +9,25 @@ let selectedGameId = null;
 let focusedGameId = null;
 let fileAvailabilityRequest = 0;
 let selectedFileAvailability = null;
+let libraryTools = null, savedFolderImport = null;
+function getLibraryTools() {
+  return libraryTools ??= window.OpenCabinetLibraryTools?.create({document,invoke,
+    onChanged:loadGames,formatDate:formatLastPlayed,
+    formatDuration:seconds=>{seconds=Math.max(0,Math.floor(seconds));return [Math.floor(seconds/3600),Math.floor(seconds/60)%60,seconds%60].map(value=>String(value).padStart(2,'0')).join(':');}});
+}
+function openSessionHistory(id) {
+  const game=allGames.find(game=>game.id===id);if(game)getLibraryTools()?.history(game,{combine:preferences.combineRegionStatistics,regionId:regionalGame(game).id});
+}
+async function relocateGame(game) {
+  try {await getLibraryTools()?.relocate(game);}catch(error){showToast(String(error),true);}
+}
+async function startSavedFolderScan(platform, folder=null) {
+  if(scanInProgress||retroarchSetup?.busy||inlineRetroarchSetup?.busy||savingEmulator||savingInlineEmulator)return;
+  try {
+    folder ||= await getLibraryTools()?.chooseFolder(platform);if(!folder)return;
+    savedFolderImport={platform,folder};document.getElementById('btn-scan-roms').click();
+  } catch(error){showToast(String(error),true);}
+}
 let selectedGameIds = new Set();
 let selectionAnchorId = null;
 let visibleGameIds = [];
@@ -1327,6 +1346,7 @@ function setupGameContextMenu() {
   const menu = document.getElementById("game-context-menu");
   const play = document.getElementById("context-play-game");
   const edit = document.getElementById("context-edit-game");
+  const history = document.getElementById("context-session-history");
   const openEmulator = document.getElementById("context-open-emulator");
   const remove = document.getElementById("context-delete-games");
   const downloadImages = document.getElementById("context-download-images");
@@ -1368,6 +1388,7 @@ function setupGameContextMenu() {
     openEmulator.classList.toggle("hidden", multiple || !emulator);
     play.classList.toggle("hidden", multiple);
     edit.classList.toggle("hidden", multiple);
+    history.classList.toggle('hidden',multiple||!window.OpenCabinetLibraryTools);
     remove.classList.remove("hidden");
     downloadImages.classList.toggle("hidden", !multiple);
     imageFolder.classList.toggle("hidden", multiple);
@@ -1378,7 +1399,7 @@ function setupGameContextMenu() {
     const canMergeDiscs = canMerge && mergeCandidates.every(game => !game.regions?.length);
     mergeDiscs.classList.toggle("hidden", !canMergeDiscs);
     mergeRegions.classList.toggle("hidden", !canMerge);
-    items = multiple ? [remove, downloadImages, ...(canMergeDiscs ? [mergeDiscs] : []), ...(canMerge ? [mergeRegions] : [])] : [play, edit, ...(emulator ? [openEmulator] : []), gameFiles, imageFolder, manualFolder, remove];
+    items = multiple ? [remove, downloadImages, ...(canMergeDiscs ? [mergeDiscs] : []), ...(canMerge ? [mergeRegions] : [])] : [play, edit, ...(window.OpenCabinetLibraryTools?[history]:[]), ...(emulator ? [openEmulator] : []), gameFiles, imageFolder, manualFolder, remove];
     document.querySelectorAll(".dropdown-menu.show").forEach((dropdown) => dropdown.classList.remove("show"));
     document.querySelectorAll(".menu-item-dropdown.active").forEach((dropdown) => dropdown.classList.remove("active"));
     menu.classList.remove("hidden");
@@ -1396,6 +1417,7 @@ function setupGameContextMenu() {
     close(true);
     if (game) launchGame(game.id, game.title);
   });
+  history.addEventListener('click',()=>{const id=targetId;close(true);openSessionHistory(id);});
   edit.addEventListener("click", () => {
     const game = allGames.find((item) => item.id === targetId);
     close(true);
@@ -1494,6 +1516,8 @@ function setupGameContextMenu() {
 function setupPlatformContextMenu() {
   const menu = document.getElementById("platform-context-menu");
   const edit = document.getElementById("context-edit-platform");
+  const findNew=document.getElementById('context-find-new-games');
+  findNew.addEventListener('click',()=>{const platform=allPlatforms.find(item=>item.id===target);close(true);if(platform)void startSavedFolderScan(platform);});
   let target = null, opener = null;
   function close(restoreFocus = false) {
     const button = opener;
@@ -1527,7 +1551,10 @@ function setupPlatformContextMenu() {
     if (menu.classList.contains("hidden")) return;
     if (event.key === "Escape") { event.preventDefault(); close(true); }
     else if (event.key === "Tab") close();
-    else if (["ArrowUp", "ArrowDown", "Home", "End"].includes(event.key)) { event.preventDefault(); edit.focus(); }
+    else if (["ArrowUp", "ArrowDown", "Home", "End"].includes(event.key)) {
+      event.preventDefault();const items=window.OpenCabinetLibraryTools?[edit,findNew]:[edit],index=items.indexOf(document.activeElement);
+      const next=event.key==='Home'?0:event.key==='End'?items.length-1:(index+(event.key==='ArrowUp'?-1:1)+items.length)%items.length;items[next].focus();
+    }
   });
   document.addEventListener("scroll", event => { if (!menu.contains(event.target)) close(); }, { capture: true });
   window.addEventListener("resize", () => close());
@@ -1796,13 +1823,16 @@ function updatePlayStatus(game) {
   const play = document.getElementById("btn-play-game");
   const availability = selectedFileAvailability?.id === game.id ? selectedFileAvailability : null;
   const unavailable = availability?.available === false;
-  play.disabled = Boolean(game.is_running) || launchingGames.has(game.id) || unavailable;
+  play.disabled = Boolean(game.is_running) || launchingGames.has(game.id);
+  play.classList?.toggle('missing-source',unavailable);
+  const history=document.getElementById('btn-session-history');
+  history.onclick=()=>openSessionHistory(game.id);
   play.innerHTML = game.is_running
     ? globalThis.OpenCabinetI18n.t("msg.cd7fe1c80d")
     : unavailable ? globalThis.OpenCabinetI18n.t("availability.missing")
     : launchingGames.has(game.id) ? '<span class="play-icon-shape">▶</span> INICIANDO...'
     : globalThis.OpenCabinetI18n.t("msg.aa6ae9fe63");
-  play.title = unavailable ? availability.missing_paths?.join("\n") || globalThis.OpenCabinetI18n.t("availability.missing") : "";
+  play.title = unavailable ? globalThis.OpenCabinetI18n.t('library.replaceSource')+'\n'+(availability.missing_paths?.join("\n") || globalThis.OpenCabinetI18n.t("availability.missing")) : "";
 }
 
 async function checkSelectedGameFiles(game) {
@@ -1880,6 +1910,10 @@ function applyPlayStatistics(stats) {
 async function setupPlayStatistics() {
   try {
     const unlisten = await window.__TAURI__.event.listen("play-statistics-updated", ({ payload }) => applyPlayStatistics(payload));
+    if(window.OpenCabinetLibraryTools){
+      const stop=await window.__TAURI__.event.listen('launch-diagnostic',({payload})=>getLibraryTools()?.diagnostic(payload.message));
+      window.addEventListener('beforeunload',stop,{once:true});
+    }
     window.addEventListener("beforeunload", unlisten, { once: true });
   } catch (error) {
     console.error("No se pudieron activar las actualizaciones de tiempo de juego:", error);
@@ -1910,7 +1944,8 @@ function showGameDetails(game) {
   const playBtn = document.getElementById("btn-play-game");
   if (playBtn) {
     playBtn.onclick = () => {
-      launchGame(game.id, game.title);
+      if(selectedFileAvailability?.id===game.id&&selectedFileAvailability.available===false)void relocateGame(game);
+      else launchGame(game.id, game.title);
     };
   }
 
@@ -2064,7 +2099,7 @@ function createPlatformDetailsEditor() {
   const defaultEmulator = document.getElementById("platform-default-emulator-select");
   const boxSettings = window.OpenCabinetBoxSettings?.createEditor({ imageSource });
   const variablesEditor = window.OpenCabinetVariables?.createEditor(document.getElementById("platform-variables-editor"), document, { getNames: libraryVariableNames });
-  const platformTabs = ["details","boxes","images","variables"].map(name => ({ name,
+  const platformTabs = ["details","boxes","images","variables","folders"].map(name => ({ name,
     tab: document.getElementById(`platform-edit-tab-${name}`), panel: document.getElementById(`platform-edit-panel-${name}`) }));
   function showPlatformTab(name, focus = false) {
     document.getElementById("platform-editor-panels").scrollTop = 0;
@@ -2307,6 +2342,7 @@ function createPlatformDetailsEditor() {
       });
       defaultEmulator.value = availableEmulators.some(emulator => emulator.id === details.default_emulator_id) ? String(details.default_emulator_id) : "";
       current = platform; images = (details.images || []).map((image) => ({ ...image }));
+      void getLibraryTools()?.renderFolders(document.getElementById('platform-folders-list'),platform,async(platform,folder)=>{if(busy)return;await close();await startSavedFolderScan(platform,folder);});
       const variableOverrides = details.variables || libraryPlatformVariables[platform.id] || {};
       variablesEditor?.set(window.OpenCabinetVariables.platformDefaults(platform.name, variableOverrides), variableOverrides);
       showPlatformTab("details");
@@ -2664,6 +2700,7 @@ function setupGameEditor() {
   });
   imageKind.value = "cover";
   let editingId = null;
+  let editingSourceGame=null,draftRomPath=null;
   const orderEditor = globalThis.OpenCabinetOrder?.createEditor({getGames:()=>allGames});
   let gameModeSource = null, gameModeLabel = "";
   function setGameModeDraft(value) {
@@ -2695,6 +2732,7 @@ function setupGameEditor() {
   function showEditorTab(name, focus = false) {
     document.getElementById("game-editor-panels").scrollTop = 0;
     if (name === "execution") {
+      syncExecutionSources();
       const discs = discEditor?.value();
       if (discs) document.getElementById("game-edit-rom-path").value = discs.map(disc => `${disc.label}: ${disc.rom_path}`).join("\n");
     }
@@ -2727,6 +2765,28 @@ function setupGameEditor() {
   const customArguments = document.getElementById("game-edit-custom-arguments");
   const argumentsInput = document.getElementById("game-edit-arguments");
   let editingDirectly = false, editingStore = false;
+  const sourceSelect=document.getElementById('game-edit-source-select');
+  function syncExecutionSources(){
+    sourceSelect.replaceChildren();
+    const discs=editingDirectly?[{rom_path:draftRomPath||editingSourceGame?.rom_path,label:''}]:discEditor?.sources?.()||editingSourceGame?.discs||[];
+    discs.forEach((disc,index)=>{const option=document.createElement('option');option.value=String(index);option.textContent=(disc.label?disc.label+' · ':'')+disc.rom_path;sourceSelect.appendChild(option);});
+    document.getElementById('btn-game-edit-source').disabled=editingStore||!!editingSourceGame?.is_running;
+  }
+  document.getElementById('btn-game-edit-source').addEventListener('click',async()=>{
+    if(editingId===null||editingStore||editingSourceGame?.is_running||saving||choosingImages||closing||networkBusy)return;
+    const id=editingId,index=Number(sourceSelect.value);
+    choosingImages=true;const wasDisabled=saveButton.disabled;saveButton.disabled=true;metadataControls();
+    try{
+      const picked=await getLibraryTools()?.pickSource(editingSourceGame);if(editingId!==id||!picked)return;
+      if(editingDirectly)draftRomPath=picked.rom_path;else discEditor?.replace(index,picked.rom_path);
+      syncExecutionSources();const sources=discEditor?.sources?.();
+      document.getElementById('game-edit-rom-path').value=editingDirectly?draftRomPath:sources.map(d=>`${d.label}: ${d.rom_path}`).join('\n');
+    }catch(error){showToast(String(error),true);}
+    finally{choosingImages=false;saveButton.disabled=wasDisabled;metadataControls();}
+  });
+  document.getElementById('btn-game-edit-history').addEventListener('click',()=>{
+    const group=allGames.find(game=>game.id===selectedGameId);if(group)getLibraryTools()?.history(group,{combine:preferences.combineRegionStatistics,regionId:editingId});
+  });
   function executionEmulators() {
     return allEmulators.filter(emu => emu.platform.toLowerCase() === platformSelect.value.toLowerCase())
       .sort((a, b) => Number(Boolean(b.is_default)) - Number(Boolean(a.is_default)) || a.id - b.id);
@@ -3063,6 +3123,7 @@ function setupGameEditor() {
       if (override && editingId !== null) await downloader.release();
       if (!await loadPlatforms()) return;
       editingId = game.id;
+      editingSourceGame=game;draftRomPath=null;
       regionEditor?.setGame(group, game.id);
       document.getElementById("game-edit-current-region").textContent = group.regions?.length
         ? globalThis.OpenCabinetI18n.t("msg.963abdf142", group.regions.find(region => region.game.id === game.id)?.label || game.title) : "";
@@ -3165,6 +3226,7 @@ function setupGameEditor() {
       variables,
       regions: regionEditor?.value() ?? null,
       id: editingId,
+      ...(draftRomPath!==null?{romPath:draftRomPath}:{}),
       execution: {
         emulator_id: emulatorSelect.value ? Number(emulatorSelect.value) : null,
         arguments: customArguments.checked && !editingStore ? argumentsInput.value : null,
@@ -3284,6 +3346,7 @@ async function launchGame(gameId, gameTitle) {
     showToast(`🎮 ${result.message}`);
   } catch (error) {
     console.error("Error al lanzar juego:", error);
+    getLibraryTools()?.diagnostic(String(error));
     showToast(`❌ ${error}`, true);
   } finally {
     launchingGames.delete(gameId);
@@ -4014,6 +4077,15 @@ function setupScannerModal() {
     chooseImportMode(null);
     platformSelect.dispatchEvent(new Event("change"));
     modal.classList.remove("hidden");
+    document.getElementById('scan-save-folder').checked=false;
+    if(savedFolderImport){
+      const {platform,folder}=savedFolderImport;savedFolderImport=null;
+      chooseImportMode('folder');platformSelect.value=platform.name;platformSelect.dispatchEvent(new Event('change'));
+      scanFolderInput.value=folder.directory;document.getElementById('scan-extensions-input').value=folder.extensions.join(', ');
+      if(allEmulators.some(emu=>emu.platform.toLowerCase()===platform.name.toLowerCase())){
+        importConfigPage='files';updateImportSourceUI();void handleExecuteScan();
+      }
+    }
   });
 
   // Cerrar modal
@@ -5235,6 +5307,10 @@ async function handleExecuteScan() {
       onProgress: progressChannel(),
     });
     activeChannel = null;
+    if(!single&&!store&&document.getElementById('scan-save-folder')?.checked){
+      const platformRecord=allPlatforms.find(item=>item.name.toLowerCase()===platform.toLowerCase());
+      await invoke('save_library_folder',{platformId:platformRecord.id,directory:folderPath,extensions:customExtensions||extRaw.split(',').map(value=>value.trim()).filter(Boolean)});
+    }
     if (!store && !pc && preview.games.some(g => g.discs?.length)) {
       preview = await invoke("prepare_disc_import", { preview, platform });
     }

@@ -324,6 +324,14 @@ test("Multiple games retain edited titles through match selection, download and 
   assert.equal(app.get("scan-folder-input").disabled, false); assert.equal(app.loaded(), 1);
 });
 
+test('A checked folder is remembered even when there are no new games to import',async()=>{
+  const app=importer({count:0,handlers:{save_library_folder:()=>null}});
+  app.evaluate('allPlatforms[0].id=3');app.get('scan-save-folder').checked=true;await app.start();
+  const saved=app.calls.find(call=>call.command==='save_library_folder');
+  assert.equal(saved.args.platformId,3);assert.equal(saved.args.directory,'C:/roms');assert.deepEqual(Array.from(saved.args.extensions),['.rom']);
+  assert.equal(app.commands().includes('start_metadata_import'),false);
+});
+
 test("No new games finishes without starting a metadata catalog session", async () => {
   const app = importer({ count: 0 }); await app.start();
   assert.deepEqual(app.commands(), ["scan_roms_folder"]);

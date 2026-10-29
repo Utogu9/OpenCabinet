@@ -8,7 +8,7 @@ function app(invoke){
  vm.runInContext(fs.readFileSync('src/main.js','utf8'),context);
  return {get,run:code=>vm.runInContext(code,context)};
 }
-test('Only the selected game is checked; a missing file disables and relabels Play',async()=>{
+test('Only the selected game is checked; a missing file relabels Play and keeps relocation accessible',async()=>{
  let finish;
  const calls=[];const instance=app((command,args)=>{calls.push({command,args});return new Promise(resolve=>{finish=resolve;});});
  const pending=instance.run('selectedGameId=1; checkSelectedGameFiles({id:1,session_count:0})');
@@ -16,9 +16,10 @@ test('Only the selected game is checked; a missing file disables and relabels Pl
  assert.equal(instance.get('btn-play-game').innerHTML,instance.run('globalThis.OpenCabinetI18n.t("msg.aa6ae9fe63")'));
  finish({available:false,missing_paths:['D:/missing.iso']});await pending;
  assert.equal(calls.length,1);assert.deepEqual({...calls[0].args},{gameId:1});
- assert.equal(instance.get('btn-play-game').disabled,true);
+ assert.equal(instance.get('btn-play-game').disabled,false);
  assert.equal(instance.get('btn-play-game').innerHTML,'Falta el archivo');
- assert.equal(instance.get('btn-play-game').title,'D:/missing.iso');
+ assert.ok(instance.get('btn-play-game').title.endsWith('D:/missing.iso'));
+ assert.ok(instance.get('btn-play-game').title.includes('Cambiar archivo'));
 });
 test('An old selection cannot disable the current game, and a usable remaining disc allows Play',async()=>{
  let old;const instance=app((command,{gameId})=>gameId===1?new Promise(resolve=>{old=resolve;}):Promise.resolve({available:true,missing_paths:['D:/disc2.iso']}));

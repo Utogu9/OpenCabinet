@@ -523,6 +523,8 @@ pub fn merge(
     }
     for id in &unique {
         if *id != primary {
+            crate::session_history::init(&tx).map_err(err)?;
+            tx.execute("UPDATE play_sessions SET game_id=?1 WHERE game_id=?2",params![primary,id]).map_err(err)?;
             tx.execute("DELETE FROM games WHERE id=?1", [id])
                 .map_err(err)?;
         }

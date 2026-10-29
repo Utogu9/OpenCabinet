@@ -821,6 +821,47 @@ pub fn validate_configuration(executable: &str, arguments: &str, core: Option<&s
     }
     Ok(())
 }
+/// Report only absent declared requirements; an existing BIOS is not certified valid.
+pub fn validate_firmware(executable:&str,core:&str,arguments:&[String])->Result<()> {
+    if arguments.iter().any(|arg|arg=="--config"||arg=="-c"||arg.starts_with("--config=")||arg.starts_with("--appendconfig")){return Ok(());}
+    let executable=Path::new(executable);let parent=executable.parent().unwrap_or(Path::new("."));
+    let mut cfg=parent.join("retroarch.cfg");
+    if !cfg.is_file(){if let Some(appdata)=std::env::var_os("APPDATA"){cfg=PathBuf::from(appdata).join("retroarch.cfg");}}
+    let values=fs::read_to_string(cfg).map(|s|settings(&s)).unwrap_or_default();
+    let system=values.get("system_directory").filter(|p|!p.is_empty()&&p.as_str()!="default").map(|p|{
+        if let Some(relative)=p.strip_prefix(":/").or_else(||p.strip_prefix(":\\")){parent.join(relative)}else if Path::new(p).is_absolute(){PathBuf::from(p)}else{parent.join(p)}
+    }).unwrap_or_else(||parent.join("system"));
+    let (_,info_dir)=directories(executable);
+    let stem=Path::new(core).file_stem().unwrap_or_default().to_string_lossy();
+    let Ok(text)=fs::read_to_string(info_dir.join(format!("{stem}.info"))) else{return Ok(());};
+    let info=settings(&text);let count=info.get("firmware_count").and_then(|s|s.parse::<usize>().ok()).unwrap_or(0).min(100);
+    let mut missing=Vec::new();let mut any_present=false;
+    for n in 0..count {
+        if info.get(&format!("firmware{n}_opt")).is_none_or(|s|s!="false"){continue;}
+        let Some(relative)=info.get(&format!("firmware{n}_path")) else{continue;};
+        if relative.contains(['*','?','|']){continue;}
+        let Ok(relative)=safe_relative(relative) else{continue;};let path=system.join(relative);
+        let present=if path.is_dir(){fs::read_dir(&path).map(|mut entries|entries.any(|entry|entry.is_ok_and(|e|e.path().is_file()))).unwrap_or(false)}else{path.is_file()};
+        if present{any_present=true;}else{missing.push(path.to_string_lossy().to_string());}
+    }
+    // Several firmwares can be regional alternatives. Do not require all variants.
+    if !missing.is_empty()&&!any_present{return Err(crate::i18n::i18n_format!("launch.firmwareMissing",stem,missing.join("\n")));}
+    Ok(())
+}
+pub fn diagnostic_log(executable:&str,args:&mut Vec<String>,game_id:i32)->Option<PathBuf>{
+    if !Path::new(executable).file_name().is_some_and(|name|name.eq_ignore_ascii_case("retroarch.exe"))||args.iter().any(|arg|arg=="--log-file"||arg.starts_with("--log-file=")){return None;}
+    let path=crate::data_directory().ok()?.join("logs").join(format!("retroarch-{game_id}-last-launch.log"));
+    fs::create_dir_all(path.parent()?).ok()?;fs::write(&path,[]).ok()?;
+    args.splice(0..0,["--verbose".into(),"--log-file".into(),path.to_string_lossy().to_string()]);Some(path)
+}
+pub fn failure_details(path:Option<&Path>)->Option<String>{
+    use std::io::{Read,Seek,SeekFrom};
+    let mut file=fs::File::open(path?).ok()?;let size=file.metadata().ok()?.len();file.seek(SeekFrom::Start(size.saturating_sub(32768))).ok()?;
+    let mut bytes=Vec::new();file.read_to_end(&mut bytes).ok()?;let text=String::from_utf8_lossy(&bytes);
+    let lines:Vec<_>=text.lines().filter(|line|{let lower=line.to_ascii_lowercase();lower.contains("[error]")||lower.contains("[libretro error]")||lower.contains("failed to load")}).collect();
+    if lines.is_empty(){None}else{Some(lines.into_iter().rev().take(12).collect::<Vec<_>>().into_iter().rev().collect::<Vec<_>>().join("\n"))}
+}
+
 pub fn remember_configuration(
     conn: &Connection,
     executable: &str,
@@ -855,6 +896,27 @@ pub fn launch_core_for_emulator(conn: &Connection, emulator_id: i64) -> Result<O
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn firmware_checks_respect_paths_optional_files_and_regional_alternatives(){
+        let sandbox=Sandbox::new();let root=&sandbox.0;fs::create_dir_all(root.join("info")).unwrap();
+        fs::write(root.join("retroarch.cfg"),"system_directory = \":/custom-system\"\n").unwrap();
+        fs::write(root.join("info/test_libretro.info"),"firmware_count = 2\nfirmware0_path = \"bios/us.bin\"\nfirmware0_opt = \"false\"\nfirmware1_path = \"bios/eu.bin\"\nfirmware1_opt = \"false\"\n").unwrap();
+        let exe=root.join("retroarch.exe").to_string_lossy().to_string();let core=root.join("cores/test_libretro.dll").to_string_lossy().to_string();
+        let error=validate_firmware(&exe,&core,&[]).unwrap_err();assert!(error.contains("us.bin")&&error.contains("custom-system"));
+        fs::create_dir_all(root.join("custom-system/bios")).unwrap();fs::write(root.join("custom-system/bios/us.bin"),b"fixture").unwrap();assert!(validate_firmware(&exe,&core,&[]).is_ok());
+        assert!(validate_firmware(&exe,&core,&["--config".into(),"personal.cfg".into()]).is_ok());
+        fs::write(root.join("info/test_libretro.info"),"firmware_count = 2\nfirmware0_path = \"ps2/bios\"\nfirmware0_opt = \"false\"\nfirmware1_path = \"optional.bin\"\nfirmware1_opt = \"true\"\n").unwrap();
+        fs::create_dir_all(root.join("custom-system/ps2/bios")).unwrap();assert!(validate_firmware(&exe,&core,&[]).is_err());
+        fs::write(root.join("custom-system/ps2/bios/one.bin"),b"fixture").unwrap();assert!(validate_firmware(&exe,&core,&[]).is_ok());
+    }
+    #[test]
+    fn launch_logs_report_concrete_errors_and_ignore_normal_output(){
+        let sandbox=Sandbox::new();let file=sandbox.0.join("launch.log");
+        fs::write(&file,"[INFO] Started\n[ERROR] Failed to load system/pcsx2/bios\n[INFO] Exiting\n").unwrap();
+        assert_eq!(failure_details(Some(&file)).as_deref(),Some("[ERROR] Failed to load system/pcsx2/bios"));
+        fs::write(&file,"[INFO] Started\n[INFO] Exiting").unwrap();assert!(failure_details(Some(&file)).is_none());
+        assert!(failure_details(None).is_none());
+    }
     struct Sandbox(PathBuf);
     impl Sandbox {
         fn new() -> Self {

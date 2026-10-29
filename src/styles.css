@@ -671,6 +671,19 @@ body.resizing-details * {
 }
 
 .game-box-stage.dragging { cursor: grabbing; }
+.playtime-with-history { display:flex;align-items:center;gap:7px; }
+.session-history-button { border:0;background:transparent;color:var(--text-muted);opacity:.6;cursor:pointer;padding:0 3px;font-size:1rem; }
+.session-history-button:hover,.session-history-button:focus-visible { opacity:1; }
+.platform-details .session-history-button { display:none; }
+.play-btn-large.missing-source { background:var(--card-bg);color:var(--text-muted); }
+dialog.library-tool-dialog { padding:24px;max-width:760px;width:min(90vw,760px);max-height:85vh;overflow:auto; }
+.library-tool-dialog h2 { font-size:1.1rem; }
+.session-history-list { display:grid;gap:8px;margin:16px 0; }
+.session-history-row { display:grid;grid-template-columns:1fr auto;gap:6px 16px;padding:12px;border:1px solid var(--border-color);border-radius:8px; }
+.session-history-row .help-text { overflow-wrap:anywhere; }
+.saved-folder-row { display:flex;flex-wrap:wrap;align-items:center;gap:10px;margin:12px 0; }
+.saved-folder-row>span { flex:1 1 100%;overflow-wrap:anywhere; }
+.launch-diagnostic-message { white-space:pre-wrap;overflow-wrap:anywhere;line-height:1.5; }
 .game-box-stage.game-box-webgl { perspective: none; }
 .game-box-webgl > canvas { position: absolute; inset: 0; width: 100%; height: 100%; z-index: 1; display: block; }
 .game-box-webgl::after { display: none; }

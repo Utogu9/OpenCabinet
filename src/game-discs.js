@@ -66,6 +66,12 @@
         container.closest("section").classList.toggle("hidden", !enabled); render();
       },
       get busy() { return busy; },
+      sources() { return copy(discs); },
+      replace(index,path) {
+        if(!enabled||busy||!discs[index])return;
+        if(discs.some((disc,i)=>i!==index&&pathKey(disc.rom_path)===pathKey(path)))throw Error(globalThis.OpenCabinetI18n.t('library.sourceDuplicate'));
+        discs[index].rom_path=path;changed=true;render();
+      },
       value() { return enabled && changed ? copy(discs) : null; },
       async add() {
         if (busy || !enabled) return;
