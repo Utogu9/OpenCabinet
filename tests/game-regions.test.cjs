@@ -54,6 +54,16 @@ test('Regional editor drafts labels and the default without mutating either edit
   assert.equal(game.default_region_id,2);assert.equal(game.regions[1].label,'USA');assert.equal(editing.region.id,2);
 });
 
+test('A missing regional source can be repaired without closing the region selector',async()=>{
+ const {api,body}=environment();let repaired;
+ const pending=api.chooseRegion(group(),async(command,{id})=>[{id:id*10,rom_path:id+'.chd',available:id===2}],{repairDisc:async(game,disc,current)=>{
+   repaired={game,disc};assert.equal(current(),true);return [{id:19,rom_path:'new.chd',available:true}];
+ }});await turn();
+ const modal=body.children[0],list=modal.children[1],row=list.children[0];assert.equal(row.children[0].disabled,true);
+ await row.children[1].children[1].onclick();assert.equal(repaired.game.id,1);assert.equal(repaired.disc.id,10);
+ assert.equal(modal.open,true);assert.equal(list.children[0].disabled,false);list.children[0].onclick();assert.equal(await pending,1);
+});
+
 test('Manual region merging keeps every edition and disc and allows retrying a failed save',async()=>{
   const {api,body}=environment();let fail=true,args;
   const games=editions().map(region=>region.game);const pending=api.mergeGames(games,async(command,input)=>{args=input;if(fail)throw Error('Busy');});

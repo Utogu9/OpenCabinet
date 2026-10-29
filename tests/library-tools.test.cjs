@@ -50,3 +50,31 @@ test('Saved folders support choosing a directory and forgetting it without delet
  await container.children[0].children[2].onclick();assert.equal(app.calls.filter(call=>call.command==='remove_library_folder').length,1);
  assert.ok(app.calls.every(call=>!call.command.includes('delete')));
 });
+
+test('Empty folder selection names the platform and lets a newly saved directory start the scan',async()=>{
+ const app=ui(command=>command==='get_library_folders'?[]:command==='select_folder'?'D:/New ROMs':undefined);
+ const pending=app.tools.chooseFolder({id:4,name:'PS2',default_extensions:'.iso, .chd'});await turn();
+ assert.ok(app.all().some(node=>node.tag==='h2'&&node.textContent.includes('PS2')));
+ await app.all().find(node=>node.tag==='button'&&node.textContent==='Agregar carpeta…').onclick();
+ const chosen=await pending;assert.equal(chosen.directory,'D:/New ROMs');
+ const saved=app.calls.find(call=>call.command==='save_library_folder').args;
+ assert.equal(saved.platformId,4);assert.deepEqual(Array.from(saved.extensions),['.iso','.chd']);
+});
+
+test('Embedded session history reuses its container and discards a response after disposal',async()=>{
+ let finish;const app=ui(()=>new Promise(resolve=>{finish=resolve;}));const container=app.document.createElement('section');app.document.body.appendChild(container);
+ const history=app.tools.mountHistory(container,{id:7,title:'Embedded'},{combine:false,regionId:8});
+ assert.equal(app.all().filter(node=>node.tag==='dialog').length,0);assert.equal(app.calls[0].args.gameId,8);
+ history.dispose();finish([{title:'Late',rom_path:'late.iso',started_at:'now',duration_seconds:1,state:'finished'}]);await turn();
+ assert.ok(!app.all().some(node=>node.textContent==='1 seconds'));
+ assert.ok(!app.all().some(node=>node.textContent?.includes('esta versión')));
+});
+
+test('Repairing one selected disc reloads its new ID without changing any other source',async()=>{
+ const app=ui(command=>command==='select_game_file'?{rom_path:'E:/Disc2.iso'}:command==='get_game_discs'?[{id:10},{id:25,rom_path:'E:/Disc2.iso',available:true}]:undefined);
+ const updated=await app.tools.replaceDisc({id:4,platform:'PS2'},{id:11});
+ assert.equal(updated[1].id,25);assert.equal(app.changed,1);
+ assert.deepEqual({...app.calls.find(call=>call.command==='replace_game_source').args},{gameId:4,discId:11,path:'E:/Disc2.iso'});
+ const cancelled=ui(()=>({rom_path:'late.iso'}));assert.equal(await cancelled.tools.replaceDisc({id:4},{id:11},()=>false),null);
+ assert.equal(cancelled.calls.length,1);
+});

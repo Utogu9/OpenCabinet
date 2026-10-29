@@ -383,6 +383,7 @@
               <button type="button" id="game-edit-tab-details" role="tab" aria-controls="game-edit-panel-details" aria-selected="true"><span data-i18n="msg.c8a74ca68d"></span></button>
               <button type="button" id="game-edit-tab-order" role="tab" aria-controls="game-edit-panel-order" aria-selected="false" tabindex="-1"><span data-i18n="order.title"></span></button>
               <button type="button" id="game-edit-tab-execution" role="tab" aria-controls="game-edit-panel-execution" aria-selected="false" tabindex="-1"><span data-i18n="msg.cbec57c0ee"></span></button>
+              <button type="button" id="game-edit-tab-history" role="tab" aria-controls="game-edit-panel-history" aria-selected="false" tabindex="-1" data-i18n="sessions.open"></button>
               <button type="button" id="game-edit-tab-images" role="tab" aria-controls="game-edit-panel-images" aria-selected="false" tabindex="-1"><span data-i18n="msg.a7f0af4e37"></span></button>
               <button type="button" id="game-edit-tab-manuals" role="tab" aria-controls="game-edit-panel-manuals" aria-selected="false" tabindex="-1"><span data-i18n="msg.58cb5b9cf5"></span></button>
               <button type="button" id="game-edit-tab-discs" role="tab" aria-controls="game-discs-section" aria-selected="false" tabindex="-1"><span data-i18n="msg.2d2dca072e"></span></button>
@@ -460,7 +461,6 @@
             <div class="form-group"><label for="game-edit-rom-path"><span data-i18n="msg.b0b830b21a"></span></label><textarea id="game-edit-rom-path" rows="3" readonly></textarea></div>
             <button class="secondary-btn" type="button" id="btn-game-edit-open-files"><span data-i18n="msg.339fbb2a97"></span></button>
             <div class="form-group"><label for="game-edit-source-select" data-i18n="library.source"></label><select id="game-edit-source-select"></select><button id="btn-game-edit-source" class="secondary-btn" type="button" data-i18n="library.replaceSource"></button></div>
-            <button id="btn-game-edit-history" class="secondary-btn" type="button" data-i18n="sessions.open"></button>
             <div class="form-group"><label for="game-edit-emulator"><span data-i18n="msg.4a812bbe2d"></span></label><select id="game-edit-emulator"></select></div>
             <p class="help-text" id="game-edit-execution-help"></p>
             <label class="preference-toggle"><input type="checkbox" id="game-edit-custom-arguments"><span><span data-i18n="msg.ab0d3e60a8"></span></span></label>
@@ -472,6 +472,7 @@
             <div id="game-disc-list" class="disc-edit-list"></div>
             <button type="button" class="browse-btn" id="btn-add-game-discs"><span data-i18n="msg.ad0393fcf5"></span></button>
           </section>
+          <section class="hidden" id="game-edit-panel-history" role="tabpanel" aria-labelledby="game-edit-tab-history"><h3 data-i18n="sessions.open"></h3><div id="game-edit-history"></div></section>
           <section class="game-image-editor hidden" id="game-edit-panel-images" role="tabpanel" aria-labelledby="game-edit-tab-images">
             <h3 id="game-images-title"><span data-i18n="msg.a7f0af4e37"></span></h3>
             <div class="image-add-controls">
@@ -1077,7 +1078,7 @@
     <div class="game-context-menu hidden" id="game-context-menu" role="menu" aria-label="" data-i18n-aria-label="msg.ab4a89881d">
       <button class="dropdown-item" id="context-play-game" type="button" role="menuitem" tabindex="-1"><span data-i18n="msg.67fa9628c4"></span></button>
       <button class="dropdown-item" id="context-edit-game" type="button" role="menuitem" tabindex="-1"><span data-i18n="msg.02f344eb6e"></span></button>
-      <button class="dropdown-item" id="context-session-history" type="button" role="menuitem" tabindex="-1" data-i18n="sessions.open"></button>
+      <button class="dropdown-item" id="context-session-history" type="button" role="menuitem" tabindex="-1"><span aria-hidden="true">🕒</span> <span data-i18n="sessions.open"></span></button>
       <button class="dropdown-item" id="context-open-emulator" type="button" role="menuitem" tabindex="-1"><span data-i18n="msg.b3a8ed7ae3"></span></button>
       <button class="dropdown-item" id="context-open-game-files" type="button" role="menuitem" tabindex="-1"><span data-i18n="msg.339fbb2a97"></span></button>
       <button class="dropdown-item" id="context-open-images" type="button" role="menuitem" tabindex="-1"><span data-i18n="msg.4fe8c2a22f"></span></button>
@@ -1090,7 +1091,7 @@
 
     <div class="game-context-menu hidden" id="platform-context-menu" role="menu" aria-label="" data-i18n-aria-label="msg.26f36f6d6e">
       <button class="dropdown-item" id="context-edit-platform" type="button" role="menuitem" tabindex="-1"><span data-i18n="msg.dcdcf57086"></span></button>
-      <button class="dropdown-item" id="context-find-new-games" type="button" role="menuitem" tabindex="-1" data-i18n="library.findNew"></button>
+      <button class="dropdown-item" id="context-find-new-games" type="button" role="menuitem" tabindex="-1"><span aria-hidden="true">🔎</span> <span data-i18n="library.findNew"></span></button>
     </div>
 
     <dialog id="bulk-images-dialog" class="confirmation-dialog bulk-images-dialog" aria-labelledby="bulk-images-title">
@@ -1260,7 +1261,7 @@
       <form method="dialog" class="modal-body">
         <h3 id="language-restart-title" data-i18n="language.restart_title"></h3>
         <p id="language-restart-message" data-i18n="language.restart_message"></p>
-        <div class="form-actions"><button class="primary-btn" value="close" data-i18n="language.restart_acknowledge"></button></div>
+        <div class="form-actions"><button id="btn-language-restart-later" type="button" class="secondary-btn" data-i18n="language.restart_later"></button><button id="btn-language-restart-now" type="button" class="primary-btn" data-i18n="language.restart_now"></button></div>
       </form>
     </dialog>
 

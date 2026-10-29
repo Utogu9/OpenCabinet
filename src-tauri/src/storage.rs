@@ -887,7 +887,7 @@ pub async fn choose_data_directory() -> Result<Option<String>> {
 }
 
 #[tauri::command]
-pub fn restart_for_data_move(
+pub fn restart_app(
     app: tauri::AppHandle,
     tracker: tauri::State<'_, crate::PlayTracker>,
     jobs: tauri::State<'_, crate::metadata::MetadataJobs>,
@@ -896,13 +896,23 @@ pub fn restart_for_data_move(
     if tracker.has_active_sessions() || jobs.has_active_job() || retroarch.busy() || crate::backups::busy() {
         return Err(crate::i18n::text("msg.bcfea2fcc9").into());
     }
+    app.request_restart();
+    Ok(())
+}
+
+#[tauri::command]
+pub fn restart_for_data_move(
+    app: tauri::AppHandle,
+    tracker: tauri::State<'_, crate::PlayTracker>,
+    jobs: tauri::State<'_, crate::metadata::MetadataJobs>,
+    retroarch: tauri::State<'_, crate::retroarch::RetroArchJobs>,
+) -> Result<()> {
     if current()?.location()?.pending_directory.is_none() {
         return Err(
             crate::i18n::text("msg.6b2d5eae74").into(),
         );
     }
-    app.request_restart();
-    Ok(())
+    restart_app(app,tracker,jobs,retroarch)
 }
 
 #[cfg(test)]

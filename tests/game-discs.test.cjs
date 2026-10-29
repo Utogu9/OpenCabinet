@@ -45,6 +45,17 @@ test("Disc editor keeps saved values unchanged until edited, reorders, labels, r
   await editor.add(); assert.equal(editor.value().length, 3);
   container.children[0].children[4].onclick(); assert.equal(editor.value().length, 2);
 });
+
+test('Missing disc repair stays in the selector, enables the replacement and launches its new ID',async()=>{
+ const {api,doc}=environment();const sources=discs();sources[1].available=false;let request;
+ const pending=api.chooseDisc({id:7,title:'Game'},sources,{repairDisc:async(game,disc,current)=>{
+   request={game,disc};assert.equal(current(),true);return [sources[0],{...sources[1],id:24,rom_path:'E:/Disc 2.chd',available:true}];
+ }});
+ const modal=doc.body.children[0],list=modal.children[2];
+ assert.equal(list.children[1].children[0].disabled,true);await list.children[1].children[1].onclick();
+ assert.equal(request.game.id,7);assert.equal(request.disc.id,2);assert.equal(modal.open,true);
+ assert.equal(list.children[1].disabled,false);list.children[1].onclick();assert.equal(await pending,24);
+});
 test('Changing a source in the launch editor preserves labels and other discs until Save',()=>{
   const {api,Element}=environment();const section=new Element('section'),container=new Element('div');section.append(container);
   const editor=api.createEditor(container,async()=>[],assert.fail),original=discs();editor.setGame({discs:original});

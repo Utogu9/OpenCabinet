@@ -2494,6 +2494,7 @@ pub fn run() {
             storage::inspect_data_directory,
             storage::choose_data_directory,
             storage::restart_for_data_move,
+            storage::restart_app,
             get_games,
             library_navigation::get_library_navigation,
             library_navigation::save_library_categories,

@@ -273,6 +273,18 @@ test('Catalog titles default on for existing preferences, respect Cancel and per
   assert.equal(failure.evaluate('preferences.useCatalogTitles'),true);assert.equal(failure.get('preferences-dialog').open,true);
 });
 
+test('Language restart supports Later, immediate restart, busy sessions and a recoverable error',async()=>{
+ const instance=app();await instance.open();instance.get('preference-language').value='en-US';await instance.save(400);
+ instance.get('btn-language-restart-later').handlers.click();assert.equal(instance.get('language-restart-dialog').open,false);
+ assert.equal(instance.calls.some(call=>call.command==='restart_app'),false);
+ instance.get('language-restart-dialog').showModal();instance.evaluate('allGames=[{id:1,is_running:true}]');
+ await instance.get('btn-language-restart-now').handlers.click();assert.equal(instance.calls.some(call=>call.command==='restart_app'),false);
+ instance.evaluate('allGames=[]');await instance.get('btn-language-restart-now').handlers.click();assert.equal(instance.calls.some(call=>call.command==='restart_app'),true);
+ const failed=app(new Map(),false,{invoke(command){if(command==='restart_app')throw Error('Busy');}});
+ failed.get('language-restart-dialog').showModal();await failed.get('btn-language-restart-now').handlers.click();
+ assert.equal(failed.get('btn-language-restart-now').disabled,false);assert.equal(failed.get('language-restart-dialog').open,true);
+});
+
 test('Preferences follow the system language until a language is saved explicitly', async () => {
   for (const language of ['es-ES','es-MX','es','en-GB','pt-BR']) {
     const instance=app(new Map(),false,{systemLanguage:language}); await instance.open();

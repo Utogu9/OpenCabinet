@@ -10,21 +10,38 @@
   function element(tag, text, cls) { const el=document.createElement(tag); if(text)el.textContent=text;if(cls)el.className=cls;return el; }
   function button(text, action) { const el=element("button",text,"secondary-btn");el.type="button";el.onclick=action;return el; }
   function dialog(title) { const modal=element("dialog",null,"disc-dialog");modal.setAttribute("aria-label",title);modal.append(element("h2",title));document.body.append(modal);return modal; }
-  async function chooseRegion(game, invoke) {
+  async function chooseRegion(game, invoke, {repairDisc}={}) {
     const available = await Promise.all(members(game).map(async region => ({...region,discs:await invoke("get_game_discs",{id:region.game.id})})));
     return new Promise(resolve=>{
-      const modal=dialog(globalThis.OpenCabinetI18n.t("msg.a89714ebc3", game.title)), list=element("div",null,"disc-choice-list");let done=false;
+      const modal=dialog(globalThis.OpenCabinetI18n.t("msg.a89714ebc3", game.title)), list=element("div",null,"disc-choice-list"),error=element('p',null,'disc-error');let done=false,repairing=false;
+      error.setAttribute('role','alert');
       function finish(id){if(done)return;done=true;modal.close();modal.remove();resolve(id);}
       let preferred;
+      function render(){
+      list.replaceChildren();preferred=null;
       for(const region of available){
         const isDefault=region.game.id===game.default_region_id;
-        const item=button("",()=>finish(region.game.id));item.classList.add("disc-choice");
+        const item=button("",()=>{if(!repairing)finish(region.game.id);});item.classList.add("disc-choice");
         item.append(element("strong",`${region.label}${isDefault ? globalThis.OpenCabinetI18n.t("msg.ca29be1250") : ""}`),element("span",region.game.rom_path.split(/[\\/]/).pop()),element("span",`${region.discs.length} ${region.discs.length===1?globalThis.OpenCabinetI18n.t("msg.247a8174ec"):globalThis.OpenCabinetI18n.t("msg.c2ab077beb")}`));
         item.disabled=!region.discs.some(disc=>disc.available);
         if(item.disabled)item.append(element("span",globalThis.OpenCabinetI18n.t("msg.cd62f5eb3a"),"disc-error"));
-        list.append(item);if(isDefault&&!item.disabled)preferred=item;
+        const missing=region.discs.filter(disc=>!disc.available);
+        if(missing.length&&repairDisc){
+          const row=element('div',null,'region-choice-with-repair');row.append(item);
+          for(const disc of missing){
+            const line=element('div',null,'disc-choice-row'),repair=button('📁',async()=>{
+              if(repairing)return;repairing=true;repair.disabled=true;error.textContent='';
+              try{const updated=await repairDisc(region.game,disc,()=>!done&&modal.open);if(updated&&!done){region.discs=updated;render();}}
+              catch(reason){if(!done)error.textContent=String(reason);}finally{repairing=false;repair.disabled=false;}
+            });
+            repair.classList.add('disc-repair-button');repair.title=globalThis.OpenCabinetI18n.t('library.replaceSource');repair.setAttribute('aria-label',repair.title);
+            line.append(element('span',disc.rom_path.split(/[\\/]/).pop(),'disc-error'),repair);row.append(line);
+          }
+          list.append(row);
+        }else list.append(item);if(isDefault&&!item.disabled)preferred=item;
       }
-      modal.append(list,button(globalThis.OpenCabinetI18n.t("msg.bb9dbb406d"),()=>finish(null)));
+      }
+      render();modal.append(list,error,button(globalThis.OpenCabinetI18n.t("msg.bb9dbb406d"),()=>finish(null)));
       modal.addEventListener("cancel",event=>{event.preventDefault();finish(null);});
       modal.showModal();preferred?.focus();
     });

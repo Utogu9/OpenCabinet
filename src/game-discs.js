@@ -35,20 +35,32 @@
     el.setAttribute("aria-label", title); el.append(element("h2", title)); document.body.append(el);
     return el;
   }
-  function chooseDisc(game, discs) {
+  function chooseDisc(game, discs, {repairDisc}={}) {
     return new Promise(resolve => {
       const modal = dialog(globalThis.OpenCabinetI18n.t("msg.cf69895107", game.title));
       modal.append(element("p", globalThis.OpenCabinetI18n.t("msg.595a858d18"), "help-text"));
       const list = element("div", null, "disc-choice-list");
-      let done = false;
+      let done = false,repairing=false;
+      const error=element('p',null,'disc-error');error.setAttribute('role','alert');
       function finish(id) { if (done) return; done = true; modal.close(); modal.remove(); resolve(id); }
+      function render(){
+      list.replaceChildren();
       for (const disc of discs) {
-        const item = button("", () => finish(disc.id)); item.classList.add("disc-choice"); item.disabled = !disc.available;
+        const item = button("", () => {if(!repairing)finish(disc.id);}); item.classList.add("disc-choice"); item.disabled = !disc.available;
         item.append(element("strong", disc.label), element("span", filename(disc.rom_path)), ...(!disc.available ? [element("span", globalThis.OpenCabinetI18n.t("msg.0968c8c67d"), "disc-error")] : []));
         item.setAttribute("aria-label", `${disc.label} · ${filename(disc.rom_path)}${disc.available ? "" : globalThis.OpenCabinetI18n.t("msg.e0468aaaa1")}`);
-        item.title = disc.rom_path; list.append(item);
+        item.title = disc.rom_path;
+        if(!disc.available&&repairDisc){
+          const row=element('div',null,'disc-choice-row'),repair=button('📁',async()=>{
+            if(repairing)return;repairing=true;repair.disabled=true;error.textContent='';
+            try{const updated=await repairDisc(game,disc,()=>!done&&modal.open);if(updated&&!done){discs=updated;render();}}
+            catch(reason){if(!done)error.textContent=String(reason);}finally{repairing=false;repair.disabled=false;}
+          },globalThis.OpenCabinetI18n.t('library.replaceSource'));
+          repair.classList.add('disc-repair-button');row.append(item,repair);list.append(row);
+        }else list.append(item);
       }
-      modal.append(list, button(globalThis.OpenCabinetI18n.t("msg.bb9dbb406d"), () => finish(null)));
+      }
+      render();modal.append(list,error, button(globalThis.OpenCabinetI18n.t("msg.bb9dbb406d"), () => finish(null)));
       modal.addEventListener("cancel", event => { event.preventDefault(); finish(null); });
       let backdrop = false;
       modal.addEventListener("pointerdown", event => { backdrop = event.target === modal; });

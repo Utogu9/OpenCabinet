@@ -12,6 +12,8 @@ cambio y lo aplica al guardar. En juegos con varios discos, el desplegable
 permite elegir el disco; los demás archivos y sus etiquetas se conservan.
 Cancelar la edición descarta el cambio. No se permite reemplazar un archivo
 por otro ya asociado a otra entrada ni cambiar fuentes durante una partida.
+Los selectores de región y disco también permiten reubicar cada archivo
+ausente con su botón de carpeta, sin salir de la selección.
 Los ejecutables de juegos directos se reemplazan por otro `.exe`. Las
 instalaciones de Steam y Epic se administran desde su propio lanzador.
 
@@ -30,11 +32,15 @@ emulador, se muestra la configuración antes de continuar.
 **Editar consola → Carpetas de biblioteca** muestra los directorios guardados,
 con acciones para buscar juegos nuevos o quitar el directorio de la lista.
 Quitar un directorio no borra sus archivos ni los juegos importados.
+Se pueden agregar carpetas desde esta categoría y desde la ventana de
+selección, cuyo título incluye la consola. No hace falta importar juegos
+antes para registrar el primer directorio.
 
 ## Historial de sesiones
 
-El pequeño reloj junto al tiempo jugado, el menú contextual y **Editar juego →
-Ejecución** abren el mismo historial. Cada fila muestra inicio, duración,
+El pequeño reloj junto al tiempo jugado y el menú contextual abren el historial.
+**Editar juego → Historial de sesiones** lo muestra integrado en su propia
+categoría, sin otra ventana. Cada fila muestra inicio, duración,
 archivo ejecutado, juego/región y estado. Los resultados se cargan de cien en
 cien y se pueden actualizar mientras hay una sesión en curso.
 
