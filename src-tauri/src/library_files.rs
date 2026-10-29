@@ -229,7 +229,9 @@ mod tests {
         fn file(&self, name: &str) -> String {
             let p = self.0.join(name);
             std::fs::write(&p, b"source").unwrap();
-            p.to_string_lossy().to_string()
+            // Windows runners may expose TEMP through an 8.3 alias (RUNNER~1).
+            // Match the canonical paths stored by replace_source, not that alias.
+            canonical(&p).unwrap()
         }
     }
     impl Drop for Files {
