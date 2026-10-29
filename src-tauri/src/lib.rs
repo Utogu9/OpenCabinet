@@ -2484,6 +2484,8 @@ pub fn run() {
             library_files::remove_library_folder,
             library_files::replace_game_source,
             session_history::get_play_sessions,
+            session_history::delete_play_session,
+            session_history::reset_play_sessions,
             app_updates::check_app_update,
             app_updates::install_app_update,
             metadata::repository::get_metadata_source,

@@ -34,7 +34,7 @@ function closeSavedFolderScan() {
 }
 function getLibraryTools() {
   return libraryTools ??= window.OpenCabinetLibraryTools?.create({document,invoke,
-    onChanged:loadGames,formatDate:formatLastPlayed,
+    onChanged:loadGames,confirm:confirmDeletion,formatDate:formatLastPlayed,formatSummary:formatPlayTime,
     formatDuration:seconds=>{seconds=Math.max(0,Math.floor(seconds));return [Math.floor(seconds/3600),Math.floor(seconds/60)%60,seconds%60].map(value=>String(value).padStart(2,'0')).join(':');}});
 }
 function openSessionHistory(id) {

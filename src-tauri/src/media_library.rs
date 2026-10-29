@@ -344,6 +344,17 @@ pub fn sync_game(
     Ok(())
 }
 
+// Queue only statistics: editing history must not copy or rewrite media files.
+pub fn sync_statistics(conn:&Connection,ids:&[i32])->Result<()> {
+    let exists:bool=conn.query_row("SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE name='media_collections')",[],|r|r.get(0)).map_err(err)?;
+    if !exists{return Ok(());}
+    for id in ids {
+        conn.execute("UPDATE media_collections SET manifest=json_set(manifest,'$.statistics',(SELECT json_object('play_time_seconds',play_time_seconds,'session_count',session_count,'last_played',last_played) FROM games WHERE id=?1)) WHERE id=(SELECT media_collection_id FROM games WHERE id=?1)",[id]).map_err(err)?;
+        conn.execute("INSERT INTO media_manifest_outbox(id,body) SELECT id,manifest FROM media_collections WHERE id=(SELECT media_collection_id FROM games WHERE id=?1) ON CONFLICT(id) DO UPDATE SET body=excluded.body",[id]).map_err(err)?;
+    }
+    Ok(())
+}
+
 fn publish(folder: &Path, body: &str) -> Result<()> {
     use std::io::Write;
     fs::create_dir_all(folder).map_err(err)?;

@@ -47,6 +47,16 @@ categoría, sin otra ventana. Cada fila muestra inicio, duración,
 archivo ejecutado, juego/región y estado. Los resultados se cargan de cien en
 cien y se pueden actualizar mientras hay una sesión en curso.
 
+El encabezado muestra el tiempo total y la cantidad de partidas, incluidos los
+acumulados anteriores al registro de sesiones. Cada sesión tiene una acción
+para borrarla, que resta su duración y una partida. **Reiniciar estadísticas**
+borra todas las sesiones del historial mostrado y pone los contadores en cero,
+incluida la fecha de última partida. Ambas acciones requieren confirmación y
+están bloqueadas mientras el juego esté ejecutándose. Con estadísticas
+regionales combinadas afectan al grupo; con la vista separada, a la región
+indicada. Los cambios actualizan también las estadísticas de recuperación de
+la colección, sin modificar imágenes, manuales ni archivos del juego.
+
 El historial respeta la preferencia de combinar estadísticas regionales; en el
 editor, la vista separada corresponde a la región que se está editando. Los
 registros se guardan en `play_sessions` dentro de la biblioteca y acompañan sus
