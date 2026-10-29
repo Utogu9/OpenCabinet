@@ -5,6 +5,14 @@ archivos; si no están disponibles, PSP utiliza su visor CSS. La selección del
 backend es compartida por el lateral, la pantalla completa y la configuración
 de cajas. Los recursos PSP se mantienen locales mientras se verifica su licencia.
 
+El visor CSS alternativo también admite el manual y el inlay. Prepara solamente
+la portada del PDF al seleccionar el juego, coloca el librito dentro de la tapa
+y permite sacarlo para leerlo con el mismo lector. No reemplaza la carátula
+exterior. El inlay se carga al abrir la caja: usa una sola imagen con ventanas
+para la tapa, el lomo y el fondo del UMD, sin invertir los textos. Si la imagen
+no se puede cargar, se conserva el interior sin impresión. Esta función no
+requiere los archivos del modelo GLB.
+
 El modelo preparado contiene las piezas de caja y UMD con las correcciones
 de geometría, las UV y ambas articulaciones. La app y su preparación utilizan
 únicamente los archivos de `src/models/psp`, sin consultar archivos de autoría

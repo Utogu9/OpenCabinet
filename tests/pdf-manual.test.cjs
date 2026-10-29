@@ -115,6 +115,18 @@ test('PS2 booklet dimensions preserve page proportions and fit the inside of the
   assert.equal(api.isPS2({ platform: 'PlayStation 3' }), false);
 });
 
+test('PSP manuals are supported and fill the lid height while preserving narrow page proportions', () => {
+  const {api}=fixture();
+  for(const platform of ['PSP','Sony PSP','PlayStation Portable','Sony PlayStation Portable'])assert.equal(api.supportsGame({platform}),true);
+  assert.equal(api.supportsGame({platform:'PS3'}),false);
+  const profile={id:'psp',width:99,height:168};
+  const narrow=api.dimensions(profile,{aspectRatio:.51,pageCount:14});
+  assert.equal(narrow.height,162);assert.ok(Math.abs(narrow.width/narrow.height-.51)<1e-9);
+  assert.ok(Math.abs(narrow.x+narrow.width/2-(profile.width/2-3))<1e-9);
+  const wide=api.dimensions(profile,{aspectRatio:1.2,pageCount:40});
+  assert.ok(wide.width<=93);assert.ok(wide.height<=162);assert.ok(Math.abs(wide.width/wide.height-1.2)<1e-9);
+});
+
 test('Box previews request only page 1 even for long PDFs, and release PDF resources before returning', async () => {
   const app = fixture({ pages: 137, width: 2000, height: 3000 }); const data = await app.render();
   assert.deepEqual(app.requested, [1]); assert.equal(data.pageCount, 137); assert.equal(data.aspectRatio, 2/3);

@@ -239,7 +239,9 @@ PS1 y Dreamcast usan el propio manual como portada: si hay PDF, su primera
 carilla reemplaza la imagen exterior bajo el acrílico. Solo se prepara esa
 carilla al seleccionar el juego; al abrir la caja se muestran el grosor y la
 hoja interior. El manual se puede sacar y leer con el lector habitual. PS2
-conserva su librito dentro de la caja. Los otros modelos no incorporan PDF.
+y PSP conservan su librito dentro de la caja, también en el visor CSS.
+PSP aplica además el inlay a las dos tapas y al lomo desde una única imagen;
+funciona aunque falten las imágenes exteriores. Los otros modelos no incorporan PDF.
 
 ### Referencias visuales de estos interiores
 

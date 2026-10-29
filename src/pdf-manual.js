@@ -2,7 +2,8 @@
 (() => {
   const isPS2 = game => /^(sony)?playstation2$|^ps2$/.test(String(game?.platform || '').toLowerCase().replace(/[^a-z0-9]/g, ''));
   const isJewelBooklet = game => /^(sony)?playstation(1)?$|^ps1?$|^(sega)?dreamcast$/.test(String(game?.platform || '').toLowerCase().replace(/[^a-z0-9]/g, ''));
-  const supportsGame = game => isPS2(game) || isJewelBooklet(game);
+  const isPSP = game => /^(sony)?(playstationportable|psp)$/.test(String(game?.platform || '').toLowerCase().replace(/[^a-z0-9]/g, ''));
+  const supportsGame = game => isPS2(game) || isJewelBooklet(game) || isPSP(game);
   let library;
   async function pdfLibrary() {
     library ??= import('./vendor/pdfjs/pdf.min.mjs').then(pdf => {
@@ -19,11 +20,12 @@
       const width=profile.width-14.6,height=profile.height-2.6,sheets=Math.ceil(info.pageCount/2);
       return {width,height,sheets,thickness:Math.min(2.5,.26+sheets*.06),x:6,y:0};
     }
-    const height = Math.min(profile.height - 6, (profile.width - 14) / info.aspectRatio);
+    const psp = profile.id === 'psp';
+    const height = Math.min(profile.height - 6, (profile.width - (psp ? 6 : 14)) / info.aspectRatio);
     const width = height * info.aspectRatio;
     const sheets = Math.ceil(info.pageCount / 2);
     return { width, height, sheets, thickness: Math.min(3.4, 0.26 + sheets * 0.075),
-      x: profile.width / 2 - 8 - width / 2, y: 0 };
+      x: profile.width / 2 - (psp ? 3 : 8) - width / 2, y: 0 };
   }
   async function render(path, { imageSource = value => value, signal, loadLibrary = pdfLibrary, coverMode = 'auto', maxSide = 2048 } = {}) {
     const abort = () => { if (signal?.aborted) throw new DOMException(globalThis.OpenCabinetI18n.t("msg.92a2872d72"), 'AbortError'); };

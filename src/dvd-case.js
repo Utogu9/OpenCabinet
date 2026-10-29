@@ -40,7 +40,7 @@
       lid: s => "translate3d(" + hinge[0]*s + "px,0," + hinge[1]*s + "px) rotateY(" + -angle + "deg) translate3d(" + w*s/2 + "px,0," + -d*s/2 + "px) ",
       spine: s => "translate3d(" + -w*s/2 + "px,0," + -d*s/2 + "px) rotateY(" + -angle/2 + "deg) translate3d(" + w*s/2 + "px,0," + d*s/2 + "px) " };
   }
-  function build({ profile, game, images, addFace, removeFace = () => {}, imageSource, trackTexture, isCurrent, schedule }) {
+  function build({ profile, game, images, paperLayout, addFace, removeFace = () => {}, imageSource, trackTexture, isCurrent, schedule }) {
     const { width: w, height: h, depth: d } = profile;
     const variant = profile.variant || (/^(sony)?playstation2$|^ps2$/.test(String(game.platform || "").toLowerCase().replace(/[^a-z0-9]/g, "")) ? "ps2" : profile.id);
     const ps2 = variant === "ps2", gamecube = variant === "gamecube";
@@ -65,7 +65,7 @@
       if (/^(wall|hinge|disc-cradle-wall|recycle-cut-edge)/.test(name)) element.style.backfaceVisibility = 'visible';
       if (curve) element.dataset.curve = "x";
       addFace({ element, width, height, normal, part, curve, interior: true,
-        lighting: name === "disc" ? "disc" : name.includes("manual-cover") ? "paper" : "plastic",
+        lighting: name === "disc" ? "disc" : /manual-cover|psp-inlay/.test(name) ? "paper" : "plastic",
         transform: s => "translate3d(" + x*s + "px," + y*s + "px," + (z - (name.includes("manual-clip") ? manualLift : 0))*s + "px) " + orientation });
       return element;
     };
@@ -156,6 +156,42 @@
     }
     if (clear) {
       for (const panel of profile.id==='longbox'?[lid]:[tray,lid]) panel.style.backgroundColor='var(--box-shell)';
+    }
+    const inlay = variant === 'psp' && images.find(image => image.kind === 'inlay' && image.path);
+    const atlas = globalThis.OpenCabinetImages;
+    if (inlay && atlas?.wrapRegions) {
+      // The scan is viewed from inside: left = lid, centre = spine, right = tray.
+      // Use one image and UV windows, without mirroring text or creating files.
+      const sheet = paperLayout || {width:w-1.8,height:h-7.1,depth:d};
+      const x = -(w-sheet.width)/2;
+      const panels = [
+        [face('cover-paper psp-inlay',sheet.width,sheet.height,x,0,d/2-.14,[0,0,-1],'rotateY(180deg)','lid'),'back_cover'],
+        [face('cover-paper psp-inlay',d,sheet.height,-w/2+.14,0,0,[1,0,0],'rotateY(90deg)','spine'),'spine'],
+        [face('cover-paper psp-inlay',sheet.width,sheet.height,x,0,-d/2+.14,[0,0,1],'','tray'),'cover'],
+      ];
+      for (const [panel,region] of panels) {
+        panel.dataset.inlayPanel=region;panel.dataset.image='loading';
+        panel.style.visibility='hidden';panel.style.pointerEvents='none';
+      }
+      const image=document.createElement('img');
+      image.alt='';image.draggable=false;image.decoding='async';image.fetchPriority='low';image.loading='eager';image.style.display='none';
+      image.onload=()=>{
+        if(!isCurrent())return;
+        const axis=image.naturalWidth>=image.naturalHeight?'x':'y';
+        const regions=atlas.wrapRegions(sheet,axis);
+        for(const [panel,region] of panels) {
+          Object.assign(panel.style,{backgroundImage:`url(${JSON.stringify(image.src)})`,backgroundSize:regions[region].size,
+            backgroundPosition:regions[region].position,backgroundRepeat:'no-repeat',visibility:''});
+          panel.dataset.image='loaded';
+        }
+        schedule();
+      };
+      image.onerror=()=>{
+        if(!isCurrent())return;
+        panels.forEach(([panel])=>{panel.dataset.image='missing';panel.style.visibility='hidden';});
+        image.removeAttribute('src');schedule();
+      };
+      trackTexture(image);panels[0][0].appendChild(image);image.src=imageSource(inlay.path);
     }
     let lidRecessShapes='';
     if(variant==='threeDs') {
@@ -645,7 +681,7 @@
     }
     function setManual(manual) {
       manualFaces.forEach(removeFace); manualFaces = []; manualLift = 0;
-      if ((!ps2 && !jewel) || !manual) return null;
+      if ((!ps2 && !jewel && variant !== 'psp') || !manual) return null;
       const size = globalThis.OpenCabinetManualPDF.dimensions(profile, manual);
       const { width, height, thickness, x, y, sheets } = size;
       if(jewel) {

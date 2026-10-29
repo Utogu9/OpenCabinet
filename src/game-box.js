@@ -159,7 +159,7 @@
     let parts = null, previews = [], lastLightAt = -Infinity, lastLightKey = "", referenceDiameter = 1;
     let lightGroups=new Map(), lightPass=0;
     let opened = 0, openTarget = false, opening = null, interiorBuilt = false, layoutOpening = null;
-    let interior = null, manualData = null, manualTask = null, manualGeneration = 0;
+    let interior = null, paperLayout = null, manualData = null, manualTask = null, manualGeneration = 0;
     let manualResolved = false;
     let rejectedFullCover = false;
     let fullPreviewUrl = null, fullPreviewController = null;
@@ -422,7 +422,7 @@
       if (interiorBuilt || !dvd?.canOpen(profile)) return;
       interiorBuilt = true;
       const token = revision;
-      interior = dvd.build({ profile, game, images, imageSource, schedule,
+      interior = dvd.build({ profile, game, images, paperLayout, imageSource, schedule,
         trackTexture: image => textures.push(image),
         isCurrent: () => !disposed && token === revision,
         addFace(face) {
@@ -520,6 +520,7 @@
       const fullCover = !rejectedFullCover && atlas?.wrapRegions && images.find(image => image.kind === "box_full" && image.path);
       if (fullCover) model.dataset.fullCover = "loading"; else delete model.dataset.fullCover;
       const paperSize = { width: topSpine ? w-paperMargin*2 : w-paperLip, height: h-paperMargin*2-paperHeader, depth:d };
+      paperLayout = paperSize;
       const wrapSurfaces = [];
       const applyAtlas = (url, width, height, state) => {
         const axis = width >= height ? "x" : "y";

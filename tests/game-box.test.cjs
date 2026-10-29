@@ -725,6 +725,62 @@ test('PS2 opens with a solid PDF booklet under its retaining tongues and keeps i
   app.viewer.clear(); assert.equal(data.disposed(), 1); assert.equal(app.elements().length, 0);
 });
 
+test('The CSS PSP viewer prefetches its manual, keeps the exterior cover and opens the existing reader', async () => {
+  const data=booklet(14,.51),activated=[];let loads=0;
+  const app=scene({loadManual:async()=>{loads++;return data;},onManualActivate:info=>{activated.push(info);return true;}});
+  const psp={...game,platform:'Sony PSP'};
+  app.viewer.update(psp,artwork);app.flush();await turn();app.flush();
+  assert.equal(loads,1);assert.equal(app.model().dataset.manual,'ready');
+  assert.equal(app.model().dataset.manualCover,undefined,'the PSP manual is inside and never replaces the exterior cover');
+  assert.equal(app.model().dataset.interior,undefined,'closed boxes only prefetch the PDF cover');
+  app.viewer.setOpen(true,false);app.flush();
+  const manual=app.elements().find(element=>element.className.endsWith('manual-front'));
+  assert.ok(manual);assert.equal(manual.children[0],data.front);assert.equal(manual.dataset.casePart,'lid');
+  const scale=Number(app.model().style['--box-scale']);
+  assert.ok(Math.abs(parseFloat(manual.style.height)/scale-162)<1e-9);
+  assert.ok(Math.abs(parseFloat(manual.style.width)/parseFloat(manual.style.height)-.51)<1e-9);
+  assert.equal(app.viewer.readManual(),true);assert.equal(activated[0].manual,data);assert.equal(activated[0].origin,manual);
+  app.viewer.returnManual();app.viewer.setOpen(false,false);app.flush();assert.equal(manual.style.display,'none');
+  app.viewer.setOpen(true,false);app.flush();assert.equal(loads,1);assert.equal(manual.style.display,'');
+  app.viewer.dispose();assert.equal(data.disposed(),1);
+});
+
+test('CSS PSP inlays cover both inside panels and the spine with one image and independent artwork',()=>{
+  for(const exterior of [artwork,[]])for(const [width,height] of [[2400,1800],[1800,2400]]) {
+    const app=scene(),psp={...game,platform:'PSP'};
+    app.viewer.update(psp,[...exterior,{kind:'inlay',path:'inside.png'}]);app.flush();
+    assert.equal(app.elements().some(element=>element.dataset.inlayPanel),false,'inlays are loaded only when building the open interior');
+    app.viewer.setOpen(true,false);app.flush();
+    const panels=app.elements().filter(element=>element.dataset.inlayPanel)
+      .sort((a,b)=>['lid','spine','tray'].indexOf(a.dataset.casePart)-['lid','spine','tray'].indexOf(b.dataset.casePart));
+    assert.equal(panels.length,3);assert.deepEqual(panels.map(element=>element.dataset.casePart),['lid','spine','tray']);
+    const images=panels.flatMap(panel=>panel.children).filter(element=>element.tag==='img');
+    assert.equal(images.length,1);const image=images[0];assert.equal(image.src,'asset:inside.png');
+    image.naturalWidth=width;image.naturalHeight=height;image.onload();app.flush();
+    assert.ok(panels.every(panel=>panel.dataset.image==='loaded'&&panel.style.visibility===''));
+    const positions=panels.map(panel=>panel.style.backgroundPosition);
+    assert.deepEqual(positions,width>height?['0% 0%','50% 0%','100% 0%']:['0% 0%','0% 50%','0% 100%']);
+    assert.ok(panels.every(panel=>panel.style.backgroundImage==='url("asset:inside.png")'));
+    assert.ok(panels.every(panel=>!panel.style.transform.includes('scaleX(-1)')),'inside text is not mirrored');
+    app.viewer.setOpen(false,false);app.flush();assert.ok(panels.every(panel=>panel.style.display==='none'));
+    app.viewer.setOpen(true,false);app.flush();assert.equal(app.elements().filter(element=>element.dataset.inlayPanel).length,3);
+    app.viewer.dispose();assert.equal(image.src,'');assert.equal(image.onload,null);
+  }
+});
+
+test('A missing or stale CSS PSP inlay keeps the plain interior and cannot repaint another game',()=>{
+  const app=scene();app.viewer.update({...game,platform:'PSP'},[{kind:'inlay',path:'missing.png'}]);
+  app.viewer.setOpen(true,false);app.flush();
+  const panels=app.elements().filter(element=>element.dataset.inlayPanel),image=panels.flatMap(panel=>panel.children).find(element=>element.tag==='img');
+  const reveal=image.onload;image.onerror();app.flush();
+  assert.ok(panels.every(panel=>panel.dataset.image==='missing'&&panel.style.visibility==='hidden'));
+  assert.equal(app.viewer.isOpen,true);
+  app.viewer.update({...game,id:2,platform:'PSP'},artwork);app.viewer.setOpen(true,false);app.flush();
+  image.naturalWidth=2400;image.naturalHeight=1800;reveal();app.flush();
+  assert.ok(panels.every(panel=>panel.dataset.image==='missing'));
+  assert.equal(app.elements().some(element=>element.dataset.inlayPanel),false);app.viewer.dispose();
+});
+
 test('A pending booklet from a previously selected game is cancelled and never attaches to another case', async () => {
   let finish, signal; const old = booklet();
   const app = scene({ loadManual: async (_, value) => { signal = value; return new Promise(done => { finish = done; }); } });
