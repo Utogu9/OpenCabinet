@@ -3,6 +3,12 @@
 Open **Options → Preferences → Themes** to activate a bundled theme, import a
 shared theme, or create your own. Editing a bundled theme creates a copy.
 
+**Spotlight** places details on the left and filters on the right, with the title
+and Play button above the media viewer. **Gallery** starts with the game list,
+then a compact details panel with media first, and puts filters on the far right.
+It hides secondary information to give the artwork more space. Both are editable
+examples alongside OpenCabinet, Paper and Forest.
+
 The editor opens its own navigation tab. Colors and layout are previewed live;
 **Save and use theme** stores the changes. **Cancel editing**, closing Preferences,
 or pressing Escape restores the active saved theme.

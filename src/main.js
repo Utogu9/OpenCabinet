@@ -212,7 +212,12 @@ function setupPreferences() {
   let reading = null;
   let backupsPanel = null, preferenceCategory = "startup";
   const themesPanel = appThemes;
-  document.getElementById("preferences-tab-theme-editor").classList.add("hidden");
+  function showThemeEditorTab(visible) {
+    for (const id of ["preferences-theme-editor-row", "preferences-tab-theme-editor"]) {
+      document.getElementById(id).classList.toggle("hidden", !visible);
+    }
+  }
+  showThemeEditorTab(false);
   function updateSaveVisibility() { save.classList.toggle("hidden", ["backups", "themes", "theme-editor"].includes(preferenceCategory)); }
   const tabs = ["startup", "library", "themes", "theme-editor", "metadata", "data", "backups"].map(name => ({
     name, button: document.getElementById(`preferences-tab-${name}`),
@@ -222,6 +227,7 @@ function setupPreferences() {
     if (!internal && (backupsPanel?.busy || themesPanel?.busy)) return;
     preferenceCategory = name; updateSaveVisibility();
     document.getElementById("preferences-tab-data").classList.toggle("has-active-subcategory", name === "backups");
+    document.getElementById("preferences-tab-themes").classList.toggle("has-active-subcategory", name === "theme-editor");
     if (name === "backups") void backupsPanel?.open();
     document.getElementById("preferences-panels").scrollTop = 0;
     tabs.forEach(tab => {
@@ -291,8 +297,8 @@ function setupPreferences() {
   }
   themesPanel?.attachPreferences({
     onBusyChange: update,
-    openEditor: () => { document.getElementById("preferences-tab-theme-editor").classList.remove("hidden"); showCategory("theme-editor"); },
-    closeEditor: () => { document.getElementById("preferences-tab-theme-editor").classList.add("hidden"); if (preferenceCategory === "theme-editor") showCategory("themes", false, true); },
+    openEditor: () => { showThemeEditorTab(true); showCategory("theme-editor"); },
+    closeEditor: () => { showThemeEditorTab(false); if (preferenceCategory === "theme-editor") showCategory("themes", false, true); },
   });
   if (globalThis.OpenCabinetBackups) backupsPanel = globalThis.OpenCabinetBackups.setup({ document, invoke,
     Channel: window.__TAURI__.core.Channel, getPreferences: () => preferences, onBusyChange: update,

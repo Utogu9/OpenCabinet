@@ -23,6 +23,14 @@
   const builtins = [defaults,
     {...copy(defaults),id:'builtin-light',name:'Paper',colors:{...defaults.colors,background:'#eef1f5',surface:'#ffffff',hover:'#e1e7ef',dialog:'#ffffff',sidebar:'#f7f8fa',titlebar:'#e7ebf0',text:'#192332',muted:'#536174',border:'#ced5df',accent:'#2463c5',accentHover:'#194e9e'}},
     {...copy(defaults),id:'builtin-forest',name:'Forest',colors:{...defaults.colors,background:'#101a18',surface:'#192924',hover:'#254036',dialog:'#14221e',sidebar:'#12201b',titlebar:'#0c1511',accent:'#2ca87a',accentHover:'#21805d',text:'#edf6ef',muted:'#a1b6a9',border:'#30483b'}},
+    {...copy(defaults),id:'builtin-spotlight',name:'Spotlight',
+      colors:{...defaults.colors,background:'#171410',surface:'#231f1a',hover:'#343027',dialog:'#1d1914',sidebar:'#1d1914',titlebar:'#110f0c',accent:'#d9a24b',accentHover:'#b98536',text:'#faf2e3',muted:'#baa98e',border:'#41392d'},
+      layout:{...copy(defaults.layout),panels:['details','catalog','library'],libraryWidth:200,detailsWidth:440,coverSize:180,gap:24,
+        sections:['identity','play','media','summary','information','description','logo'].map(id=>({id,visible:id!=='logo'}))}},
+    {...copy(defaults),id:'builtin-gallery',name:'Gallery',
+      colors:{...defaults.colors,background:'#10151e',surface:'#182231',hover:'#243249',dialog:'#141e2b',sidebar:'#121b27',titlebar:'#0b1119',accent:'#54c5d0',accentHover:'#389ca5',text:'#eef5fb',muted:'#a2b4c6',border:'#2a3a4f'},
+      layout:{...copy(defaults.layout),panels:['catalog','details','library'],libraryWidth:200,detailsWidth:360,coverSize:210,gap:28,radius:12,
+        sections:['media','identity','play','summary','logo','description','information'].map(id=>({id,visible:!['logo','information','description'].includes(id)})),hiddenFields:['developer','publisher']}},
   ];
   const invalid = () => new Error(t('themes.invalid'));
   function keys(value, names) { return value && typeof value==='object' && !Array.isArray(value)

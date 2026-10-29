@@ -180,7 +180,7 @@ body {
 .menu-title:hover,
 .menu-item-dropdown.active .menu-title {
   color: var(--text-main);
-  background-color: rgba(255, 255, 255, 0.08);
+  background-color: var(--card-hover-bg);
 }
 
 .dropdown-menu {
@@ -188,7 +188,7 @@ body {
   top: 100%;
   left: 0;
   margin-top: 2px;
-  background-color: #181c24;
+  background-color: var(--card-bg);
   border: 1px solid var(--border-color);
   border-radius: 6px;
   box-shadow: 0 10px 25px rgba(0, 0, 0, 0.6);
@@ -220,7 +220,7 @@ body {
   outline: 2px solid var(--accent-color);
   outline-offset: -2px;
   background-color: var(--accent-color);
-  color: #fff;
+  color: var(--button-text);
 }
 
 .game-card:focus-visible {
@@ -249,7 +249,7 @@ body {
 
 .dropdown-item:hover {
   background-color: var(--accent-color);
-  color: #ffffff;
+  color: var(--button-text);
 }
 
 /* Biblioteca y filtros de consolas */
@@ -2183,7 +2183,6 @@ button:disabled {
 .theme-preview-library, .theme-preview-details { flex: 0 0 24%; background: var(--sidebar-bg); }
 .theme-preview-catalog { flex: 1; background: var(--card-bg); border: 1px dashed var(--preview-accent); }
 .theme-preview-details small { font-size: .58rem; padding: 2px; background: var(--card-bg); border-radius: 2px; }
-#preferences-tab-theme-editor { margin-left: 10px; font-size: .8rem; }
 @media (max-width: 650px) {
   .theme-editor-identity, .theme-colors, .theme-sizes, .theme-detail-fields { grid-template-columns: minmax(0, 1fr); }
   .theme-swatches { display: none; }

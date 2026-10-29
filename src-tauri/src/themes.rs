@@ -10,7 +10,7 @@ use std::{
 
 type Result<T> = std::result::Result<T, String>;
 static LOCK: Mutex<()> = Mutex::new(());
-const BUILTINS: &[&str] = &["builtin-dark", "builtin-light", "builtin-forest"];
+const BUILTINS: &[&str] = &["builtin-dark", "builtin-light", "builtin-forest", "builtin-spotlight", "builtin-gallery"];
 const COLORS: &[&str] = &[
     "background",
     "surface",
