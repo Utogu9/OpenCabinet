@@ -10,8 +10,8 @@ under **Creative Commons Zero (CC0 / Public Domain)**.
 
 OpenCabinet's conversion separates the lid, rear shell, booklet and disc,
 defines their hinge and artwork coordinates, and removes duplicate geometry.
-These prepared files are distributed with the application; the original OBJ
-authoring files in `_modelos/Dreamcast` are optional.
+These prepared files are distributed with the application. Builds and tests
+use them directly and do not load or convert the original authoring files.
 
 `ribs-height.svg` is generated from OpenCabinet's original ridge pattern in
 `src/assets/textures/cd-case-ribs.svg`, covered by the project's MIT license.

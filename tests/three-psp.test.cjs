@@ -5,7 +5,12 @@ test('PSP geometry preserves its source record, rounded UMD contours and two art
   if(!fs.existsSync(path.join(directory,'case.glb'))){t.skip('The optional PSP model is not available.');return;}
   const manifest=JSON.parse(fs.readFileSync(path.join(directory,'case.json'),'utf8'));
   assert.equal(manifest.model,'psp');assert.equal(manifest.animations.length,2);
-  assert.ok(Object.keys(manifest.sources).length>=6);
+  const sources=Object.entries(manifest.sources);
+  assert.ok(sources.length>0,'the model records at least one authoring source');
+  for(const [file,digest] of sources) {
+    assert.ok(file.trim(),'each source has a filename');
+    assert.match(digest,/^[a-f0-9]{64}$/i,'each source retains its SHA-256 fingerprint');
+  }
   for(const part of manifest.rounding)assert.ok(part.after>part.before,'curves gain actual vertices rather than only smoother normals');
   const {GLTFLoader}=await import('three/addons/loaders/GLTFLoader.js');
   const THREE=await import('three'),bytes=fs.readFileSync(path.join(directory,'case.glb'));

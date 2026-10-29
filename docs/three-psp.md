@@ -5,15 +5,15 @@ archivos; si no están disponibles, PSP utiliza su visor CSS. La selección del
 backend es compartida por el lateral, la pantalla completa y la configuración
 de cajas. Los recursos PSP se mantienen locales mientras se verifica su licencia.
 
-El modelo se adaptó de las piezas de caja y UMD aportadas en `_modelos/PSP`.
-La versión actual se exporta de `Untitled.blend`, con las correcciones manuales
-de su geometría. La exportación conserva las piezas, las UV y ambas articulaciones,
-sin repetir el procesamiento geométrico de los OBJ originales.
-El manifiesto conserva la referencia de origen y las firmas SHA-256 de los OBJ
-y del archivo Blender utilizado.
+El modelo preparado contiene las piezas de caja y UMD con las correcciones
+de geometría, las UV y ambas articulaciones. La app y su preparación utilizan
+únicamente los archivos de `src/models/psp`, sin consultar archivos de autoría
+ni convertir geometría durante el inicio o la compilación.
+El manifiesto conserva la referencia de origen y las firmas SHA-256 de los
+archivos de autoría utilizados. Una exportación desde un único archivo Blender
+no necesita enumerar los OBJ de la conversión anterior.
 Se eliminan las líneas flotantes junto al lomo y los separadores añadidos bajo
-ellas, ya que no forman parte de la caja real. La copia editable se guarda como
-`_modelos/PSP/PSP-no-dividers.blend`, conservando `Untitled.blend` como original.
+ellas, ya que no forman parte de la caja real.
 Las copias geométricas repetidas de carcasa, film y ventana UMD se omiten.
 La apertura usa dos articulaciones de 90 grados; el UMD permanece en la base.
 La orientación del modelo y las UV coinciden con las imágenes habituales de

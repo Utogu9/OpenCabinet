@@ -4,7 +4,10 @@ const fs=require('node:fs');
 const path=require('node:path');
 const vm=require('node:vm');
 const tick=()=>new Promise(resolve=>setImmediate(resolve));
-const hasOriginals=directory=>[0,1,2,3,4,5,6,7,8,11].every(id=>fs.existsSync(path.join(directory,`model_${id}.obj`)));
+function dreamcastModel() {
+  const directory=path.join(__dirname,'../src/models/dreamcast');
+  return {manifest:JSON.parse(fs.readFileSync(path.join(directory,'case.json'),'utf8')),binary:fs.readFileSync(path.join(directory,'case.bin'))};
+}
 function router(load,{switchModel=false,pspModel=false}={}) {
   const context=vm.createContext({console,OpenCabinetLocalModels:{switch:switchModel,psp:pspModel}});
   vm.runInContext(fs.readFileSync(path.join(__dirname,'../src/three-box-router.js'),'utf8'),context);
@@ -80,10 +83,10 @@ test('Full covers retain contiguous UV windows; separate back and spine images e
   assert.equal(chooseArtwork([{kind:'cover',path:'front'},{kind:'box_full',path:'wrap'}]).cover,'wrap');
 });
 test('The bundled geometry has one shell, a movable lid and separate UV surfaces for both spines',async()=>{
-  const {sourceIds}=await import('../scripts/prepare-three.mjs');
-  const directory=path.join(__dirname,'../src/models/dreamcast');
-  const manifest=JSON.parse(fs.readFileSync(path.join(directory,'case.json'),'utf8')),binary=fs.readFileSync(path.join(directory,'case.bin'));
-  assert.equal(sourceIds.includes(9),false);assert.equal(sourceIds.includes(10),false);assert.equal(sourceIds.includes(12),false);
+  const {manifest,binary}=dreamcastModel();
+  const shells=manifest.meshes.filter(mesh=>mesh.material==='acrylic');
+  assert.equal(shells.length,2,'one shell per panel, without duplicate assemblies');
+  assert.deepEqual(shells.map(mesh=>mesh.part).sort(),['base','lid']);
   const back=manifest.meshes.find(mesh=>mesh.material==='back_cover'),spines=['spine_left','spine_right'].map(kind=>manifest.meshes.find(mesh=>mesh.material===kind));
   assert.ok(back);assert.ok(spines.every(Boolean));assert.ok(manifest.meshes.some(mesh=>mesh.part==='lid'&&mesh.material==='acrylic'));
   for(const spec of [back,...spines]){
@@ -129,18 +132,19 @@ test('Dreamcast selects white inserts only for a distinct white front-cover band
   assert.equal(dreamcastInsertTheme([]),'black');
 });
 
-test('The molded acrylic rails retain their original texture coordinates and stay attached to the lid',async t=>{
-  const directory=path.join(__dirname,'../_modelos/Dreamcast');if(!hasOriginals(directory)){t.skip('Optional original OBJ authoring files are not available.');return;}
-  const {convertDreamcast}=await import('../scripts/prepare-three.mjs');
-  const {OBJLoader}=await import('three/addons/loaders/OBJLoader.js');
-  const original=new OBJLoader().parse(fs.readFileSync(path.join(directory,'model_11.obj'),'utf8')).children[0].geometry;
-  const uv=original.attributes.uv,known=new Set();
-  for(let i=0;i<uv.count;i++)known.add(`${uv.getX(i)},${uv.getY(i)}`);
-  const {manifest,binary}=convertDreamcast(directory),rails=manifest.meshes.filter(mesh=>mesh.material==='ribs');
+test('The bundled acrylic rails retain complete texture coordinates and stay attached to the lid',()=>{
+  const {manifest,binary}=dreamcastModel(),rails=manifest.meshes.filter(mesh=>mesh.material==='ribs');
   assert.equal(rails.length,1);assert.equal(rails[0].part,'lid');
   const vertices=new Float32Array(binary.buffer,binary.byteOffset+rails[0].vertexOffset,rails[0].vertexCount*8);
-  for(let i=6;i<vertices.length;i+=8)assert.ok(known.has(`${vertices[i]},${vertices[i+1]}`),'the original stripe mapping is preserved, without rescaling UVs');
-  original.dispose();
+  const u=[],v=[];
+  for(let i=6;i<vertices.length;i+=8) {
+    assert.ok(Number.isFinite(vertices[i])&&Number.isFinite(vertices[i+1]),'every rail vertex has usable UV coordinates');
+    u.push(vertices[i]);v.push(vertices[i+1]);
+  }
+  for(const axis of [u,v]) {
+    assert.ok(Math.abs(Math.min(...axis))<.001&&Math.abs(Math.max(...axis)-1)<.001,'the ridge texture covers its complete UV window');
+    assert.ok(new Set(axis).size>2,'the molded rails preserve their intermediate texture coordinates');
+  }
 });
 
 test('The original OpenCabinet ridge texture has identical line spacing across the tile seam',async t=>{
@@ -190,29 +194,22 @@ test('Pointer movement follows the mouse in Three.js world space and the lid ope
   assert.ok(open.x<hinge.x);assert.ok(Math.abs(open.z-(2*hinge.z-edge.z))<1e-10);
 });
 
-test('The supplied shell keeps complete hinge arms on the lid and the fixed column on the rear shell',async t=>{
-  const directory=path.join(__dirname,'../_modelos/Dreamcast');if(!hasOriginals(directory)){t.skip('Optional original OBJ authoring files are not available.');return;}
-  const {shellParts,convertDreamcast,hinge}=await import('../scripts/prepare-three.mjs');
-  const {OBJLoader}=await import('three/addons/loaders/OBJLoader.js');
+test('The bundled shell keeps complete hinge arms on the lid and the fixed column on the rear shell',async()=>{
   const {Vector3}=await import('three');
-  const source=fs.readFileSync(path.join(directory,'model_7.obj'),'utf8');
-  const geometry=new OBJLoader().parse(source).children[0].geometry;
-  const assignments=shellParts(geometry,source);
-  const faces=source.split(/\r?\n/).filter(line=>line.startsWith('f ')).map(line=>line.trim().split(/\s+/).slice(1).map(value=>Number(value.split('/')[0])-1));
+  const {manifest,binary}=dreamcastModel();
   let arms=0,column=0;
-  for(const [face,part] of assignments) {
-    const indices=faces[face];
-    assert.ok(indices.every(index=>part==='base'?index<14625:index>=14625&&index<20989));
-    for(let j=0;j<3;j++){
-      const x=geometry.attributes.position.getX(face*3+j),y=geometry.attributes.position.getY(face*3+j);
-      if(part==='lid'&&x< -4.5&&y> -3.6)arms++;
-      if(part==='base'&&x< -4.5)column++;
+  for(const mesh of manifest.meshes.filter(mesh=>mesh.material==='acrylic')) {
+    const vertices=new Float32Array(binary.buffer,binary.byteOffset+mesh.vertexOffset,mesh.vertexCount*8);
+    for(let i=0;i<vertices.length;i+=8){
+      const x=vertices[i],y=vertices[i+1];
+      if(mesh.part==='lid'&&x<manifest.hinge[0]&&Math.abs(y)>50)arms++;
+      if(mesh.part==='base'&&x<manifest.hinge[0]&&Math.abs(y)<50)column++;
     }
   }
   assert.ok(arms>30,'both ears/arms remain on the movable lid near the real pins');
   assert.ok(column>30,'the fixed acrylic column remains part of the back');
-  assert.ok(Math.abs(hinge[0]+4.6584623)<1e-6);assert.ok(Math.abs(hinge[1]+3.3674923)<1e-6);
-  const {manifest,binary}=convertDreamcast(directory);
+  assert.ok(manifest.hinge.every(Number.isFinite));
+  assert.ok(manifest.hinge[0]<-60&&manifest.hinge[2]>0&&manifest.hinge[2]<3,'the pivot remains at the rear hinge pins');
   const cover=manifest.meshes.find(mesh=>mesh.material==='cover'),lid=manifest.meshes.find(mesh=>mesh.name==='7:lid:acrylic');
   const vertices=new Float32Array(binary.buffer,binary.byteOffset+cover.vertexOffset,cover.vertexCount*8);
   const depths=[];for(let i=2;i<vertices.length;i+=8)depths.push(vertices[i]);
@@ -226,5 +223,4 @@ test('The supplied shell keeps complete hinge arms on the lid and the fixed colu
     assert.ok(pin.distanceTo(pivot)<1e-10);
   }
   assert.equal(manifest.meshes.find(mesh=>mesh.material==='insert').part,'base');
-  geometry.dispose();
 });

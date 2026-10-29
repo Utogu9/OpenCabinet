@@ -25,16 +25,15 @@ test('A fresh distribution prepares Three.js without authoring files and preserv
   const {prepare}=await import('../scripts/prepare-three.mjs'),app=distribution(t);
   const original=assets.map(app.digest);prepare(app.options);
   assert.deepEqual(assets.map(app.digest),original);
-  assert.equal(fs.existsSync(path.join(app.projectRoot,'_modelos')),false);
-  assert.equal(fs.existsSync(path.join(app.model,'.source-hash')),false);
+  assert.deepEqual(fs.readdirSync(app.projectRoot),['src'],'preparation requires only distributed runtime assets');
   assert.match(fs.readFileSync(path.join(app.projectRoot,'src/local-models.js'),'utf8'),/"switch":false/);
   assert.match(fs.readFileSync(path.join(app.projectRoot,'src/local-models.js'),'utf8'),/"psp":false/);
   const vendor=path.join(app.projectRoot,'src/vendor/three');
   assert.ok(fs.statSync(path.join(vendor,'three.module.js')).size>0);
   assert.match(fs.readFileSync(path.join(vendor,'RoomEnvironment.js'),'utf8'),/from '\.\/three\.module\.js'/);
   assert.equal(fs.readFileSync(path.join(vendor,'LICENSE'),'utf8'),fs.readFileSync(path.join(root,'node_modules/three/LICENSE'),'utf8'));
-  // Leaving an empty source folder after archiving the OBJ files is also valid.
-  fs.mkdirSync(path.join(app.projectRoot,'_modelos/Dreamcast'),{recursive:true});prepare(app.options);
+  // Repeated preparation must never rebuild or overwrite the bundled geometry.
+  prepare(app.options);
   assert.deepEqual(assets.map(app.digest),original);
 });
 

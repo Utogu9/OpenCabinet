@@ -13,11 +13,9 @@ de esa carpeta y en `THIRD_PARTY_NOTICES.md`.
 
 `npm run prepare:three` prepara la dependencia Three.js para funcionar sin
 conexión y valida los archivos del modelo incluidos en el repositorio. También
-se ejecuta antes de iniciar o compilar Tauri. No requiere `_modelos`: si están
-disponibles todos los OBJ originales en `_modelos/Dreamcast`, puede regenerar
-la geometría; si faltan o la carpeta está vacía, utiliza la versión distribuida.
-Los OBJ opcionales, la firma `.source-hash` y la antigua textura PNG de estrías
-no se versionan. Una distribución incompleta del modelo detiene la preparación
+se ejecuta antes de iniciar o compilar Tauri. Utiliza únicamente los recursos
+preparados de `src/models/dreamcast`, sin consultar archivos de autoría ni
+regenerar la geometría. Una distribución incompleta del modelo detiene la preparación
 con un error en lugar de producir una aplicación sin sus recursos.
 
 Los insertos de reemplazo `insert.webp` (negro) e `insert2.webp`
@@ -69,8 +67,8 @@ ilegible y compara puntos interiores para descartar una imagen totalmente
 blanca. Analiza primero la miniatura y luego la portada final;
 en cubiertas completas sólo analiza la zona frontal. Si el manual sustituye la
 portada, analiza su primera página. Un inlay válido siempre tiene prioridad y
-conserva sus imágenes originales en el interior. Los JPG de `_modelos` sirven
-únicamente como referencias de prueba, no se asignan a la biblioteca.
+conserva sus imágenes originales en el interior. Las pruebas utilizan los
+recursos distribuidos y no requieren escaneos externos de referencia.
 
 Se mantienen apertura, giro libre, bloqueos de ejes, rueda, teclado, zoom,
 delante/detrás y pantalla completa. Un PDF disponible aporta la portada del
