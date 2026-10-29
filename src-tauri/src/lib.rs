@@ -23,6 +23,7 @@ mod steam;
 mod epic;
 mod media_library;
 mod manuals;
+mod cbz;
 mod discs;
 mod game_execution;
 mod emulator_defaults;
@@ -2526,6 +2527,8 @@ pub fn run() {
             select_game_images,
             manuals::select_game_manuals,
             manuals::get_game_manuals,
+            cbz::get_cbz_manifest,
+            cbz::read_cbz_page,
             manuals::open_game_folder,
             game_execution::open_game_files,
             game_execution::open_game_emulator,

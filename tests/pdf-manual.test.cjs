@@ -118,13 +118,37 @@ test('PS2 booklet dimensions preserve page proportions and fit the inside of the
 test('PSP manuals are supported and fill the lid height while preserving narrow page proportions', () => {
   const {api}=fixture();
   for(const platform of ['PSP','Sony PSP','PlayStation Portable','Sony PlayStation Portable'])assert.equal(api.supportsGame({platform}),true);
-  assert.equal(api.supportsGame({platform:'PS3'}),false);
+  assert.equal(api.supportsGame({platform:'PS4'}),false);
   const profile={id:'psp',width:99,height:168};
   const narrow=api.dimensions(profile,{aspectRatio:.51,pageCount:14});
   assert.equal(narrow.height,162);assert.ok(Math.abs(narrow.width/narrow.height-.51)<1e-9);
   assert.ok(Math.abs(narrow.x+narrow.width/2-(profile.width/2-3))<1e-9);
   const wide=api.dimensions(profile,{aspectRatio:1.2,pageCount:40});
   assert.ok(wide.width<=93);assert.ok(wide.height<=162);assert.ok(Math.abs(wide.width/wide.height-1.2)<1e-9);
+});
+
+test('DVD, DS, GameCube and PS3 manuals preserve their page proportions and respect lid clearances',()=>{
+  const {api}=fixture();
+  for(const platform of ['Xbox','Microsoft Xbox','Xbox 360','Microsoft Xbox 360','DS','Nintendo DS','GameCube','Nintendo GameCube','Wii','Nintendo Wii','Wii U','Nintendo Wii U','PS3','Sony PlayStation 3'])assert.equal(api.supportsGame({platform}),true,platform);
+  for(const platform of ['Xbox One','Xbox Series X','Nintendo Switch','Nintendo 3DS','PS5','Sega Genesis'])assert.equal(api.supportsGame({platform}),false,platform);
+  for(const profile of [
+    {id:'dvd',variant:'xbox',width:135,height:190},
+    {id:'dvd',variant:'xbox360',width:135,height:190},
+    {id:'dvd',variant:'wii',width:135,height:190},
+    {id:'dvd',variant:'wiiu',width:135,height:190},
+    {id:'dvd',variant:'gamecube',width:135,height:190},
+    {id:'gameCubeJapan',variant:'gamecube',width:107,height:149},
+    {id:'ds',variant:'ds',width:135,height:122},
+    {id:'dsPal',variant:'ds',width:135,height:122},
+    {id:'bluray',variant:'ps3',width:135,height:171,headerHeight:14},
+  ])for(const ratio of [.45,.65,1.03,1.4]){
+    const size=api.dimensions(profile,{aspectRatio:ratio,pageCount:40}),header=profile.headerHeight||0;
+    assert.ok(Math.abs(size.width/size.height-ratio)<1e-9);
+    assert.ok(size.y-size.height/2>=-profile.height/2+header+3-1e-9,'paper stays below the header');
+    assert.ok(size.y+size.height/2<=profile.height/2-3+1e-9,'paper stays inside the lower rim');
+    assert.ok(size.x-size.width/2>=-profile.width/2+3-1e-9);
+    if(['ds','gamecube'].includes(profile.variant))assert.ok(size.x+size.width/2<profile.width/2-10.375,'paper stops before the security divider');
+  }
 });
 
 test('Box previews request only page 1 even for long PDFs, and release PDF resources before returning', async () => {
@@ -137,6 +161,23 @@ test('Box previews request only page 1 even for long PDFs, and release PDF resou
   assert.equal(app.argumentsList[0].isEvalSupported, false);
   assert.match(app.argumentsList[0].wasmUrl, /^http:\/\/tauri.localhost\/vendor\/pdfjs\/wasm\/$/);
   data.dispose(); assert.ok(app.canvases.every(canvas => !canvas.width && !canvas.height));
+});
+
+test('DS splits a square-booklet cover spread without cutting a single square or slightly landscape cover',async()=>{
+  const app=fixture({pages:24,width:1180,height:580}),data=await app.render({platform:'Nintendo DS'});
+  assert.equal(data.platform,'Nintendo DS');
+  assert.equal(data.splitCover,true);assert.ok(Math.abs(data.aspectRatio-59/58)<1e-9);
+  assert.deepEqual(app.requested,[1]);assert.equal(data.front.width,Math.ceil(data.front.height*data.aspectRatio));data.dispose();
+  for(const ratio of [1,1.1,1.25]){
+    const single=fixture({width:ratio*600,height:600}),preview=await single.render({platform:'DS'});
+    assert.equal(preview.splitCover,false);assert.equal(preview.aspectRatio,ratio);preview.dispose();
+  }
+  const explicit=await fixture({width:1180,height:580}).render({platform:'DS',coverMode:'full'});
+  assert.equal(explicit.splitCover,false);explicit.dispose();
+  const reading=await app.open({platform:'Nintendo DS',layout:'auto'});
+  assert.equal(reading.layout,'booklet');assert.equal(reading.pageCount,48);reading.dispose();
+  const single=await fixture({width:660,height:600}).open({platform:'DS',layout:'auto'});
+  assert.equal(single.layout,'original');single.dispose();
 });
 
 test('Background manual previews rasterize only the cropped first page at the cache resolution',async()=>{

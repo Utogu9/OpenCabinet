@@ -431,7 +431,7 @@ fn valid_manifest(manifest: &Manifest) -> Result<()> {
     let mut paths = HashSet::new();
     for manual in &manifest.manuals {
         let path = relative(Path::new(manual))?;
-        if !path.starts_with("manuals/") || !path.to_lowercase().ends_with(".pdf") {
+        if !path.starts_with("manuals/") || !crate::manuals::supported(Path::new(&path)) {
             return Err(crate::i18n::text("msg.0ec2fc74f2").into());
         }
     }
@@ -1260,6 +1260,22 @@ mod tests {
         fs::write(folder.join("manuals/bad.pdf"), b"not a pdf").unwrap();
         fs::write(folder.join("manuals/notes.txt"), b"%PDF-1.7").unwrap();
         assert_eq!(crate::manuals::scan(&folder).unwrap().len(), 3);
+    }
+    #[test]
+    fn cbz_manuals_keep_their_format_and_survive_collection_recovery() {
+        let files=Sandbox::new();let mut conn=db();let rom=files.rom("CBZ game.iso");let id=game(&conn,&rom,None);
+        let incoming=files.0.join("incoming/Manual.CBZ");crate::cbz::tests::fixture(&incoming);
+        let source=incoming.to_string_lossy().into_owned();
+        crate::save_game_with_media(&mut conn,manual_edit(id,vec![source.clone()]),&files.0).unwrap();
+        let (uuid,dir)=collection(&conn,id);let folder=files.0.join(&dir);
+        assert!(folder.join("manuals/Manual.cbz").is_file());assert!(incoming.is_file());
+        let manifest:Manifest=serde_json::from_str(&fs::read_to_string(folder.join("manifest.json")).unwrap()).unwrap();
+        assert_eq!(manifest.manuals,vec!["manuals/Manual.cbz"]);
+        crate::save_game_with_media(&mut conn,manual_edit(id,vec![source]),&files.0).unwrap();assert_eq!(crate::manuals::scan(&folder).unwrap().len(),1);
+        preserve_before_delete(&mut conn,&files.0,&[id as i32]).unwrap();crate::delete_game_records(&mut conn,&[id as i32]).unwrap();
+        let mut fresh=db();assert!(reconcile(&mut fresh,&files.0).unwrap().warnings.is_empty());
+        let report=lookup(&fresh,&files.0,&preview(&rom),"PS2",&[],vec![]).unwrap();
+        assert_eq!(report.rows[0].collections[0].manual_count,1);assert_eq!(report.rows[0].recommended_id.as_deref(),Some(uuid.as_str()));
     }
     #[test]
     fn manuals_only_collections_recover_after_deletion_and_database_loss() {

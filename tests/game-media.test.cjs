@@ -126,6 +126,7 @@ function mediaApp(options = {}) {
         open() {}, close() {}, setBusy() {}, getValue: () => ({base:{color:'#cc0011'},regions:{}}),
       }) } : undefined,
       OpenCabinetManualPDF: options.manualPDF,
+      OpenCabinetManualReader: options.manualReader,
       localStorage: { getItem: key => storage.get(key) || null, setItem: (key,value) => storage.set(key,value) },
       __TAURI__: { core: {
         Channel: class {},
@@ -376,6 +377,17 @@ test("Manual PDFs stay in the editor draft until Save, and Cancel discards the s
   await app.get("game-manual-list").children[1].children[1].trigger("click");
   await app.save();
   assert.deepEqual(app.calls.find(c => c.command === "update_game").args.details.manuals, ["C:/docs/Manual.pdf"]);
+});
+
+test('CBZ manuals open inside the game editor and release their preview when the reader closes',async()=>{
+  let active=false,disposed=0,opened,rendered;const data={dispose(){disposed++;}};
+  const app=mediaApp({handlers:{get_game_manuals:()=>['C:/manuals/Guide.CBZ']},
+    manualPDF:{render:async(path,options)=>{rendered={path,options};return data;}},
+    manualReader:{create({onClose}){return {close(){if(active){active=false;onClose();}},open(manual,options){active=true;opened={manual,options};return true;}};}}});
+  await app.open();await app.get('game-manual-list').children[0].children[1].trigger('click');
+  assert.equal(rendered.path,'C:/manuals/Guide.CBZ');assert.equal(rendered.options.platform,'SNES');assert.equal(opened.manual,data);
+  assert.equal(app.calls.some(call=>call.command==='open_game_manual'),false);assert.equal(active,true);
+  await app.get('btn-cancel-game-edit').trigger('click');assert.equal(active,false);assert.equal(disposed,1);
 });
 
 test("Explorer PDFs refresh without discarding pending manuals and open through the backend", async () => {

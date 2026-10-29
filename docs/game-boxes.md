@@ -488,6 +488,20 @@ pieza de plástico interior; el del disco se conserva. No se reduce la geometrí
 ni la resolución de las texturas. Al completar la iluminación pendiente el visor
 vuelve a quedar inactivo.
 
+Los manuales PDF y CBZ también se muestran dentro de las cajas de Xbox, Xbox 360,
+Nintendo DS (fina y PAL), GameCube (incluida la japonesa), Wii, Wii U y PS3.
+Conservan la proporción de la página y se apoyan bajo las pestañas de la tapa;
+en DS y GameCube dejan libre la franja de seguridad. En PS3 quedan por debajo
+del espacio superior reservado para el logo de Blu-ray.
+Las pestañas se levantan según el espesor del librito y sus soportes se
+extienden hasta la tapa. La vista previa solo rasteriza la primera página;
+cerrar, girar o ampliar la caja reutiliza ese lienzo. Pulsar el manual abre el
+lector existente y cargar otras páginas queda reservado para esa lectura.
+En DS, la detección automática considera que el manual es cuadrado: un escaneo
+de portada y contraportada de aproximadamente 2:1 se divide por la mitad.
+Una portada cuadrada individual se conserva completa. El lector recibe la misma
+plataforma para mantener coherentes el recorte y la detección de hojas plegadas.
+
 La sección de la muesca abierta tiene un escalón rectangular, con un hombro y
 paredes a 90°, en lugar de una rampa diagonal. El hombro mantiene el espesor del
 plástico, incluyendo sus caras interiores.

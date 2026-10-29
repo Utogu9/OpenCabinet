@@ -8,7 +8,7 @@ OpenCabinet es una biblioteca y un lanzador de juegos de escritorio, desarrollad
 con Tauri, Rust, SQLite y HTML/CSS/JavaScript.
 
 Organizá tus juegos, configurá emuladores, descargá imágenes y explorá tu
-colección mediante cajas 3D interactivas y manuales PDF.
+colección mediante cajas 3D interactivas y manuales PDF y CBZ.
 
 El proyecto está en desarrollo activo. Windows es la plataforma actualmente
 soportada y probada; las demás plataformas de escritorio no fueron validadas.
@@ -26,7 +26,7 @@ soportada y probada; las demás plataformas de escritorio no fueron validadas.
 - Descargar los datos e imágenes de juegos y consolas disponibles en
   [OpenCabinet-BDD](https://github.com/Utogu9/OpenCabinet-BDD), o agregar imágenes locales.
 - Girar y ampliar cajas 3D, abrir los modelos compatibles, mostrar la imagen del
-  disco y leer los manuales PDF agregados por el usuario, página por página.
+  disco y leer los manuales PDF y CBZ agregados por el usuario, página por página.
 - Medir tiempo de juego, sesiones y última vez jugado, con estadísticas por
   región y totales de cada consola.
 
@@ -61,7 +61,7 @@ ejecutar `npm.ps1`.
 2. Elegí **Herramientas → Importar juegos**, seleccioná el origen y seguí los
    pasos de revisión. La búsqueda de datos y descarga de imágenes es opcional.
 3. Hacé clic derecho sobre un juego para editar sus datos, imágenes, manuales,
-   discos y opciones de ejecución. Los manuales PDF se agregan desde tus archivos.
+   discos y opciones de ejecución. Los manuales PDF y CBZ se agregan desde tus archivos.
 4. Entrá en **Opciones → Preferencias** para elegir el idioma, la apariencia de
    la biblioteca, la caché y la ubicación de los datos.
 5. Usá **Acerca de → Buscar actualizaciones** para consultar e instalar nuevas versiones.

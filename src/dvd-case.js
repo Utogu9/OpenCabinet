@@ -66,7 +66,7 @@
       if (curve) element.dataset.curve = "x";
       addFace({ element, width, height, normal, part, curve, interior: true,
         lighting: name === "disc" ? "disc" : /manual-cover|psp-inlay/.test(name) ? "paper" : "plastic",
-        transform: s => "translate3d(" + x*s + "px," + y*s + "px," + (z - (name.includes("manual-clip") ? manualLift : 0))*s + "px) " + orientation });
+        transform: s => "translate3d(" + x*s + "px," + y*s + "px," + (z - (/manual-clip|manual-frame|manual-pressure/.test(name) ? manualLift : 0))*s + "px) " + orientation });
       return element;
     };
     const solid = (name, width, height, depth, x, y, z, part = "tray") => {
@@ -142,6 +142,9 @@
     }
     const manualSlots = hookClips ? [-h*0.415,h*0.415].map(y=>({y,
       hole:cutout.map(([u,v])=>[hookStart-u,y+v])})) : [];
+    const manualMounts = hookClips
+      ? manualSlots.map(slot=>({x:hookStart-2.25,y:slot.y,width:4.5,height:10.4}))
+      : (variant==='psp'?[0]:[-h*.34,h*.34]).map(y=>({x:w/2-4.5,y,width:4,height:16}));
     // Interior bases face into the cavity, so they cannot show through the cover.
     const panelWidth=w-(profile.id==='longbox'?12:jewel?14.4:2.4),panelX=jewel?6:0;
     const panelHeight=profile.id==='longbox'?h:h-2.4;
@@ -681,7 +684,7 @@
     }
     function setManual(manual) {
       manualFaces.forEach(removeFace); manualFaces = []; manualLift = 0;
-      if ((!ps2 && !jewel && variant !== 'psp') || !manual) return null;
+      if ((!ps2 && !jewel && !['psp','xbox','xbox360','ds','gamecube','wii','wiiu','ps3'].includes(variant)) || !manual) return null;
       const size = globalThis.OpenCabinetManualPDF.dimensions(profile, manual);
       const { width, height, thickness, x, y, sheets } = size;
       if(jewel) {
@@ -718,16 +721,16 @@
       }
       // Lift the retaining tongues over the paper; extend their feet to the lid.
       if (manualLift > 0) {
-        for (const slot of manualSlots) {
+        for (const mount of manualMounts) {
           // Record these six faces with the booklet so replacement removes them.
           const capture = (name,ww,hh,xx,yy,zz,n,o) => bookFace(name,ww,hh,xx,yy,zz,n,o,"lid");
-          const xx=hookStart-2.25, yy=slot.y, zz=-base-manualLift/2;
-          capture("clip manual-foot",4.5,10.4,xx,yy,zz+manualLift/2,[0,0,1],"");
-          capture("clip manual-foot",4.5,10.4,xx,yy,zz-manualLift/2,[0,0,-1],"rotateY(180deg)");
-          capture("clip manual-foot",manualLift,10.4,xx-2.25,yy,zz,[-1,0,0],"rotateY(-90deg)");
-          capture("clip manual-foot",manualLift,10.4,xx+2.25,yy,zz,[1,0,0],"rotateY(90deg)");
-          capture("clip manual-foot",4.5,manualLift,xx,yy-5.2,zz,[0,-1,0],"rotateX(90deg)");
-          capture("clip manual-foot",4.5,manualLift,xx,yy+5.2,zz,[0,1,0],"rotateX(-90deg)");
+          const {width:ww,height:hh}=mount,xx=mount.x,yy=mount.y,zz=-base-manualLift/2;
+          capture("clip manual-foot",ww,hh,xx,yy,zz+manualLift/2,[0,0,1],"");
+          capture("clip manual-foot",ww,hh,xx,yy,zz-manualLift/2,[0,0,-1],"rotateY(180deg)");
+          capture("clip manual-foot",manualLift,hh,xx-ww/2,yy,zz,[-1,0,0],"rotateY(-90deg)");
+          capture("clip manual-foot",manualLift,hh,xx+ww/2,yy,zz,[1,0,0],"rotateY(90deg)");
+          capture("clip manual-foot",ww,manualLift,xx,yy-hh/2,zz,[0,-1,0],"rotateX(90deg)");
+          capture("clip manual-foot",ww,manualLift,xx,yy+hh/2,zz,[0,1,0],"rotateX(-90deg)");
         }
       }
       return size;

@@ -8,7 +8,7 @@ OpenCabinet is a desktop game library and launcher, built
 with Tauri, Rust, SQLite and HTML/CSS/JavaScript.
 
 Organize your games, configure emulators, download artwork and explore your
-collection through interactive 3D game boxes and PDF manuals.
+collection through interactive 3D game boxes and PDF and CBZ manuals.
 
 The project is in active development. Windows is the current supported and
 tested platform; other desktop platforms have not been validated.
@@ -26,7 +26,7 @@ tested platform; other desktop platforms have not been validated.
 - Download available game and console metadata and artwork from
   [OpenCabinet-BDD](https://github.com/Utogu9/OpenCabinet-BDD), or add local media.
 - Rotate and zoom 3D boxes, open supported case models, display disc artwork and
-  read locally supplied PDF manuals page by page.
+  read locally supplied PDF and CBZ manuals page by page.
 - Track play time, session counts and the last played date, including regional
   statistics and platform totals.
 
@@ -61,7 +61,7 @@ from running.
 2. Choose **Tools → Import games**, select an import source and follow the review
    steps. Metadata and artwork downloads are optional.
 3. Right-click a game to edit its details, images, manuals, discs and execution
-   options. Add PDF manuals from your own files.
+   options. Add PDF and CBZ manuals from your own files.
 4. Open **Options → Preferences** to choose the language, library appearance,
    cache settings and data location.
 5. Use **About → Check for updates** to check for a new version and install it.

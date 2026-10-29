@@ -3,7 +3,10 @@
   const isPS2 = game => /^(sony)?playstation2$|^ps2$/.test(String(game?.platform || '').toLowerCase().replace(/[^a-z0-9]/g, ''));
   const isJewelBooklet = game => /^(sony)?playstation(1)?$|^ps1?$|^(sega)?dreamcast$/.test(String(game?.platform || '').toLowerCase().replace(/[^a-z0-9]/g, ''));
   const isPSP = game => /^(sony)?(playstationportable|psp)$/.test(String(game?.platform || '').toLowerCase().replace(/[^a-z0-9]/g, ''));
-  const supportsGame = game => isPS2(game) || isJewelBooklet(game) || isPSP(game);
+  const supportsGame = game => isPS2(game) || isJewelBooklet(game) || isPSP(game)
+    || /^(microsoft)?xbox(360)?$|^(nintendo)?(ds|dsi|gamecube|wii|wiiu)$|^(sony)?(playstation3|ps3)$/.test(String(game?.platform || '').toLowerCase().replace(/[^a-z0-9]/g, ''));
+  const isCoverSpread = (ratio,platform) => /^(nintendo)?dsi?$/.test(String(platform).toLowerCase().replace(/[^a-z0-9]/g,''))
+    ? ratio>=1.8&&ratio<=2.4 : ratio>=1.05&&ratio<=1.7;
   let library;
   async function pdfLibrary() {
     library ??= import('./vendor/pdfjs/pdf.min.mjs').then(pdf => {
@@ -12,6 +15,7 @@
     }).catch(error => { library = null; throw error; });
     return library;
   }
+  const documentLibrary=(path,loadPDF)=>String(path).toLowerCase().endsWith('.cbz')?globalThis.OpenCabinetManualCBZ.library(path):loadPDF();
   function dimensions(profile, info) {
     if (!Number.isFinite(info.aspectRatio) || info.aspectRatio <= 0 || !Number.isInteger(info.pageCount) || info.pageCount < 1) {
       throw new Error(globalThis.OpenCabinetI18n.t("msg.18885412bf"));
@@ -21,15 +25,19 @@
       return {width,height,sheets,thickness:Math.min(2.5,.26+sheets*.06),x:6,y:0};
     }
     const psp = profile.id === 'psp';
-    const height = Math.min(profile.height - 6, (profile.width - (psp ? 6 : 14)) / info.aspectRatio);
+    const security = ['gamecube','ds','threeDs'].includes(profile.variant) || ['ds','dsPal','threeDs','gameCubeJapan'].includes(profile.id);
+    const header = profile.headerHeight || 0;
+    const rightInset = psp ? 3 : security ? 12.5 : 8;
+    const leftInset = psp || security ? 3 : 6;
+    const height = Math.min(profile.height - header - 6, (profile.width - rightInset - leftInset) / info.aspectRatio);
     const width = height * info.aspectRatio;
     const sheets = Math.ceil(info.pageCount / 2);
     return { width, height, sheets, thickness: Math.min(3.4, 0.26 + sheets * 0.075),
-      x: profile.width / 2 - (psp ? 3 : 8) - width / 2, y: 0 };
+      x: profile.width / 2 - rightInset - width / 2, y: header / 2 };
   }
-  async function render(path, { imageSource = value => value, signal, loadLibrary = pdfLibrary, coverMode = 'auto', maxSide = 2048 } = {}) {
+  async function render(path, { imageSource = value => value, signal, loadLibrary = pdfLibrary, coverMode = 'auto', maxSide = 2048, platform = '' } = {}) {
     const abort = () => { if (signal?.aborted) throw new DOMException(globalThis.OpenCabinetI18n.t("msg.92a2872d72"), 'AbortError'); };
-    abort(); const pdf = await loadLibrary(); abort();
+    abort(); const pdf = await documentLibrary(path,loadLibrary); abort();
     const resource = folder => new URL(`vendor/pdfjs/${folder}/`, document.baseURI).href;
     const task = pdf.getDocument({ url: imageSource(path), isEvalSupported: false, enableXfa: false,
       cMapUrl: resource('cmaps'), cMapPacked: true, standardFontDataUrl: resource('standard_fonts'),
@@ -46,10 +54,10 @@
       const sourceAspectRatio = viewport.width / viewport.height;
       if (!Number.isFinite(sourceAspectRatio) || sourceAspectRatio <= 0) throw new Error(globalThis.OpenCabinetI18n.t("msg.e8600759e8"));
       if (!['auto', 'full', 'left', 'right'].includes(coverMode)) coverMode = 'auto';
-      // A typical PS2 cover spread is landscape, with a portrait page on each
-      // side. Very wide foldouts and square/portrait pages stay intact in Auto.
+      // DS booklets are square: their unfolded front/back scan is about 2:1.
+      // Portrait DVD/PSP booklets retain their existing landscape detection.
       const splitCover = coverMode === 'left' || coverMode === 'right'
-        || (coverMode === 'auto' && sourceAspectRatio >= 1.05 && sourceAspectRatio <= 1.7);
+        || (coverMode === 'auto' && isCoverSpread(sourceAspectRatio,platform));
       const coverSide = splitCover ? (coverMode === 'left' ? 'left' : 'right') : 'full';
       const aspectRatio = sourceAspectRatio / (splitCover ? 2 : 1);
       async function draw(page) {
@@ -66,7 +74,7 @@
       }
       const front = await draw(first);
       const pageCount=doc.numPages;
-      return { path, pageCount, aspectRatio, sourceAspectRatio, splitCover, coverMode, front,
+      return { path, platform, pageCount, aspectRatio, sourceAspectRatio, splitCover, coverMode, front,
         get back() { return back; },
         async loadBack() {
           abort();if(disposed)throw new DOMException(globalThis.OpenCabinetI18n.t("msg.92a2872d72"),'AbortError');
@@ -78,7 +86,7 @@
           backTask=(async()=>{
             let reader;
             try {
-              reader=await open(path,{imageSource,loadLibrary,signal:controller.signal,
+              reader=await open(path,{imageSource,loadLibrary,signal:controller.signal,platform,
                 layout:splitCover?'booklet':'original',coverSide:coverSide==='left'?'left':'right'});
               const canvas=await reader.renderPage(reader.pageCount,{maxSide:2048});
               abort();if(disposed||controller.signal.aborted)throw new DOMException(globalThis.OpenCabinetI18n.t("msg.92a2872d72"),'AbortError');
@@ -97,10 +105,10 @@
       await Promise.resolve(destroy()).catch(() => {});
     }
   }
-  async function open(path, { imageSource = value => value, signal, loadLibrary = pdfLibrary, layout = 'original', coverSide = 'right' } = {}) {
+  async function open(path, { imageSource = value => value, signal, loadLibrary = pdfLibrary, layout = 'original', coverSide = 'right', platform = '' } = {}) {
     const cancelled = () => new DOMException(globalThis.OpenCabinetI18n.t("msg.92a2872d72"), 'AbortError');
     const check = () => { if (signal?.aborted) throw cancelled(); };
-    check(); const pdf = await loadLibrary(); check();
+    check(); const pdf = await documentLibrary(path,loadLibrary); check();
     const resource = folder => new URL(`vendor/pdfjs/${folder}/`, document.baseURI).href;
     const task = pdf.getDocument({ url: imageSource(path), isEvalSupported: false, enableXfa: false,
       cMapUrl: resource('cmaps'), cMapPacked: true, standardFontDataUrl: resource('standard_fonts'),
@@ -132,7 +140,7 @@
       let firstRatio,singleRatio,sequence=null,mixed=false;
       if(layout==='auto') {
         firstRatio=await pageBox(1);
-        if(firstRatio>=1.05&&firstRatio<=1.7)layout='booklet';
+        if(isCoverSpread(firstRatio,platform))layout='booklet';
         else {
           mixed=doc.numPages>1&&doubleWidth(await pageBox(2),firstRatio);
           layout=mixed?'spreads':'original';

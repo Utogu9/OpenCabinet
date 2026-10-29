@@ -1,4 +1,4 @@
-//! PDF manuals live inside the portable media collection, not under the game ID.
+//! PDF/CBZ manuals live inside the portable media collection, not under the game ID.
 use crate::{PendingImageCopies, media_library};
 use rusqlite::Connection;
 use std::{
@@ -13,13 +13,16 @@ fn err(e: impl std::fmt::Display) -> String {
     e.to_string()
 }
 
+pub(crate) fn supported(path: &Path) -> bool {
+    path.extension().is_some_and(|e|e.eq_ignore_ascii_case("pdf")||e.eq_ignore_ascii_case("cbz"))
+}
 fn validate(path: &Path) -> Result<()> {
-    if !path
+    if !supported(path)||!path.is_file(){return Err(crate::i18n::text("msg.767a2ac791").into());}
+    if path
         .extension()
-        .is_some_and(|e| e.eq_ignore_ascii_case("pdf"))
-        || !path.is_file()
+        .is_some_and(|e| e.eq_ignore_ascii_case("cbz"))
     {
-        return Err(crate::i18n::text("msg.767a2ac791").into());
+        return crate::cbz::inspect(path).map(|_|());
     }
     let mut header = [0; 1024];
     let size = fs::File::open(path)
@@ -45,7 +48,7 @@ fn folder(collection: &Path) -> Result<PathBuf> {
     Ok(path)
 }
 
-/// Discover PDFs dropped in Explorer as well as files added through the editor.
+/// Discover manuals dropped in Explorer as well as files added through the editor.
 pub(crate) fn scan(collection: &Path) -> Result<Vec<PathBuf>> {
     let folder = folder(collection)?;
     if !folder.exists() {
@@ -127,12 +130,13 @@ pub(crate) fn copy_into_collection(
             .file_stem()
             .ok_or(crate::i18n::text("msg.d6c26a3f9c"))?
             .to_string_lossy();
+        let extension=source.extension().unwrap().to_string_lossy().to_ascii_lowercase();
         let mut suffix = 1;
         loop {
             let filename = if suffix == 1 {
-                format!("{name}.pdf")
+                format!("{name}.{extension}")
             } else {
-                format!("{name} ({suffix}).pdf")
+                format!("{name} ({suffix}).{extension}")
             };
             let target = destination.join(filename);
             match fs::OpenOptions::new()
@@ -189,7 +193,7 @@ pub async fn select_game_manuals() -> Result<Vec<String>> {
     tauri::async_runtime::spawn_blocking(|| {
         rfd::FileDialog::new()
             .set_title(crate::i18n::text("msg.ba25164eb0"))
-            .add_filter(crate::i18n::text("msg.dbd228271d"), &["pdf"])
+            .add_filter(crate::i18n::text("msg.dbd228271d"), &["pdf","cbz"])
             .pick_files()
             .unwrap_or_default()
             .into_iter()

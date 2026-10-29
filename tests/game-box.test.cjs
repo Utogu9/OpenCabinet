@@ -745,6 +745,42 @@ test('The CSS PSP viewer prefetches its manual, keeps the exterior cover and ope
   app.viewer.dispose();assert.equal(data.disposed(),1);
 });
 
+test('Xbox, Xbox 360, DS, GameCube, Wii, Wii U and PS3 keep a prefetched booklet on their lid and open the reader',async()=>{
+  for(const [platform,rom_path] of [
+    ['Microsoft Xbox','Game (USA).iso'],['Microsoft Xbox 360','Game.iso'],
+    ['Nintendo DS','Game (USA).nds'],['Nintendo DS','Game (Europe).nds'],
+    ['Nintendo GameCube','Game.iso'],['Nintendo GameCube','Game (Japan).iso'],
+    ['Nintendo Wii','Game.iso'],['Nintendo Wii U','Game.wud'],['Sony PlayStation 3','EBOOT.BIN'],
+  ]){
+    const data=booklet(32,platform==='Nintendo DS'?1.03:.65),activated=[];let loads=0;
+    const app=scene({loadManual:async()=>{loads++;return data;},onManualActivate:info=>{activated.push(info);return true;}});
+    app.viewer.update({...game,platform,rom_path},artwork);app.flush();await turn();app.flush();
+    assert.equal(loads,1,platform);assert.equal(app.model().dataset.manual,'ready');
+    assert.equal(app.model().dataset.interior,undefined,'prefetch does not build the interior');
+    app.viewer.setOpen(true,false);app.flush();
+    const manual=app.elements().find(element=>element.className.endsWith('manual-front'));
+    assert.ok(manual,platform);assert.equal(manual.children[0],data.front);assert.equal(manual.dataset.casePart,'lid');
+    assert.equal(app.model().dataset.manualCover,undefined,'the exterior cover remains independent');
+    assert.equal(app.viewer.readManual(),true);assert.equal(activated[0].manual,data);assert.equal(activated[0].origin,manual);
+    app.viewer.returnManual();app.viewer.setOpen(false,false);app.flush();assert.equal(manual.style.display,'none');
+    app.viewer.setOpen(true,false);app.viewer.zoom(.4);app.flush();assert.equal(loads,1);assert.equal(manual.style.display,'');
+    app.viewer.clear();assert.equal(data.disposed(),1);
+  }
+});
+
+test('PS3 retaining frames and pressure tongues lift over thick manuals without detached mounts',()=>{
+  const app=scene(),profile=app.api.profileFor('PS3'),faces=[];
+  const interior=app.dvd.build({profile,game:{...game,platform:'PS3'},images:[],addFace:f=>faces.push(f),imageSource:v=>v,trackTexture(){},isCurrent:()=>true,schedule(){}});
+  const clips=faces.filter(f=>/manual-frame|manual-pressure/.test(f.element.className));
+  const z=f=>Number(f.transform(1).match(/translate3d\([^,]+,[^,]+,([^p]+)px\)/)[1]);
+  const before=clips.map(z);const size=interior.setManual(booklet(80));
+  assert.ok(clips.every((face,i)=>Math.abs(z(face)-(before[i]-size.thickness+.55))<1e-9));
+  const feet=faces.filter(f=>f.element.className.includes('manual-foot'));
+  assert.equal(feet.length,12,'each of the two mounts is extended with six closed faces');
+  assert.ok(feet.every(face=>face.element.dataset.manualBooklet===undefined));
+  interior.setManual(null);assert.deepEqual(clips.map(z),before);
+});
+
 test('CSS PSP inlays cover both inside panels and the spine with one image and independent artwork',()=>{
   for(const exterior of [artwork,[]])for(const [width,height] of [[2400,1800],[1800,2400]]) {
     const app=scene(),psp={...game,platform:'PSP'};
@@ -782,13 +818,16 @@ test('A missing or stale CSS PSP inlay keeps the plain interior and cannot repai
 });
 
 test('A pending booklet from a previously selected game is cancelled and never attaches to another case', async () => {
-  let finish, signal; const old = booklet();
-  const app = scene({ loadManual: async (_, value) => { signal = value; return new Promise(done => { finish = done; }); } });
-  app.viewer.update(game, artwork); app.viewer.setOpen(true, false); assert.equal(signal.aborted, false);
-  app.viewer.update({ ...game, id: 2, platform: 'Wii' }, artwork); assert.equal(signal.aborted, true);
-  finish(old); await turn(); app.viewer.setOpen(true, false); await turn(); app.flush();
+  const pending=[],old = booklet(),current=booklet(48);
+  const app = scene({ loadManual: async (_, signal) => new Promise(finish=>pending.push({signal,finish})) });
+  app.viewer.update(game, artwork); app.viewer.setOpen(true, false); assert.equal(pending[0].signal.aborted, false);
+  app.viewer.update({ ...game, id: 2, platform: 'Wii' }, artwork); assert.equal(pending[0].signal.aborted, true);
+  pending[0].finish(old); await turn(); app.viewer.setOpen(true, false); await turn(); app.flush();
   assert.equal(old.disposed(), 1); assert.equal(app.model().dataset.interior, 'wii');
   assert.equal(app.elements().some(face => face.className.includes('manual-front')), false);
+  pending[1].finish(current);await turn();app.flush();
+  assert.equal(app.elements().find(face=>face.className.endsWith('manual-front')).children[0],current.front);
+  app.viewer.dispose();assert.equal(current.disposed(),1);
 });
 
 test('Opening during manual prefetch reuses the pending load, including missing or unreadable PDFs', async () => {

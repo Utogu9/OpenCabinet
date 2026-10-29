@@ -164,7 +164,7 @@
       if (s.loading || active !== s || s.closing) return;
       s.loading = true; s.book.setAttribute('aria-busy', 'true'); s.error.textContent = ''; s.retry.hidden = true;
       try {
-        const doc = await openPDF(s.path, { imageSource, signal: s.lifetime.signal, layout: s.readingMode, coverSide: s.coverSide });
+        const doc = await openPDF(s.path, { imageSource, signal: s.lifetime.signal, layout: s.readingMode, coverSide: s.coverSide, platform:s.platform });
         if (active !== s || s.closing) { doc.dispose(); return; }
         s.doc = doc; s.count = doc.pageCount; s.page = Math.min(s.page, s.count); s.wanted = Math.floor(s.page / 2);
         if(Number.isFinite(doc.aspectRatio)&&doc.aspectRatio>0){s.ratio=doc.aspectRatio;fit(s);}
@@ -294,7 +294,7 @@
         const cover = booklet === !!manual.splitCover ? snapshot(manual.front) : null;
         const s = { dialog, viewport, center, book, paper, left, right, leaf, leafFront, leafBack,
           previous, next, previousEdge, nextEdge, input, total, zoomOut, zoomIn, fitButton, error, retry,
-          path: manual.path, count: manual.pageCount * (booklet ? 2 : 1), readingMode, coverSide: manual.coverMode === 'left' ? 'left' : 'right',
+          path: manual.path, platform:manual.platform, count: manual.pageCount * (booklet ? 2 : 1), readingMode, coverSide: manual.coverMode === 'left' ? 'left' : 'right',
           page: 1, spread: 0, wanted: 0, rendered: false, jump: false,
           ratio: (manual.sourceAspectRatio || (manual.splitCover ? manual.aspectRatio * 2 : manual.aspectRatio)
             || (manual.front?.width / manual.front?.height) || 2 / 3) / (booklet ? 2 : 1),

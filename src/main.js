@@ -1033,7 +1033,7 @@ function createDetailsGameBox() {
       manualSelect.value = manualPath || ""; manualUI();
       if (!manualPath) return null;
       if(isDreamcastGame(game)&&manualCoverCache)return manualCoverCache.render(manualPath,{imageSource,signal,coverMode:manualCoverModes[manualPath]||'auto',onPreview});
-      return window.OpenCabinetManualPDF.render(manualPath, { imageSource, signal, coverMode: manualCoverModes[manualPath] || "auto" });
+      return window.OpenCabinetManualPDF.render(manualPath, { imageSource, signal, platform:game.platform, coverMode: manualCoverModes[manualPath] || "auto" });
     },
     onManualState(state) { manualState = state; manualUI(); },
     onManualActivate({ manual, game, origin }) {
@@ -2889,6 +2889,8 @@ function setupGameEditor() {
   let closing = false;
   let draftImages = [];
   let savedManuals = [], draftManuals = [];
+  let editorManualData=null;
+  const editorManualReader=window.OpenCabinetManualReader?.create({imageSource,onClose:()=>{editorManualData?.dispose();editorManualData=null;}});
   let manualVersion = 0;
   let draftCatalogId = null;
   let metadataResults = [], metadataVersion = 0;
@@ -3064,8 +3066,16 @@ function setupGameEditor() {
           if (saving || choosingImages || closing || networkBusy) return;
           if (pending) { draftManuals = draftManuals.filter(p => p !== path); renderManuals(); }
           else {
-            try { await invoke("open_game_manual", { id: editingId, path }); }
+            try {
+              if(path.toLowerCase().endsWith('.cbz')&&editorManualReader){
+                choosingImages=true;metadataControls();
+                const data=await window.OpenCabinetManualPDF.render(path,{imageSource,platform:platformSelect.value});
+                editorManualReader.close(false,false);editorManualData=data;
+                editorManualReader.open(data,{title:document.getElementById('game-edit-name').value,focusTarget:action});
+              }else await invoke("open_game_manual", { id: editingId, path });
+            }
             catch (error) { showToast(globalThis.OpenCabinetI18n.t("msg.49219768fa", error), true); }
+            finally{choosingImages=false;metadataControls();}
           }
         });
         row.append(name, action); list.appendChild(row);
@@ -3133,6 +3143,7 @@ function setupGameEditor() {
 
   async function close() {
     if (saving || choosingImages || closing) return;
+    editorManualReader?.close(false,false);
     sessionHistoryView?.dispose();sessionHistoryView=null;
     closing = true;
     resetMetadata(); metadataPanel.classList.add("hidden");
