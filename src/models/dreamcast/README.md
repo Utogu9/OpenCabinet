@@ -15,11 +15,10 @@ use them directly and do not load or convert the original authoring files.
 
 `ribs-height.svg` is generated from OpenCabinet's original ridge pattern in
 `src/assets/textures/cd-case-ribs.svg`, covered by the project's MIT license.
-The original `ps1-insert.svg` black grille is also covered by the MIT license.
-PlayStation uses it as its fallback insert while sharing the case geometry,
+PlayStation uses `ps1-insert.webp` as its fallback insert while sharing the case geometry,
 inlay mapping, booklet and controls with Dreamcast.
 
-`insert.webp` and `insert2.webp` are replacement fallback strip images supplied
+`insert.webp`, `insert2.webp` and `ps1-insert.webp` are replacement fallback strip images supplied
 separately for OpenCabinet. They are not part of the original model's CC0
 release. Console names and logos remain associated with their respective
 rights holders; the model's CC0 notice does not license those marks.

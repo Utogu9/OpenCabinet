@@ -4,7 +4,7 @@ const fs=require('node:fs');
 const path=require('node:path');
 const crypto=require('node:crypto');
 const root=path.resolve(__dirname,'..');
-const assets=['case.json','case.bin','insert.webp','insert2.webp','ps1-insert.svg','ribs-height.svg','LICENSE-CC0.txt'];
+const assets=['case.json','case.bin','insert.webp','insert2.webp','ps1-insert.webp','ribs-height.svg','LICENSE-CC0.txt'];
 function distribution(t) {
   const target=path.join(root,'target');fs.mkdirSync(target,{recursive:true});
   const projectRoot=fs.mkdtempSync(path.join(target,'three-preparation-'));

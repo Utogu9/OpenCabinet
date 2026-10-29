@@ -98,7 +98,7 @@ export async function createViewer(host, options={}) {
   const textures=new Set(),manualTextures=new Set(),listeners=[];
   let insertTheme='black';
   const insertTextures={};
-  for(const [theme,file] of [['black','insert.webp'],['white','insert2.webp'],['ps1','ps1-insert.svg']]) {
+  for(const [theme,file] of [['black','insert.webp'],['white','insert2.webp'],['ps1','ps1-insert.webp']]) {
     insertTextures[theme]=new THREE.TextureLoader().load(new URL(`./models/dreamcast/${file}`,import.meta.url).href,texture=>{
       if(disposed){texture.dispose();return;}
       // These assets are already the complete narrow strip, not a crop of an inlay.

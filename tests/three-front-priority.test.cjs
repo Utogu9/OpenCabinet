@@ -29,7 +29,7 @@ test('Dreamcast and PS1 share manual priority, folded inlays and separate-spine 
   assert.equal(await page.evaluate(()=>debug.materials.cover.map.image.width),512);
   assert.equal(await page.evaluate(()=>disposals.includes(4)),true);
 
-  await page.evaluate(()=>select(6,'Sony PlayStation'));await page.waitForFunction(()=>debug.materials.insert.map?.image.src.endsWith('/ps1-insert.svg'));
+  await page.evaluate(()=>select(6,'Sony PlayStation'));await page.waitForFunction(()=>debug.materials.insert.map?.image.src.endsWith('/ps1-insert.webp'));
   assert.equal(await page.evaluate(()=>document.querySelector('#stage').dataset.variant),'ps1');
   assert.equal(await page.evaluate(()=>debug.materials.paper_spine_left.color.getHex()),0x151515);
   await page.evaluate(()=>requests.get(6).onPreview(manualPreview));await page.waitForFunction(()=>debug.materials.cover.map?.image.width===128);
@@ -54,7 +54,7 @@ test('Dreamcast and PS1 share manual priority, folded inlays and separate-spine 
   await page.waitForFunction(()=>debug.materials.spine_left.map?.image.src===separateSpine);
   assert.equal(await page.evaluate(()=>debug.materials.spine_right.map.image.src===separateSpine),true);
   assert.equal(await page.evaluate(()=>debug.meshes.find(mesh=>mesh.name==='dreamcast-insert').visible),true);
-  assert.equal(await page.evaluate(()=>debug.materials.insert.map.image.src.endsWith('/ps1-insert.svg')),true);
+  assert.equal(await page.evaluate(()=>debug.materials.insert.map.image.src.endsWith('/ps1-insert.webp')),true);
   await page.evaluate(()=>{select(9);requests.get(9).resolve(null);});await page.waitForFunction(()=>debug.materials.insert.map?.image.src.endsWith('/insert.webp'));
   assert.equal(await page.evaluate(()=>debug.renderer.getContext().getError()),0);assert.deepEqual(errors,[]);
   await page.evaluate(()=>viewer.dispose());

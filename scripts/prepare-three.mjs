@@ -11,7 +11,7 @@ function writeChanged(file, bytes) {
 }
 
 function validateRuntime(directory) {
-  const missing=['case.json','case.bin','insert.webp','insert2.webp','ps1-insert.svg','ribs-height.svg','LICENSE-CC0.txt']
+  const missing=['case.json','case.bin','insert.webp','insert2.webp','ps1-insert.webp','ribs-height.svg','LICENSE-CC0.txt']
     .filter(file=>!fs.existsSync(path.join(directory,file)));
   if(missing.length)throw Error(`Missing bundled Dreamcast assets: ${missing.join(', ')}`);
   const manifest=JSON.parse(fs.readFileSync(path.join(directory,'case.json'),'utf8'));

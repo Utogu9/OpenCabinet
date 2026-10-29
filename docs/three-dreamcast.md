@@ -12,8 +12,8 @@ el lateral como en pantalla completa. Conserva las medidas de su formato de
 caja y las configuraciones de la consola o del juego. Elegir un formato
 distinto de CD, por ejemplo una caja larga, conserva su visor correspondiente.
 
-Sin inlay se utiliza `src/models/dreamcast/ps1-insert.svg`, una grilla negra
-propia, en lugar de los insertos con la marca Dreamcast. Los lomos interiores
+Sin inlay se utiliza `src/models/dreamcast/ps1-insert.webp`, un inserto propio
+de PlayStation, en lugar de los insertos con la marca Dreamcast. Los lomos interiores
 también quedan negros. No se aplica a PS1 la detección de franja blanca o negra
 de Dreamcast. Un inlay válido reemplaza el inserto y el fondo de la bandeja.
 
