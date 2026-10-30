@@ -2001,7 +2001,7 @@ mod game_edit_tests {
     }
 
     #[test]
-    fn recomp_merge_rejects_other_platforms_two_executables_and_store_launchers_without_partial_groups() {
+    fn recomp_merge_rejects_other_platforms_native_only_entries_and_store_launchers_without_partial_groups() {
         let mut conn=region_database();entity_variables::save_recomp(&conn,2,true).unwrap();
         conn.execute("UPDATE games SET launch_directly=1,rom_path='Native.exe',platform='Other' WHERE id=2",[]).unwrap();
         assert!(game_regions::merge_recomp(&mut conn,&[1,2],1,&region_labels()).is_err());
@@ -2011,6 +2011,37 @@ mod game_edit_tests {
         conn.execute("UPDATE games SET launch_directly=0 WHERE id=1",[]).unwrap();conn.execute("UPDATE games SET rom_path=?1 WHERE id=2",[steam::uri(10)]).unwrap();
         assert!(game_regions::merge_recomp(&mut conn,&[1,2],1,&region_labels()).is_err());
         assert_eq!(conn.query_row("SELECT COUNT(*) FROM game_regions",[],|r|r.get::<_,i64>(0)).unwrap(),0);
+    }
+
+    #[test]
+    fn several_recomps_can_merge_at_once_or_join_an_existing_group_and_keep_independent_launches() {
+        for gradual in [false,true] {
+            let mut conn=region_database();let files=MediaDirectory::new();
+            let first=files.image("First.exe");let second=files.image("Second.exe");
+            conn.execute("UPDATE games SET launch_directly=1,rom_path=?1,arguments_override='--first' WHERE id=2",[&first]).unwrap();
+            conn.execute("INSERT INTO games(id,title,platform,rom_path,launch_directly,arguments_override,play_time,play_time_seconds,session_count) VALUES(3,'Second recomp','SNES',?1,1,'--second',1,90,2)",[&second]).unwrap();
+            for id in [2,3]{entity_variables::save_recomp(&conn,id,true).unwrap();}
+            let mut labels=region_labels();labels[1].label="My first build".into();
+            if gradual{game_regions::merge_recomp(&mut conn,&[1,2],1,&labels).unwrap();}
+            labels.push(game_regions::Label{id:3,label:"My second build".into()});
+            game_regions::merge_recomp(&mut conn,if gradual{&[1,3]}else{&[1,2,3]},1,&labels).unwrap();
+            let library=read_library_games(&conn,&files.0,&PlayTracker::default()).unwrap();
+            assert_eq!(library.len(),1);assert_eq!(library[0].regions.len(),3);assert_eq!(library[0].session_count,7);assert_eq!(library[0].play_time_seconds,810);
+            assert_eq!(library[0].regions[1].label,"My first build");
+            for (id,path,arg) in [(2,&first,"--first"),(3,&second,"--second")] {
+                let (result,())=launch_game_record_with_region(&conn,1,Some(id),None,|exe,args,_|{assert_eq!(exe,path);assert_eq!(args,&[arg]);Ok(())}).unwrap();
+                assert_eq!(result.stats.id,id);let mut saved=0;playtime::save_elapsed(&conn,id,5,&mut saved,false).unwrap();
+            }
+            assert_eq!(conn.query_row("SELECT session_count FROM games WHERE id=1",[],|r|r.get::<_,i64>(0)).unwrap(),2);
+            assert_eq!(conn.query_row("SELECT session_count FROM games WHERE id=2",[],|r|r.get::<_,i64>(0)).unwrap(),4);
+            assert_eq!(conn.query_row("SELECT session_count FROM games WHERE id=3",[],|r|r.get::<_,i64>(0)).unwrap(),3);
+            // An invalid extra build must leave all existing associations intact.
+            conn.execute("INSERT INTO games(id,title,platform,rom_path,launch_directly,play_time) VALUES(4,'Unmarked','SNES','Unmarked.exe',1,0)",[]).unwrap();
+            labels.push(game_regions::Label{id:4,label:"Unmarked".into()});
+            assert!(game_regions::merge_recomp(&mut conn,&[1,4],1,&labels).is_err());
+            assert_eq!(game_regions::expanded(&conn,&[1]).unwrap(),vec![1,2,3]);
+            assert!(game_regions::merge_recomp(&mut conn,&[1,2],1,&labels).is_err());
+        }
     }
 
     #[test]

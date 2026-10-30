@@ -11,10 +11,12 @@ ejecutable importado, también al agregar más archivos desde la revisión.
 Desmarcarla permite importar un ejecutable normal sin esa clasificación.
 La importación habitual de juegos de PC, Steam o Epic no activa esta variable.
 
-Para mostrar un original y su recomp juntos, seleccioná ambas entradas de la
+Para mostrar un original y sus recomps juntos, seleccioná las entradas de la
 misma consola y usá **Fusionar con recomp/decomp** en el menú contextual.
 La fusión permite revisar las etiquetas y elegir la entrada principal;
 conserva los archivos, datos, imágenes, manuales y estadísticas de cada versión.
+Se pueden fusionar varias versiones de una vez o seleccionar un grupo existente
+junto con nuevos recomps para agregarlos. Las etiquetas ya configuradas se conservan.
 **Jugar** permite elegir original emulado o recomp/decomp; si el original tiene
 varios discos, su selector aparece después. En **Editar juego → Versiones /
 regiones** se puede elegir la versión predeterminada y editar cada una.

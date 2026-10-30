@@ -244,7 +244,7 @@ pub fn merge(conn: &mut Connection, ids: &[i32], primary: i32, labels: &[Label])
     merge_entries(conn,ids,primary,labels,false)
 }
 pub fn merge_recomp(conn:&mut Connection,ids:&[i32],primary:i32,labels:&[Label])->Result<()> {
-    if ids.len()!=2 || ids.iter().map(|id|owner(conn,*id)).collect::<Result<HashSet<_>>>()?.len()!=2 {
+    if ids.len()<2 || ids.iter().map(|id|owner(conn,*id)).collect::<Result<HashSet<_>>>()?.len()!=ids.len() {
         return Err(crate::i18n::text("recomp.invalidMerge").into());
     }
     merge_entries(conn,ids,primary,labels,true)
@@ -291,7 +291,7 @@ fn merge_entries(conn:&mut Connection,ids:&[i32],primary:i32,labels:&[Label],rec
         tx.execute("DELETE FROM game_regions WHERE game_id=?1", [id])
             .map_err(err)?;
     }
-    if recomp && (direct_count!=1 || direct_count==members.len()) {
+    if recomp && (direct_count==0 || direct_count==members.len()) {
         return Err(crate::i18n::text("recomp.invalidMerge").into());
     }
     for (position, label) in labels.iter().enumerate() {

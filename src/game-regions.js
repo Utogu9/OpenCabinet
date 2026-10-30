@@ -9,10 +9,11 @@
   function selected(game) { return game.regions?.find(region => region.game.id === game.default_region_id)?.game || game; }
   function hasLaunchVariants(game) {const versions=members(game);return versions.some(item=>item.game.launch_directly)&&versions.some(item=>!item.game.launch_directly);}
   function canMergeRecomp(games) {
-    if(games.length!==2||games.some(game=>!game||game.is_running)||games[0].platform.toLowerCase()!==games[1].platform.toLowerCase())return false;
+    if(games.length<2||new Set(games.map(game=>game?.id)).size!==games.length||games.some(game=>!game||game.is_running||game.platform.toLowerCase()!==games[0].platform.toLowerCase()))return false;
     const versions=games.flatMap(members).map(item=>item.game);
-    return versions.every(game=>!game.steam_app_id&&!game.epic_app_id)&&versions.filter(game=>game.launch_directly).length===1
-      &&versions.some(game=>game.launch_directly&&game.recomp)&&versions.some(game=>!game.launch_directly);
+    return new Set(versions.map(game=>game.id)).size===versions.length
+      &&versions.every(game=>!game.steam_app_id&&!game.epic_app_id&&!game.is_running&&(!game.launch_directly||game.recomp))
+      &&versions.some(game=>game.launch_directly)&&versions.some(game=>!game.launch_directly);
   }
   function sourceLabel(game) {return globalThis.OpenCabinetI18n.t(game.launch_directly?'recomp.native':'recomp.emulated');}
   function element(tag, text, cls) { const el=document.createElement(tag); if(text)el.textContent=text;if(cls)el.className=cls;return el; }
@@ -57,9 +58,13 @@
   }
   async function mergeGames(games, invoke,{recomp=false}={}) {
     if(recomp&&!canMergeRecomp(games))throw Error(globalThis.OpenCabinetI18n.t('recomp.invalidMerge'));
-    const regions=games.flatMap(members).map((region,index)=>({...region,label:recomp
-      ?sourceLabel(region.game)+(guess(region.game.rom_path)?' · '+guess(region.game.rom_path):'')
-      :region.label||guess(region.game.rom_path)||globalThis.OpenCabinetI18n.t("msg.de6d5b15ed", index+1)}));
+    const nativeCount=games.flatMap(members).filter(region=>region.game.launch_directly).length;
+    const regions=games.flatMap(game=>members(game).map(region=>({...region,keepLabel:!!game.regions?.length}))).map((region,index)=>{
+      const label=recomp&&!region.keepLabel
+        ?sourceLabel(region.game)+(region.game.launch_directly&&nativeCount>1?' · '+region.game.title:'')+(guess(region.game.rom_path)?' · '+guess(region.game.rom_path):'')
+        :region.label||guess(region.game.rom_path)||globalThis.OpenCabinetI18n.t("msg.de6d5b15ed", index+1);
+      return {...region,label:[...label].slice(0,100).join('')};
+    });
     return new Promise(resolve=>{
       const modal=dialog(globalThis.OpenCabinetI18n.t(recomp?'recomp.merge':"msg.6cd843ce14"));
       modal.append(element("p",globalThis.OpenCabinetI18n.t(recomp?'recomp.mergeHelp':"msg.4e06837553"),"help-text"));

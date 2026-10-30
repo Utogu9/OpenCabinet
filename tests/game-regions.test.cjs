@@ -25,7 +25,7 @@ const group=()=>({id:1,title:'Game',default_region_id:2,regions:editions()});
 const turn=()=>new Promise(resolve=>setImmediate(resolve));
 const recomp=()=>({id:3,title:'Native game',platform:'PS2',rom_path:'C:/Games/Native.exe',launch_directly:true,recomp:true,discs:[]});
 
-test('Recomp merging requires two compatible roots and proposes the emulated original as the main entry',async()=>{
+test('Recomp merging requires compatible roots and proposes the emulated original as the main entry',async()=>{
  const {api,body}=environment();const original={...group(),platform:'PS2'};original.regions.forEach(item=>item.game.platform='PS2');
  assert.equal(api.canMergeRecomp([original,recomp()]),true);
  assert.equal(api.canMergeRecomp([original,{...recomp(),recomp:false}]),false);
@@ -36,6 +36,31 @@ test('Recomp merging requires two compatible roots and proposes the emulated ori
  const modal=body.children[0];assert.equal(modal.children[2].children[0].value,'1');
  await modal.children[5].children[1].onclick();assert.equal(await pending,1);assert.equal(sent.command,'merge_game_recomp');
  assert.equal(sent.args.labels.length,3);assert.match(sent.args.labels[0].label,/Recomp/);
+});
+
+test('Several recomp builds merge together or extend an existing group without replacing its labels',async()=>{
+ const {api,body}=environment();const original={id:1,title:'Original',platform:'PS2',rom_path:'Original.iso',discs:[{}]};
+ const first=recomp(),second={...recomp(),id:4,title:'Another recomp',rom_path:'C:/Other/Recomp.exe'};
+ assert.equal(api.canMergeRecomp([original,first,second]),true);
+ assert.equal(api.canMergeRecomp([original,first,{...second,recomp:false}]),false);
+ const existing={...original,regions:[{label:'Original custom label',game:original},{label:'My preferred build',game:first}]};
+ assert.equal(api.canMergeRecomp([existing,second]),true);
+ assert.equal(api.canMergeRecomp([existing,first]),false,'a group cannot include the same edition twice');
+ let sent;const pending=api.mergeGames([existing,second],async(command,args)=>{sent={command,args};},{recomp:true});
+ const modal=body.children[0];await modal.children[5].children[1].onclick();assert.equal(await pending,1);
+ assert.equal(sent.command,'merge_game_recomp');assert.deepEqual(Array.from(sent.args.ids),[1,4]);
+ assert.deepEqual(Array.from(sent.args.labels,label=>label.id),[1,3,4]);
+ assert.equal(sent.args.labels[0].label,'Original custom label');assert.equal(sent.args.labels[1].label,'My preferred build');
+ assert.match(sent.args.labels[2].label,/Another recomp/);
+ const all=api.mergeGames([original,first,second],async(command,args)=>{sent={command,args};},{recomp:true});
+ await body.children[0].children[5].children[1].onclick();await all;
+ assert.match(sent.args.labels[1].label,/Native game/);assert.match(sent.args.labels[2].label,/Another recomp/);
+});
+
+test('A game with several recomps offers every build in the version selector',async()=>{
+ const {api,body}=environment();const game=group();game.regions.push({label:'First recomp',game:recomp()},{label:'Second recomp',game:{...recomp(),id:4,rom_path:'Second.exe'}});
+ const pending=api.chooseRegion(game,async(command,{id})=>[{rom_path:id+'.exe',available:true}]);await turn();
+ const list=body.children[0].children[1];assert.equal(list.children.length,4);list.children[3].onclick();assert.equal(await pending,4);
 });
 
 test('The version selector distinguishes recomp executables from emulated multi-disc editions and disables missing files',async()=>{

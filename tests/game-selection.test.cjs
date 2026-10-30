@@ -136,6 +136,15 @@ test('The context menu offers recomp merging only for a marked executable and it
  app.evaluate('allGames[1].recomp=false');app.click(1);app.click(2,{ctrlKey:true});app.rightClick(2);assert.equal(app.get('context-merge-recomp').classList.contains('hidden'),true);
 });
 
+test('Recomp merging stays available for three selected entries and for a group plus another build',()=>{
+ const app=library({regions:true});app.evaluate('for(const game of [allGames[1],allGames[2]]){game.launch_directly=true;game.recomp=true;}');
+ app.click(1);app.click(2,{ctrlKey:true});app.click(3,{ctrlKey:true});app.rightClick(3);
+ assert.equal(app.get('context-merge-recomp').classList.contains('hidden'),false);
+ app.evaluate("const base={...allGames[0]};allGames[0].regions=[{label:'Original',game:base},{label:'First build',game:{...allGames[1]}}];allGames=allGames.filter(game=>game.id!==2);renderGames(allGames);");
+ app.click(1);app.click(3,{ctrlKey:true});app.rightClick(3);assert.equal(app.get('context-merge-recomp').classList.contains('hidden'),false);
+ app.evaluate('allGames.find(game=>game.id===3).recomp=false');app.rightClick(3);assert.equal(app.get('context-merge-recomp').classList.contains('hidden'),true);
+});
+
 test("Keyboard navigation has one grid tab stop, supports ranges, focus-only movement and Enter launch", async () => {
   const app=library({keyboard:true});
   const cards=app.get('games-grid').children;
