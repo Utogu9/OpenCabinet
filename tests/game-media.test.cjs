@@ -341,6 +341,13 @@ test("Game box settings remain drafts, save independently, and can be reset to p
   assert.equal(app.calls.filter(call=>call.command==='update_game').at(-1).args.details.box3d,null);
 });
 
+test('A newly imported recomp keeps its classification when editing other fields before navigation reloads',async()=>{
+ const app=mediaApp({variables:true});app.evaluate('allGames[0].launch_directly=true;allGames[0].recomp=true');
+ await app.open();const rows=app.get('game-variables-editor').children[0].children;
+ assert.ok(rows.some(row=>row.children[0].value==='recomp'));
+ await app.save();assert.equal(app.calls.find(call=>call.command==='update_game').args.details.variables.recomp,'yes');
+});
+
 test("Game variables stay in the draft on Cancel and save without altering Steam launch identity", async () => {
   const app=mediaApp({variables:true});
   app.evaluate("allGames[0].steam_app_id=42;libraryGameVariables={1:{favorito:'yes'}};");

@@ -532,7 +532,7 @@
             <div class="game-manual-list" id="game-manual-list" aria-live="polite"></div>
           </section>
           <section class="hidden" id="game-edit-panel-regions" role="tabpanel" aria-labelledby="game-edit-tab-regions">
-            <h3><span data-i18n="msg.d4a0db1956"></span></h3>
+            <h3 id="game-edit-regions-title"><span data-i18n="msg.d4a0db1956"></span></h3>
             <p id="game-edit-current-region" class="help-text"></p>
             <div id="game-regions-editor" class="form-group"></div>
           </section>
@@ -794,6 +794,10 @@
               <label id="scan-direct-choice" class="preference-toggle hidden">
                 <input type="checkbox" id="scan-launch-directly" />
                 <span data-i18n="import.direct-executable"></span>
+              </label>
+              <label id="scan-recomp-choice" class="preference-toggle hidden">
+                <input type="checkbox" id="scan-recomp" checked />
+                <span data-i18n="recomp.import"></span>
               </label>
               <div id="emu-select-group" class="form-group full-width">
                 <label for="scan-emu-select"><span data-i18n="msg.a2c16e6c78"></span></label>
@@ -1087,6 +1091,7 @@
       <button class="dropdown-item hidden" id="context-delete-games" type="button" role="menuitem" tabindex="-1"><span data-i18n="msg.79ee14b77a"></span></button>
       <button class="dropdown-item hidden" id="context-merge-discs" type="button" role="menuitem" tabindex="-1"><span data-i18n="msg.e4998f3861"></span></button>
       <button class="dropdown-item hidden" id="context-merge-regions" type="button" role="menuitem" tabindex="-1"><span data-i18n="msg.e7f0211399"></span></button>
+      <button class="dropdown-item hidden" id="context-merge-recomp" type="button" role="menuitem" tabindex="-1"><span aria-hidden="true">🔗</span> <span data-i18n="recomp.merge"></span></button>
       <button class="dropdown-item hidden" id="context-download-images" type="button" role="menuitem" tabindex="-1"><span data-i18n="msg.6b39d242e1"></span></button>
     </div>
 

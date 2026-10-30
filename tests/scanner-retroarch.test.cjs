@@ -355,6 +355,7 @@ test('Single-console executable skips emulator setup and preserves platform thro
  await app.get('btn-import-single').fire('click');await app.selectPlatform('PS2');
  assert.equal(app.get('scan-direct-choice').classList.contains('hidden'),false);
  app.get('scan-launch-directly').checked=true;await app.get('scan-launch-directly').fire('change');
+ assert.equal(app.get('scan-recomp-choice').classList.contains('hidden'),false);assert.equal(app.get('scan-recomp').checked,true);
  assert.equal(app.get('no-emu-inline-box').classList.contains('hidden'),true);
  await app.get('btn-import-next').fire('click');
  assert.equal(app.get('import-files-step').classList.contains('hidden'),false);
@@ -362,7 +363,7 @@ test('Single-console executable skips emulator setup and preserves platform thro
  await app.get('btn-browse-game-file').fire('click');await app.evaluate('handleExecuteScan()');
  assert.equal(app.calls.find(c=>c.command==='select_game_file').args.launchDirectly,true);
  const saved=app.calls.find(c=>c.command==='import_scanned_roms');
- assert.equal(saved.args.platform,'PS2');assert.equal(saved.args.preview.games[0].launch_directly,true);
+ assert.equal(saved.args.platform,'PS2');assert.equal(saved.args.preview.games[0].launch_directly,true);assert.equal(saved.args.preview.games[0].recomp,true);
  assert.equal(app.calls.some(c=>c.command==='add_emulator'),false);
  await app.get('btn-import-folder').fire('click');
  assert.equal(app.get('scan-launch-directly').checked,false);
@@ -387,8 +388,18 @@ test('Multiple executable import starts with one file without emulator and alway
  assert.equal(saved.platform,'PS2'); assert.equal(saved.preview.games[0].launch_directly,true);
  await app.get('btn-import-back').fire('click');
  app.get('scan-launch-directly').checked=false; await app.get('scan-launch-directly').fire('change');
+ assert.equal(app.get('scan-recomp-choice').classList.contains('hidden'),true);
  assert.equal(app.get('scan-folder-step').classList.contains('hidden'),false);
  assert.equal(app.get('scan-file-input').value,'');
+});
+
+test('A direct executable can opt out of recomp classification without selecting an emulator',async()=>{
+ const app=scanner({select_game_file:()=>({rom_path:'D:/Native/Game.exe',title:'Game'}),preview_single_game:({filePath,title,launchDirectly})=>({games:[{rom_path:filePath,title,launch_directly:launchDirectly}],total_found:1,skipped_count:0})});
+ await app.get('btn-import-single').fire('click');await app.selectPlatform('PS2');
+ app.get('scan-launch-directly').checked=true;await app.get('scan-launch-directly').fire('change');app.get('scan-recomp').checked=false;
+ await app.get('btn-import-next').fire('click');await app.get('btn-browse-game-file').fire('click');await app.evaluate('handleExecuteScan()');
+ const candidate=app.calls.find(call=>call.command==='import_scanned_roms').args.preview.games[0];
+ assert.equal(candidate.launch_directly,true);assert.equal(candidate.recomp,false);
 });
 
 test('Single-console ROM import keeps emulator requirements, extension filtering and the confirmed file',async()=>{

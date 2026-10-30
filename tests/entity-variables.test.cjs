@@ -7,6 +7,13 @@ const vars=context.OpenCabinetVariables,library=context.OpenCabinetLibrary;
 const plain=x=>JSON.parse(JSON.stringify(x));
 const platform={id:1,name:'Sony Playstation 2'},game={id:7,title:'Game',platform:platform.name,steam_app_id:10};
 
+test('Recomp classification is visible before navigation reloads and can be disabled as an ordinary variable',()=>{
+ const recomp={id:8,platform:platform.name,launch_directly:true,recomp:true};
+ assert.equal(vars.gameValues(recomp,platform).recomp,'yes');assert.ok(vars.knownNames().includes('recomp'));
+ assert.equal(vars.gameValues(recomp,platform,{games:{8:{recomp:'no'}}}).recomp,undefined);
+ assert.equal(recomp.launch_directly,true);
+});
+
 test('Grouped game categories use variables from the default edition without inheriting the primary edition overrides',()=>{
   const europe={id:7,platform:platform.name},usa={id:8,platform:platform.name};
   const grouped={...europe,default_region_id:8,regions:[{game:europe},{game:usa}]};

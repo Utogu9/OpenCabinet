@@ -1403,6 +1403,7 @@ function setupGameContextMenu() {
   const downloadImages = document.getElementById("context-download-images");
   const mergeDiscs = document.getElementById("context-merge-discs");
   const mergeRegions = document.getElementById("context-merge-regions");
+  const mergeRecomp = document.getElementById("context-merge-recomp");
   const imageFolder = document.getElementById("context-open-images");
   const manualFolder = document.getElementById("context-open-manuals");
   const gameFiles = document.getElementById("context-open-game-files");
@@ -1450,7 +1451,9 @@ function setupGameContextMenu() {
     const canMergeDiscs = canMerge && mergeCandidates.every(game => !game.regions?.length);
     mergeDiscs.classList.toggle("hidden", !canMergeDiscs);
     mergeRegions.classList.toggle("hidden", !canMerge);
-    items = multiple ? [remove, downloadImages, ...(canMergeDiscs ? [mergeDiscs] : []), ...(canMerge ? [mergeRegions] : [])] : [play, edit, ...(window.OpenCabinetLibraryTools?[history]:[]), ...(emulator ? [openEmulator] : []), gameFiles, imageFolder, manualFolder, remove];
+    const canMergeRecomp=window.OpenCabinetRegions?.canMergeRecomp?.(mergeCandidates)&&mergeCandidates.every(g=>!g.is_running&&!launchingGames.has(g.id));
+    mergeRecomp.classList.toggle('hidden',!canMergeRecomp);
+    items = multiple ? [remove, downloadImages, ...(canMergeDiscs ? [mergeDiscs] : []), ...(canMerge ? [mergeRegions] : []),...(canMergeRecomp?[mergeRecomp]:[])] : [play, edit, ...(window.OpenCabinetLibraryTools?[history]:[]), ...(emulator ? [openEmulator] : []), gameFiles, imageFolder, manualFolder, remove];
     document.querySelectorAll(".dropdown-menu.show").forEach((dropdown) => dropdown.classList.remove("show"));
     document.querySelectorAll(".menu-item-dropdown.active").forEach((dropdown) => dropdown.classList.remove("active"));
     menu.classList.remove("hidden");
@@ -1517,17 +1520,19 @@ function setupGameContextMenu() {
       showToast(globalThis.OpenCabinetI18n.t("msg.5613c4acd7"));
     } catch (error) { showToast(globalThis.OpenCabinetI18n.t("msg.0cda860364", error), true); }
   });
-  mergeRegions.addEventListener("click", async () => {
+  async function mergeVersions(recomp=false) {
     const games = targetIds.map(id => allGames.find(game => game.id === id)); close(true);
     if (games.length < 2 || games.some(game => !game || game.is_running)) return;
     try {
-      const primary = await window.OpenCabinetRegions.mergeGames(games, invoke);
+      const primary = await window.OpenCabinetRegions.mergeGames(games, invoke,{recomp});
       if (primary === null) return;
       selectedGameId = primary; selectedGameIds = new Set([primary]); selectionAnchorId = primary;
       platformDetailsCache.clear(); await loadGames();
-      showToast(globalThis.OpenCabinetI18n.t("msg.2d8ee6524f"));
-    } catch (error) { showToast(globalThis.OpenCabinetI18n.t("msg.952c09398e", error), true); }
-  });
+      showToast(globalThis.OpenCabinetI18n.t(recomp?'recomp.merged':"msg.2d8ee6524f"));
+    } catch (error) { showToast(globalThis.OpenCabinetI18n.t(recomp?'recomp.mergeError':"msg.952c09398e", error), true); }
+  }
+  mergeRegions.addEventListener('click',()=>mergeVersions());
+  mergeRecomp.addEventListener('click',()=>mergeVersions(true));
   downloadImages.addEventListener("click", () => {
     if (targetIds.length < 2) return;
     const ids = [...targetIds];
@@ -1871,7 +1876,8 @@ function gameVariantLabel(game) {
   const versions = game.regions?.length ? game.regions.map(region => region.game) : [game];
   const counts = versions.map(version => Math.max(1, version?.discs?.length || 0));
   const discs = Math.max(...counts), labels = [];
-  if (versions.length > 1) labels.push(globalThis.OpenCabinetI18n.t("play.regions", versions.length));
+  const mixed=versions.some(version=>version.launch_directly)&&versions.some(version=>!version.launch_directly);
+  if (versions.length > 1) labels.push(globalThis.OpenCabinetI18n.t(mixed?"recomp.versions":"play.regions", versions.length));
   if (discs > 1) labels.push(globalThis.OpenCabinetI18n.t(
     new Set(counts).size > 1 ? "play.discsUpTo" : "play.discs", discs));
   return labels.join(" · ");
@@ -3257,17 +3263,22 @@ function setupGameEditor() {
       editingSourceGame=game;draftRomPath=null;
       regionEditor?.setGame(group, game.id);
       document.getElementById("game-edit-current-region").textContent = group.regions?.length
-        ? globalThis.OpenCabinetI18n.t("msg.963abdf142", group.regions.find(region => region.game.id === game.id)?.label || game.title) : "";
+        ? globalThis.OpenCabinetI18n.t(window.OpenCabinetRegions?.hasLaunchVariants?.(group)?'recomp.editing':"msg.963abdf142", group.regions.find(region => region.game.id === game.id)?.label || game.title) : "";
       if (variablesEditor) {
         const platform = allPlatforms.find(p => p.name.toLowerCase() === game.platform.toLowerCase()) || { name:game.platform };
-        variablesEditor.set(window.OpenCabinetVariables.gameDefaults(game, window.OpenCabinetVariables.platformValues(platform,libraryVariableContext())), libraryGameVariables[game.id] || {});
+        const overrides={...(game.recomp?{recomp:'yes'}:{}),...(libraryGameVariables[game.id]||{})};
+        variablesEditor.set(window.OpenCabinetVariables.gameDefaults(game, window.OpenCabinetVariables.platformValues(platform,libraryVariableContext())), overrides);
       }
       discEditor?.setGame(game);
       orderEditor?.setGame(game);
       editingStore = Boolean(game.steam_app_id || game.epic_app_id);
       editingDirectly = Boolean(game.launch_directly) && !editingStore;
       editorTabs.find(item => item.name === "discs").tab.disabled = editingStore || editingDirectly;
-      editorTabs.find(item => item.name === "regions").tab.disabled = editingStore || editingDirectly;
+      editorTabs.find(item => item.name === "regions").tab.disabled = editingStore || (editingDirectly&&!group.regions?.length);
+      const variants=window.OpenCabinetRegions?.hasLaunchVariants?.(group);
+      const regionTab=editorTabs.find(item=>item.name==='regions');
+      regionTab.tab.textContent=globalThis.OpenCabinetI18n.t(variants?'recomp.tab':'msg.d4a0db1956');
+      document.getElementById('game-edit-regions-title').textContent=regionTab.tab.textContent;
       showEditorTab("details");
       document.getElementById("game-edit-rom-path").value = game.discs?.length
         ? game.discs.map(disc => `${disc.label}: ${disc.rom_path}`).join("\n") : game.rom_path || "";
@@ -3465,7 +3476,7 @@ async function launchGame(gameId, gameTitle) {
       source = selected.regions.find(region => region.game.id === regionId)?.game;
       if (!source) throw new Error(globalThis.OpenCabinetI18n.t("msg.5877fb995a"));
     }
-    if (source?.discs?.length > 1) {
+    if (!source?.launch_directly && source?.discs?.length > 1) {
       const discs = await invoke("get_game_discs", { id: source.id });
       discId = await window.OpenCabinetDiscs.chooseDisc(source, discs,{repairDisc});
       if (discId === null) return;
@@ -4035,6 +4046,11 @@ function importUsesFileSelection() {
   return importMode === "single" || (importMode === "folder" && importRunsDirectly());
 }
 
+function markRecompCandidates(preview) {
+  const recomp=importRunsDirectly()&&!isPcPlatform(getSelectedPlatformName())&&!!document.getElementById('scan-recomp')?.checked;
+  for(const game of preview.games)game.recomp=recomp&&!!game.launch_directly;
+}
+
 function updateImportSourceUI() {
   const single = importUsesFileSelection(), steam = importMode === "steam", epic = importMode === "epic", store = steam || epic, pc = isPcPlatform(getSelectedPlatformName());
   const visible = (id, show) => { const item = document.getElementById(id); if (show) item?.classList.remove("hidden"); else item?.classList.add("hidden"); };
@@ -4051,6 +4067,7 @@ function updateImportSourceUI() {
   visible("scan-folder-step", !single && !store); visible("scan-single-step", single); visible("scan-steam-step", steam); visible("scan-epic-step", epic);
   visible("scan-folder-console-help", !single && !store && /^(?:sony)?(?:playstation|ps)[34]$/.test(getSelectedPlatformName().toLowerCase().replace(/[^a-z0-9]/g,'')));
   visible("scan-direct-choice", !store && !pc);
+  visible('scan-recomp-choice',!store&&!pc&&importRunsDirectly());
   visible("scan-emulator-step", !pc && !store); visible("scan-direct-help", single && pc); visible("scan-pc-folder-help", !single && !store && pc);
   for (const id of ["scan-folder-input", "scan-extensions-input"]) { const input = document.getElementById(id); if (input) input.disabled = single || store; }
   const folder = document.getElementById("scan-folder-input"); if (folder) folder.required = !single && !store;
@@ -4070,6 +4087,7 @@ function chooseImportMode(mode) {
   if (scanInProgress || inlineRetroarchSetup?.busy || savingInlineEmulator) return;
   ++singleFileRequest; importMode = mode;
   const directChoice = document.getElementById("scan-launch-directly"); if (directChoice) directChoice.checked = false;
+  const recompChoice=document.getElementById('scan-recomp');if(recompChoice)recompChoice.checked=true;
   if (mode) warmImportCatalog();
   importConfigPage = "platform";
   if (mode === "steam" || mode === "epic") document.getElementById("scan-platform-select").value = allPlatforms.find(platform => isPcPlatform(platform.name))?.name || "PC";
@@ -4086,6 +4104,7 @@ function chooseImportMode(mode) {
 
 function setupScannerModal() {
   document.getElementById("scan-launch-directly")?.addEventListener("change", () => {
+    document.getElementById('scan-recomp').checked=!!document.getElementById('scan-launch-directly').checked;
     ++singleFileRequest;
     document.getElementById("scan-file-input").value = "";
     document.getElementById("scan-single-title").value = "";
@@ -4571,6 +4590,7 @@ function reviewScannedGames(preview,operation=null) {
           extra = await invoke("preview_single_game", { filePath: selected.rom_path, platform, title: selected.title, launchDirectly: direct });
         }
         if (!alive) return;
+        markRecompCandidates(extra);
         if (!direct && extra.games.some(game => game.discs?.length)) {
           extra = await invoke("prepare_disc_import", { preview: extra, platform });
           if (!alive) return;
@@ -5455,6 +5475,7 @@ async function handleExecuteScan() {
       onProgress: progressChannel(),
     }));
     activeChannel = null;
+    markRecompCandidates(preview);
     if(savedScan?.cancelled)throw savedScan;
     if(!single&&!store&&document.getElementById('scan-save-folder')?.checked){
       const platformRecord=allPlatforms.find(item=>item.name.toLowerCase()===platform.toLowerCase());

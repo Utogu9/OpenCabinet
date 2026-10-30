@@ -93,6 +93,7 @@ function library(options = {}) {
     context.window.OpenCabinetKeyboard=context.OpenCabinetKeyboard;
   }
   if (options.order) vm.runInContext(fs.readFileSync(path.join(__dirname,"../src/game-order.js"),"utf8"),context);
+  if (options.regions) vm.runInContext(fs.readFileSync(path.join(__dirname,"../src/game-regions.js"),"utf8"),context);
   vm.runInContext(source + `
     allGames = Array.from({ length: 6 }, (_, index) => ({ id: index + 1, title: 'Game ' + (index + 1), platform: 'SNES' }));
     renderGameCover = () => {};
@@ -125,6 +126,15 @@ function library(options = {}) {
   return { get, click, doubleClick, rightClick, selected, evaluate, calls, confirmations,
     confirm: (value) => { confirmed = value; }, reject: () => { rejectDelete = true; } };
 }
+
+test('The context menu offers recomp merging only for a marked executable and its emulated counterpart',async()=>{
+ const app=library({regions:true,handlers:{merge_game_recomp:()=>null}});
+ app.evaluate("allGames[1].launch_directly=true;allGames[1].recomp=true;window.OpenCabinetRegions.mergeGames=async(games,invoke,options)=>{globalThis.mergeOptions=options;await invoke('merge_game_recomp',{ids:games.map(game=>game.id)});return 1;}");
+ app.click(1);app.click(2,{ctrlKey:true});app.rightClick(2);assert.equal(app.get('context-merge-recomp').classList.contains('hidden'),false);
+ assert.equal(app.get('context-merge-regions').classList.contains('hidden'),true);
+ await app.get('context-merge-recomp').handlers.click();assert.equal(app.evaluate('mergeOptions.recomp'),true);assert.equal(app.evaluate('bulkRefreshes'),1);
+ app.evaluate('allGames[1].recomp=false');app.click(1);app.click(2,{ctrlKey:true});app.rightClick(2);assert.equal(app.get('context-merge-recomp').classList.contains('hidden'),true);
+});
 
 test("Keyboard navigation has one grid tab stop, supports ranges, focus-only movement and Enter launch", async () => {
   const app=library({keyboard:true});

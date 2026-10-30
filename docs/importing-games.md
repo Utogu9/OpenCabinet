@@ -5,6 +5,20 @@ juegos**. En ese caso, se elige primero un `.exe` y luego se pueden sumar otros
 con **Agregar juego…** desde la revisión. Todos permanecen en la plataforma
 elegida y se ejecutan directamente, sin modificar su emulador predeterminado.
 
+Al marcar **No usar emulador**, aparece **Este juego es un recomp/decomp**,
+activado por defecto. Guarda la variable editable `recomp = yes` en cada
+ejecutable importado, también al agregar más archivos desde la revisión.
+Desmarcarla permite importar un ejecutable normal sin esa clasificación.
+La importación habitual de juegos de PC, Steam o Epic no activa esta variable.
+
+Para mostrar un original y su recomp juntos, seleccioná ambas entradas de la
+misma consola y usá **Fusionar con recomp/decomp** en el menú contextual.
+La fusión permite revisar las etiquetas y elegir la entrada principal;
+conserva los archivos, datos, imágenes, manuales y estadísticas de cada versión.
+**Jugar** permite elegir original emulado o recomp/decomp; si el original tiene
+varios discos, su selector aparece después. En **Editar juego → Versiones /
+regiones** se puede elegir la versión predeterminada y editar cada una.
+
 La revisión aparece aunque haya un solo juego nuevo. Permite agregar archivos
 individuales y, en importaciones emuladas, **Agregar carpeta…** para escanear
 otros directorios de la misma plataforma. Conserva los títulos corregidos,

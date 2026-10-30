@@ -7,13 +7,22 @@
   }
   function members(game) { return game.regions?.length ? game.regions : [{ label:guess(game.rom_path) || globalThis.OpenCabinetI18n.t("msg.e545b02d8d"), game }]; }
   function selected(game) { return game.regions?.find(region => region.game.id === game.default_region_id)?.game || game; }
+  function hasLaunchVariants(game) {const versions=members(game);return versions.some(item=>item.game.launch_directly)&&versions.some(item=>!item.game.launch_directly);}
+  function canMergeRecomp(games) {
+    if(games.length!==2||games.some(game=>!game||game.is_running)||games[0].platform.toLowerCase()!==games[1].platform.toLowerCase())return false;
+    const versions=games.flatMap(members).map(item=>item.game);
+    return versions.every(game=>!game.steam_app_id&&!game.epic_app_id)&&versions.filter(game=>game.launch_directly).length===1
+      &&versions.some(game=>game.launch_directly&&game.recomp)&&versions.some(game=>!game.launch_directly);
+  }
+  function sourceLabel(game) {return globalThis.OpenCabinetI18n.t(game.launch_directly?'recomp.native':'recomp.emulated');}
   function element(tag, text, cls) { const el=document.createElement(tag); if(text)el.textContent=text;if(cls)el.className=cls;return el; }
   function button(text, action) { const el=element("button",text,"secondary-btn");el.type="button";el.onclick=action;return el; }
   function dialog(title) { const modal=element("dialog",null,"disc-dialog");modal.setAttribute("aria-label",title);modal.append(element("h2",title));document.body.append(modal);return modal; }
   async function chooseRegion(game, invoke, {repairDisc}={}) {
     const available = await Promise.all(members(game).map(async region => ({...region,discs:await invoke("get_game_discs",{id:region.game.id})})));
     return new Promise(resolve=>{
-      const modal=dialog(globalThis.OpenCabinetI18n.t("msg.a89714ebc3", game.title)), list=element("div",null,"disc-choice-list"),error=element('p',null,'disc-error');let done=false,repairing=false;
+      const mixed=hasLaunchVariants(game);
+      const modal=dialog(globalThis.OpenCabinetI18n.t(mixed?'recomp.choose':"msg.a89714ebc3", game.title)), list=element("div",null,"disc-choice-list"),error=element('p',null,'disc-error');let done=false,repairing=false;
       error.setAttribute('role','alert');
       function finish(id){if(done)return;done=true;modal.close();modal.remove();resolve(id);}
       let preferred;
@@ -22,7 +31,7 @@
       for(const region of available){
         const isDefault=region.game.id===game.default_region_id;
         const item=button("",()=>{if(!repairing)finish(region.game.id);});item.classList.add("disc-choice");
-        item.append(element("strong",`${region.label}${isDefault ? globalThis.OpenCabinetI18n.t("msg.ca29be1250") : ""}`),element("span",region.game.rom_path.split(/[\\/]/).pop()),element("span",`${region.discs.length} ${region.discs.length===1?globalThis.OpenCabinetI18n.t("msg.247a8174ec"):globalThis.OpenCabinetI18n.t("msg.c2ab077beb")}`));
+        item.append(element("strong",`${region.label}${isDefault ? globalThis.OpenCabinetI18n.t("msg.ca29be1250") : ""}`),element("span",region.game.rom_path.split(/[\\/]/).pop()),element("span",region.game.launch_directly?sourceLabel(region.game):`${mixed?sourceLabel(region.game)+' · ':''}${region.discs.length} ${region.discs.length===1?globalThis.OpenCabinetI18n.t("msg.247a8174ec"):globalThis.OpenCabinetI18n.t("msg.c2ab077beb")}`));
         item.disabled=!region.discs.some(disc=>disc.available);
         if(item.disabled)item.append(element("span",globalThis.OpenCabinetI18n.t("msg.cd62f5eb3a"),"disc-error"));
         const missing=region.discs.filter(disc=>!disc.available);
@@ -46,14 +55,17 @@
       modal.showModal();preferred?.focus();
     });
   }
-  async function mergeGames(games, invoke) {
-    const regions=games.flatMap(members).map((region,index)=>({...region,label:region.label||guess(region.game.rom_path)||globalThis.OpenCabinetI18n.t("msg.de6d5b15ed", index+1)}));
+  async function mergeGames(games, invoke,{recomp=false}={}) {
+    if(recomp&&!canMergeRecomp(games))throw Error(globalThis.OpenCabinetI18n.t('recomp.invalidMerge'));
+    const regions=games.flatMap(members).map((region,index)=>({...region,label:recomp
+      ?sourceLabel(region.game)+(guess(region.game.rom_path)?' · '+guess(region.game.rom_path):'')
+      :region.label||guess(region.game.rom_path)||globalThis.OpenCabinetI18n.t("msg.de6d5b15ed", index+1)}));
     return new Promise(resolve=>{
-      const modal=dialog(globalThis.OpenCabinetI18n.t("msg.6cd843ce14"));
-      modal.append(element("p",globalThis.OpenCabinetI18n.t("msg.4e06837553"),"help-text"));
+      const modal=dialog(globalThis.OpenCabinetI18n.t(recomp?'recomp.merge':"msg.6cd843ce14"));
+      modal.append(element("p",globalThis.OpenCabinetI18n.t(recomp?'recomp.mergeHelp':"msg.4e06837553"),"help-text"));
       const label=element("label",globalThis.OpenCabinetI18n.t("msg.69c4ac3d9e")),primary=element("select");
       regions.forEach(region=>{const option=element("option",`${region.game.title} · ${region.label}`);option.value=region.game.id;primary.append(option);});
-      primary.value=String(games[0].id);label.append(primary);modal.append(label);
+      primary.value=String(recomp?regions.find(region=>!region.game.launch_directly).game.id:games[0].id);label.append(primary);modal.append(label);
       const list=element("div",null,"region-edit-list");
       regions.forEach(region=>{const row=element("label",null,"form-group");row.append(element("span",region.game.rom_path.split(/[\\/]/).pop()));const input=element("input");input.value=region.label;input.maxLength=100;input.autocomplete="off";input.setAttribute("aria-label",globalThis.OpenCabinetI18n.t("msg.33ac393f9d"));input.oninput=()=>{region.label=input.value;};row.append(input);list.append(row);});
       let busy=false,done=false;const error=element("p",null,"disc-error");error.setAttribute("role","alert");
@@ -61,7 +73,7 @@
       const cancel=button(globalThis.OpenCabinetI18n.t("msg.bb9dbb406d"),()=>finish(null)),confirm=button(globalThis.OpenCabinetI18n.t("msg.53615300e7"),async()=>{
         if(busy)return;busy=true;error.textContent="";
         const controls=[...modal.querySelectorAll("button,input,select")];controls.forEach(control=>{control.disabled=true;});
-        try{const id=Number(primary.value);await invoke("merge_game_regions",{ids:games.map(game=>game.id),primaryId:id,labels:regions.map(region=>({id:region.game.id,label:region.label}))});busy=false;finish(id);}
+        try{const id=Number(primary.value);await invoke(recomp?'merge_game_recomp':"merge_game_regions",{ids:games.map(game=>game.id),primaryId:id,labels:regions.map(region=>({id:region.game.id,label:region.label}))});busy=false;finish(id);}
         catch(reason){busy=false;error.textContent=String(reason);controls.forEach(control=>{control.disabled=false;});}
       });
       const actions=element("div",null,"form-actions");actions.append(cancel,confirm);modal.append(list,error,actions);
@@ -74,17 +86,19 @@
       setGame(game,editingId){
         group=game;defaultId=game.default_region_id;labels=members(game).map(region=>({id:region.game.id,label:region.label}));container.replaceChildren();
         if(!game.regions?.length){container.append(element("p",globalThis.OpenCabinetI18n.t("msg.40a7962693"),"help-text"));return;}
-        container.append(element("p",globalThis.OpenCabinetI18n.t("msg.8ddb35aa90"),"help-text"));
-        const label=element("label",globalThis.OpenCabinetI18n.t("msg.dcec58b721")),select=element("select");select.id="game-default-region";
+        const mixed=hasLaunchVariants(game);
+        container.append(element("p",globalThis.OpenCabinetI18n.t(mixed?'recomp.editorHelp':"msg.8ddb35aa90"),"help-text"));
+        const label=element("label",globalThis.OpenCabinetI18n.t(mixed?'recomp.default':"msg.dcec58b721")),select=element("select");select.id="game-default-region";
         game.regions.forEach(region=>{const option=element("option",region.label);option.value=region.game.id;select.append(option);});select.value=String(defaultId);select.onchange=()=>{defaultId=Number(select.value);};label.append(select);container.append(label);
         game.regions.forEach((region,index)=>{
           const row=element("div",null,"region-edit-row");const input=element("input");input.value=labels[index].label;input.maxLength=100;input.autocomplete="off";input.setAttribute("aria-label",globalThis.OpenCabinetI18n.t("msg.33ac393f9d"));input.oninput=()=>{labels[index].label=input.value;};
           const edit=button(region.game.id===editingId?globalThis.OpenCabinetI18n.t("msg.957a90ec0d"):globalThis.OpenCabinetI18n.t("msg.e477d2b2ff"),()=>onEdit(region.game,game));edit.disabled=region.game.id===editingId;
-          row.append(input,element("span",`${region.game.discs.length} ${region.game.discs.length===1?globalThis.OpenCabinetI18n.t("msg.247a8174ec"):globalThis.OpenCabinetI18n.t("msg.c2ab077beb")}`,"disc-filename"),edit);container.append(row);
+          const discs=region.game.discs?.length||1;
+          row.append(input,element("span",region.game.launch_directly?sourceLabel(region.game):`${discs} ${discs===1?globalThis.OpenCabinetI18n.t("msg.247a8174ec"):globalThis.OpenCabinetI18n.t("msg.c2ab077beb")}`,"disc-filename"),edit);container.append(row);
         });
       },
       value(){return group?.regions?.length?{parent_id:group.id,default_id:defaultId,labels:labels.map(label=>({...label}))}:null;},
     };
   }
-  root.OpenCabinetRegions={guess,members,selected,chooseRegion,mergeGames,createEditor};
+  root.OpenCabinetRegions={guess,members,selected,hasLaunchVariants,canMergeRecomp,chooseRegion,mergeGames,createEditor};
 })(typeof window === "undefined" ? globalThis : window);

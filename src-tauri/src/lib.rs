@@ -74,6 +74,8 @@ pub struct Game {
     pub session_count: i64,
     pub is_running: bool,
     pub launch_directly: bool,
+    #[serde(default)]
+    pub recomp: bool,
     pub steam_app_id: Option<u32>,
     pub epic_app_id: Option<String>,
 }
@@ -158,6 +160,8 @@ pub struct ScanResult {
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 pub struct RomCandidate {
     #[serde(default)]
+    recomp: bool,
+    #[serde(default)]
     launch_directly: bool,
     #[serde(default)]
     discs: Vec<discs::Disc>,
@@ -187,6 +191,7 @@ fn candidate_launch_mode(candidate: &RomCandidate, platform: &str) -> Result<boo
     } else {
         steam::launch_mode(candidate, platform)?
     };
+    if candidate.recomp && (!candidate.launch_directly || !direct) { return Err(crate::i18n::text("recomp.invalidImport").into()); }
     if !candidate.discs.is_empty() {
         if direct || discs::key(&candidate.discs[0].rom_path)!=discs::key(&candidate.rom_path) {
             return Err(crate::i18n::text("msg.83d5697d91").into());
@@ -360,6 +365,7 @@ fn read_library_games(conn: &Connection, root: &Path, tracker: &PlayTracker) -> 
     let order_groups=game_order::groups(conn)?;
     let order_index=game_order::index(&order_groups);
     let mut box_settings = game_box_settings::all(conn)?;
+    let variables = entity_variables::all(conn,"game")?;
     let mut stmt = conn
         .prepare("SELECT id, title, platform, rom_path, cover_path, play_time, release_date, developer, publisher, genre, game_mode, max_players, description, last_played, play_time_seconds, session_count, launch_directly, emulator_override_id, arguments_override FROM games ORDER BY title ASC")
         .map_err(|e| e.to_string())?;
@@ -380,6 +386,7 @@ fn read_library_games(conn: &Connection, root: &Path, tracker: &PlayTracker) -> 
                 description: row.get(12)?, last_played: row.get(13)?,
                 play_time_seconds: row.get(14)?, session_count: row.get(15)?, is_running: false,
                 launch_directly: row.get(16)?,
+                recomp: false,
                 steam_app_id: None,
                 epic_app_id: None,
             })
@@ -400,6 +407,7 @@ fn read_library_games(conn: &Connection, root: &Path, tracker: &PlayTracker) -> 
     for game in games_iter {
         let mut game = game.map_err(|e| e.to_string())?;
         game.discs = disc_lists.remove(&game.id).unwrap_or_default();
+        game.recomp = entity_variables::truth(variables.get(&game.id).and_then(|values|values.get("recomp")));
         game.box_3d = box_settings.remove(&game.id);
         game.order_group = order_index.get(&game_order::key(&game.title)).map(|index|order_groups[*index].clone());
         game.is_running = tracker.is_running(game.id);
@@ -748,11 +756,13 @@ fn save_game_details_in_transaction(conn: &Connection, details: GameDetails) -> 
             description: row.get(12)?, last_played: row.get(13)?,
             play_time_seconds: row.get(14)?, session_count: row.get(15)?, is_running: false,
             launch_directly: row.get(16)?,
+            recomp: false,
             steam_app_id: None,
             epic_app_id: None,
         }),
     ).map_err(|e| e.to_string())?;
     game.steam_app_id = steam::app_id(&game.rom_path);
+    game.recomp = entity_variables::truth(entity_variables::read(tx,"game",details.id)?.get("recomp"));
     game.epic_app_id = epic::app_id(&game.rom_path);
     game.images = read_game_images(&tx, details.id)?;
     game.discs = discs::read(&tx, details.id as i64)?;
@@ -1000,7 +1010,7 @@ fn launch_game_record_with_region<T>(
         .prepare("SELECT title, platform, rom_path, launch_directly FROM games WHERE id = ?1")
         .map_err(|e| e.to_string())?;
     let game_info: (String, String, String, bool) = stmt
-        .query_row([game_id], |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)))
+        .query_row([source_id], |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)))
         .map_err(|_| crate::i18n::i18n_format!("msg.4cc7a81c78", game_id))?;
     let (title, platform, rom_path, launch_directly) = game_info;
     if launch_directly && disc_id.is_some() { return Err(crate::i18n::text("msg.11fbfacfff").into()); }
@@ -1018,10 +1028,10 @@ fn launch_game_record_with_region<T>(
     }
     if launch_directly {
         manual_import::validate_pc_executable(&rom_path)?;
-        let options = game_execution::read(conn, game_id)?;
+        let options = game_execution::read(conn, source_id)?;
         let args = shlex_split(options.arguments.as_deref().unwrap_or("")).into_iter().map(|arg|arg.replace("%ROM%", &rom_path)).collect::<Vec<_>>();
         let process = spawn(&rom_path, &args, Path::new(&rom_path).parent())?;
-        let stats = playtime::start_session(conn, game_id)
+        let stats = playtime::start_session(conn, source_id)
             .map_err(|e| crate::i18n::i18n_format!("msg.32e05611f6", e))?;
         return Ok((LaunchResult { message: format!("Ejecutando {}", title), stats }, process));
     }
@@ -1199,7 +1209,7 @@ fn discover_roms_for_platform(
                 skipped_count += 1;
             } else {
                 let file_stem = entry_path.file_stem().and_then(|name| name.to_str()).unwrap_or(crate::i18n::text("msg.4d1a7c9832"));
-                candidates.push(RomCandidate { launch_directly: false, discs: Vec::new(), existing_game_id: None, title: clean_rom_title(file_stem), rom_path, steam: None, epic: None });
+                candidates.push(RomCandidate { recomp: false, launch_directly: false, discs: Vec::new(), existing_game_id: None, title: clean_rom_title(file_stem), rom_path, steam: None, epic: None });
             }
         }
         if last_update.elapsed() >= Duration::from_millis(100) {
@@ -1221,7 +1231,7 @@ fn discover_roms_for_platform(
             let rom_path = file.to_string_lossy().into_owned();
             total_found += 1;
             if existing.contains(&discs::key(&rom_path)) { skipped_count += 1; }
-            else { candidates.push(RomCandidate { launch_directly: false, discs: Vec::new(), existing_game_id: None, title, rom_path, steam: None, epic: None }); }
+            else { candidates.push(RomCandidate { recomp: false, launch_directly: false, discs: Vec::new(), existing_game_id: None, title, rom_path, steam: None, epic: None }); }
         }
     }
     let mut candidates = discs::group(candidates);
@@ -1323,6 +1333,7 @@ fn import_roms_with_media(
             if rows > 0 {
                 added_count += 1;
                 let id = tx.last_insert_rowid();
+                entity_variables::save_recomp(&tx,id as i32,candidate.recomp)?;
                 if !direct { discs::replace(&tx,id,&sources)?; }
                 if let Some((root,selections)) = recovery {
                     if let Some(collection)=media_library::selection_for(selections, &candidate.rom_path) {
@@ -1961,6 +1972,48 @@ mod game_edit_tests {
     }
 
     #[test]
+    fn recomp_merge_preserves_both_versions_and_launches_the_selected_source_with_its_own_arguments() {
+        for primary in [1,2] {
+            let mut conn=region_database();let files=MediaDirectory::new();
+            let rom=files.image("Original (Europe).chd");let executable=files.image("Recomp.exe");
+            discs::replace(&conn,1,&[discs::source(&rom)]).unwrap();
+            conn.execute("UPDATE games SET launch_directly=1,rom_path=?1,arguments_override='--native-test' WHERE id=2",[&executable]).unwrap();
+            conn.execute_batch("CREATE TABLE emulators(name TEXT,platform TEXT,executable_path TEXT,arguments TEXT);INSERT INTO emulators VALUES ('Test','SNES','emu.exe','--full \"%ROM%\"');").unwrap();
+            assert!(game_regions::merge_recomp(&mut conn,&[1,2],primary,&region_labels()).is_err());
+            entity_variables::save_recomp(&conn,2,true).unwrap();
+            game_regions::merge_recomp(&mut conn,&[1,2],primary,&region_labels()).unwrap();
+            let library=read_library_games(&conn,&files.0,&PlayTracker::default()).unwrap();
+            assert_eq!(library.len(),1);assert_eq!(library[0].id,primary);assert_eq!(library[0].regions.len(),2);
+            assert!(library[0].regions.iter().find(|region|region.game.id==2).unwrap().game.recomp);
+            assert_eq!(library[0].session_count,5);assert_eq!(library[0].play_time_seconds,720);
+            assert!(launch_game_record_with_region(&conn,primary,None,None,|_,_,_|Ok(())).is_err());
+            let (result,())=launch_game_record_with_region(&conn,primary,Some(2),None,|path,args,working|{
+                assert_eq!(path,executable);assert_eq!(args,&["--native-test"]);assert_eq!(working,Path::new(&executable).parent());Ok(())
+            }).unwrap();
+            assert_eq!(result.stats.id,2);assert_eq!(result.stats.session_count,4);
+            let mut saved=0;playtime::save_elapsed(&conn,2,10,&mut saved,false).unwrap();
+            let (result,())=launch_game_record_with_region(&conn,primary,Some(1),None,|path,args,_|{
+                assert_eq!(path,"emu.exe");assert_eq!(args,&["--full".to_string(),rom.clone()]);Ok(())
+            }).unwrap();assert_eq!(result.stats.id,1);assert_eq!(result.stats.session_count,3);
+            assert!(Path::new(&rom).is_file()&&Path::new(&executable).is_file());
+            assert_eq!(entity_variables::read(&conn,"game",2).unwrap().get("recomp").map(String::as_str),Some("yes"));
+        }
+    }
+
+    #[test]
+    fn recomp_merge_rejects_other_platforms_two_executables_and_store_launchers_without_partial_groups() {
+        let mut conn=region_database();entity_variables::save_recomp(&conn,2,true).unwrap();
+        conn.execute("UPDATE games SET launch_directly=1,rom_path='Native.exe',platform='Other' WHERE id=2",[]).unwrap();
+        assert!(game_regions::merge_recomp(&mut conn,&[1,2],1,&region_labels()).is_err());
+        conn.execute("UPDATE games SET platform='SNES' WHERE id=2",[]).unwrap();
+        conn.execute("UPDATE games SET launch_directly=1 WHERE id=1",[]).unwrap();entity_variables::save_recomp(&conn,1,true).unwrap();
+        assert!(game_regions::merge_recomp(&mut conn,&[1,2],1,&region_labels()).is_err());
+        conn.execute("UPDATE games SET launch_directly=0 WHERE id=1",[]).unwrap();conn.execute("UPDATE games SET rom_path=?1 WHERE id=2",[steam::uri(10)]).unwrap();
+        assert!(game_regions::merge_recomp(&mut conn,&[1,2],1,&region_labels()).is_err());
+        assert_eq!(conn.query_row("SELECT COUNT(*) FROM game_regions",[],|r|r.get::<_,i64>(0)).unwrap(),0);
+    }
+
+    #[test]
     fn regrouping_and_invalid_merges_preserve_every_regional_record_and_statistics() {
         let mut conn=region_database();game_regions::merge(&mut conn,&[1,2],1,&region_labels()).unwrap();
         conn.execute("INSERT INTO games(id,title,platform,rom_path,play_time_seconds,session_count) VALUES (3,'Japan','Genesis','C:/Game (Japan).chd',20,1)",[]).unwrap();
@@ -2546,6 +2599,7 @@ pub fn run() {
             discs::pick_disc_files,
             discs::merge_game_discs,
             game_regions::merge_game_regions,
+            game_regions::merge_game_recomp,
             scan_roms_folder,
             emulator_defaults::get_emulator_argument_presets,
             manual_import::select_game_file,

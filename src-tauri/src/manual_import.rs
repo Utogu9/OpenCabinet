@@ -63,7 +63,7 @@ pub async fn select_game_file(
         }
         dialog = dialog.add_filter(crate::i18n::text("msg.a4a04914f5"), &["*"]);
     }
-    Ok(dialog.pick_file().await.map(|file| RomCandidate { launch_directly: false, discs: Vec::new(), existing_game_id: None,
+    Ok(dialog.pick_file().await.map(|file| RomCandidate { recomp: false, launch_directly: false, discs: Vec::new(), existing_game_id: None,
         steam: None, epic: None,
         title: if crate::folder_games::supported(&platform) && file.path().file_name().is_some_and(|s| s.eq_ignore_ascii_case("eboot.bin")) {
             crate::folder_games::title(file.path().parent().unwrap_or(file.path()), file.path())
@@ -123,7 +123,7 @@ fn preview_file(
         games: if exists {
             vec![]
         } else {
-            vec![RomCandidate { launch_directly: false, discs: if !is_pc_platform(platform) && crate::discs::identify(file_path).is_some() { vec![crate::discs::source(file_path)] } else { Vec::new() }, existing_game_id: None,
+            vec![RomCandidate { recomp: false, launch_directly: false, discs: if !is_pc_platform(platform) && crate::discs::identify(file_path).is_some() { vec![crate::discs::source(file_path)] } else { Vec::new() }, existing_game_id: None,
                 steam: None, epic: None,
                 title: title.into(),
                 rom_path: file_path.into(),
@@ -182,12 +182,15 @@ mod tests {
         let mut conn = files.database();
         let mut preview = preview_file(&conn, &path, "Sony PlayStation 2", "Reviewed title").unwrap();
         preview.games[0].launch_directly = true;
+        preview.games[0].recomp = true;
         // The flag must survive the frontend/native JSON round trip and both import paths.
         let preview: ScanPreview = serde_json::from_str(&serde_json::to_string(&preview).unwrap()).unwrap();
         assert!(crate::candidate_launch_mode(&preview.games[0], "Sony PlayStation 2").unwrap());
         crate::import_roms(&mut conn, preview, "Sony PlayStation 2", |_| {}).unwrap();
         let row: (String, bool) = conn.query_row("SELECT platform,launch_directly FROM games", [], |r| Ok((r.get(0)?,r.get(1)?))).unwrap();
         assert_eq!(row, ("Sony PlayStation 2".into(), true));
+        assert_eq!(crate::entity_variables::read(&conn,"game",1).unwrap().get("recomp").map(String::as_str),Some("yes"));
+        let sources=crate::discs::available_sources(&conn,1).unwrap();assert_eq!(sources.len(),1);assert!(sources[0].available);
         crate::launch_game_record(&conn, 1, |executable, args, directory| {
             assert_eq!(executable, path);
             assert!(args.is_empty());
@@ -197,6 +200,16 @@ mod tests {
         let mut invalid = preview_file(&conn, &files.file("Disc.iso"), "PS2", "ROM").unwrap().games.remove(0);
         invalid.launch_directly = true;
         assert!(crate::candidate_launch_mode(&invalid, "PS2").is_err());
+    }
+
+    #[test]
+    fn recomp_is_optional_for_direct_imports_and_cannot_mark_an_emulated_rom() {
+        let files=Files::new();let mut conn=files.database();
+        let mut preview=preview_file(&conn,&files.file("Native.exe"),"PS2","Native").unwrap();preview.games[0].launch_directly=true;
+        crate::import_roms(&mut conn,preview,"PS2",|_|{}).unwrap();assert!(crate::entity_variables::read(&conn,"game",1).unwrap().is_empty());
+        let mut invalid=preview_file(&conn,&files.file("Original.iso"),"PS2","Original").unwrap();invalid.games[0].recomp=true;
+        assert!(crate::import_roms(&mut conn,invalid,"PS2",|_|{}).is_err());
+        assert_eq!(conn.query_row("SELECT COUNT(*) FROM games",[],|r|r.get::<_,i64>(0)).unwrap(),1);
     }
 
     #[test]

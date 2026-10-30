@@ -241,6 +241,15 @@ pub fn statistics(
     Ok(stats)
 }
 pub fn merge(conn: &mut Connection, ids: &[i32], primary: i32, labels: &[Label]) -> Result<()> {
+    merge_entries(conn,ids,primary,labels,false)
+}
+pub fn merge_recomp(conn:&mut Connection,ids:&[i32],primary:i32,labels:&[Label])->Result<()> {
+    if ids.len()!=2 || ids.iter().map(|id|owner(conn,*id)).collect::<Result<HashSet<_>>>()?.len()!=2 {
+        return Err(crate::i18n::text("recomp.invalidMerge").into());
+    }
+    merge_entries(conn,ids,primary,labels,true)
+}
+fn merge_entries(conn:&mut Connection,ids:&[i32],primary:i32,labels:&[Label],recomp:bool)->Result<()> {
     init(conn).map_err(err)?;
     if ids.iter().copied().collect::<HashSet<_>>().len() < 2 {
         return Err(crate::i18n::text("msg.36783a7fcc").into());
@@ -257,6 +266,7 @@ pub fn merge(conn: &mut Connection, ids: &[i32], primary: i32, labels: &[Label])
         .transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)
         .map_err(err)?;
     let mut platform = None;
+    let mut direct_count=0;
     for id in &members {
         let (p, direct, path): (String, bool, String) = tx
             .query_row(
@@ -265,7 +275,7 @@ pub fn merge(conn: &mut Connection, ids: &[i32], primary: i32, labels: &[Label])
                 |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
             )
             .map_err(err)?;
-        if direct
+        if (direct && (!recomp || !crate::entity_variables::truth(crate::entity_variables::read(&tx,"game",*id)?.get("recomp"))))
             || crate::steam::app_id(&path).is_some()
             || crate::epic::app_id(&path).is_some()
             || platform
@@ -277,8 +287,12 @@ pub fn merge(conn: &mut Connection, ids: &[i32], primary: i32, labels: &[Label])
             );
         }
         platform = Some(p);
+        direct_count+=usize::from(direct);
         tx.execute("DELETE FROM game_regions WHERE game_id=?1", [id])
             .map_err(err)?;
+    }
+    if recomp && (direct_count!=1 || direct_count==members.len()) {
+        return Err(crate::i18n::text("recomp.invalidMerge").into());
     }
     for (position, label) in labels.iter().enumerate() {
         if label.label.trim().is_empty() || label.label.chars().count() > 100 {
@@ -306,4 +320,14 @@ pub async fn merge_game_regions(
     })
     .await
     .map_err(err)?
+}
+
+#[tauri::command]
+pub async fn merge_game_recomp(ids:Vec<i32>,primary_id:i32,labels:Vec<Label>,tracker:tauri::State<'_,PlayTracker>)->Result<()> {
+    let tracker=tracker.inner().clone();
+    tauri::async_runtime::spawn_blocking(move||{
+        let mut conn=crate::get_db_connection().map_err(err)?;
+        let _reservations=expanded(&conn,&ids)?.into_iter().map(|id|tracker.reserve(id)).collect::<Result<Vec<_>>>()?;
+        merge_recomp(&mut conn,&ids,primary_id,&labels)
+    }).await.map_err(err)?
 }

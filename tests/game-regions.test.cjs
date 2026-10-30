@@ -23,6 +23,29 @@ function environment(){
 const editions=()=>[{label:'Europa',game:{id:1,title:'Game',rom_path:'Game (Europe).chd',discs:[{id:11}]}},{label:'USA',game:{id:2,title:'Game',rom_path:'Game (USA) (Disc 1).chd',discs:[{id:21},{id:22}]}}];
 const group=()=>({id:1,title:'Game',default_region_id:2,regions:editions()});
 const turn=()=>new Promise(resolve=>setImmediate(resolve));
+const recomp=()=>({id:3,title:'Native game',platform:'PS2',rom_path:'C:/Games/Native.exe',launch_directly:true,recomp:true,discs:[]});
+
+test('Recomp merging requires two compatible roots and proposes the emulated original as the main entry',async()=>{
+ const {api,body}=environment();const original={...group(),platform:'PS2'};original.regions.forEach(item=>item.game.platform='PS2');
+ assert.equal(api.canMergeRecomp([original,recomp()]),true);
+ assert.equal(api.canMergeRecomp([original,{...recomp(),recomp:false}]),false);
+ assert.equal(api.canMergeRecomp([original,{...recomp(),platform:'Other'}]),false);
+ assert.equal(api.canMergeRecomp([recomp(),{...recomp(),id:4}]),false);
+ assert.equal(api.canMergeRecomp([original,{...recomp(),steam_app_id:10}]),false);
+ let sent;const pending=api.mergeGames([recomp(),original],async(command,args)=>{sent={command,args};},{recomp:true});
+ const modal=body.children[0];assert.equal(modal.children[2].children[0].value,'1');
+ await modal.children[5].children[1].onclick();assert.equal(await pending,1);assert.equal(sent.command,'merge_game_recomp');
+ assert.equal(sent.args.labels.length,3);assert.match(sent.args.labels[0].label,/Recomp/);
+});
+
+test('The version selector distinguishes recomp executables from emulated multi-disc editions and disables missing files',async()=>{
+ const {api,body}=environment();const game=group();game.regions.push({label:'Recomp/decomp',game:recomp()});
+ assert.equal(api.hasLaunchVariants(game),true);
+ const pending=api.chooseRegion(game,async(command,{id})=>id===3?[{available:true,rom_path:'Native.exe'}]:[{available:false}]);await turn();
+ const modal=body.children[0];assert.match(modal.children[0].textContent,/versión/);
+ assert.equal(modal.children[1].children[0].disabled,true);assert.equal(modal.children[1].children[2].disabled,false);
+ assert.equal(modal.children[1].children[2].children[2].textContent,'Recomp/decomp');modal.children[1].children[2].onclick();assert.equal(await pending,3);
+});
 
 test('Region names come from ROM tags and default presentation keeps the matching edition',()=>{
   const {api}=environment();
@@ -88,4 +111,14 @@ test('All shared launch paths select region first, then only its discs, and canc
   calls.length=0;regionId=null;await vm.runInContext('launchGame(1,"Game")',context);assert.deepEqual(calls.map(call=>call.command),['choose_region']);
   calls.length=0;regionId=2;discId=null;await vm.runInContext('launchGame(1,"Game")',context);assert.ok(!calls.some(call=>call.command==='launch_game'));
   assert.equal(vm.runInContext('launchingGames.size',context),0);
+});
+
+test('Choosing a recomp launches it directly without requesting a disc, while retaining the group identity',async()=>{
+ const {context}=environment(),calls=[];const game=group();game.regions.push({label:'Recomp',game:{...recomp(),discs:[{},{}]}});
+ context.invoke=async(command,args)=>{calls.push({command,args});return {message:'OK'};};context.seed=game;
+ context.window.OpenCabinetRegions.chooseRegion=async()=>3;
+ vm.runInContext('let allGames=[seed];const launchingGames=new Set();let selectedGameId=1;function updatePlatformStatistics(){}function updatePlayStatus(){}function showToast(){}function applyPlayStatistics(){}',context);
+ const main=fs.readFileSync('src/main.js','utf8');vm.runInContext(main.slice(main.indexOf('async function launchGame('),main.indexOf('async function loadEmulators()')),context);
+ await vm.runInContext('launchGame(1,"Game")',context);assert.deepEqual(calls.map(call=>call.command),['launch_game']);
+ assert.deepEqual({...calls[0].args},{gameId:1,regionId:3});
 });

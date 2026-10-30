@@ -3,6 +3,17 @@ use std::collections::{BTreeMap, HashMap};
 use rusqlite::{Connection, OptionalExtension};
 pub type Variables = BTreeMap<String, String>;
 
+pub fn truth(value: Option<&String>) -> bool {
+    value.is_some_and(|value| ["yes","true","1","si","sí"].iter().any(|yes|value.trim().eq_ignore_ascii_case(yes)))
+}
+
+pub fn save_recomp(conn:&Connection,id:i32,recomp:bool)->Result<(),String> {
+    if !recomp{return Ok(());}
+    init_schema(conn).map_err(|e|e.to_string())?;
+    conn.execute("INSERT INTO entity_variables(entity,entity_id,name,value) VALUES('game',?1,'recomp','yes') ON CONFLICT(entity,entity_id,name) DO UPDATE SET value='yes'",[id]).map_err(|e|e.to_string())?;
+    Ok(())
+}
+
 pub fn init_schema(conn: &Connection) -> rusqlite::Result<()> {
     conn.execute_batch("CREATE TABLE IF NOT EXISTS entity_variables (
         entity TEXT NOT NULL CHECK(entity IN ('game','platform')), entity_id INTEGER NOT NULL,

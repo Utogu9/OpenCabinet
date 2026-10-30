@@ -123,6 +123,7 @@ test('Executable review keeps every added game on the console and hides director
    select_game_file:()=>({rom_path:'D:/Other/Second.exe',title:'Second'}),
  });
  app.get('scan-launch-directly').checked=true;
+ app.get('scan-recomp').checked=true;
  app.get('scan-file-input').value='C:/First.exe'; app.get('scan-single-title').value='First';
  const pending=app.start(); await nextTurn();
  assert.equal(app.get('btn-review-add-folder').classList.contains('hidden'),true);
@@ -133,6 +134,7 @@ test('Executable review keeps every added game on the console and hides director
  const imported=app.calls.find(call=>call.command==='import_scanned_roms').args;
  assert.equal(imported.platform,'PS2'); assert.equal(imported.preview.games.length,2);
  assert.ok(imported.preview.games.every(game=>game.launch_directly));
+ assert.ok(imported.preview.games.every(game=>game.recomp));
 });
 
 test('Review can cancel an active addition and ignores its late response', async () => {

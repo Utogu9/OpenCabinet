@@ -297,7 +297,7 @@ fn prepare_with_counts(
             platform: source.into(),
             games: vec![PreparedGame {
                 media_collection_id: None,
-                candidate: RomCandidate { launch_directly: false, discs: Vec::new(), existing_game_id: None,
+                candidate: RomCandidate { recomp: false, launch_directly: false, discs: Vec::new(), existing_game_id: None,
                     steam: None, epic: None,
                     title: crate::i18n::i18n_format!("msg.cfa8c71e2b", source = source),
                     rom_path: String::new(),

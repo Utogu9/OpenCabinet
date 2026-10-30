@@ -439,14 +439,19 @@ pub async fn prepare_disc_import(
 pub async fn get_game_discs(id: i32) -> Result<Vec<Disc>> {
     tauri::async_runtime::spawn_blocking(move || {
         let conn = crate::get_db_connection().map_err(err)?;
-        let mut discs = read(&conn, id as i64)?;
-        for disc in &mut discs {
-            disc.available = Path::new(&disc.rom_path).is_file();
-        }
-        Ok(discs)
+        available_sources(&conn,id)
     })
     .await
     .map_err(err)?
+}
+pub fn available_sources(conn:&Connection,id:i32)->Result<Vec<Disc>> {
+    let mut discs=read(conn,id as i64)?;
+    if discs.is_empty() {
+        let path:String=conn.query_row("SELECT rom_path FROM games WHERE id=?1",[id],|r|r.get(0)).map_err(err)?;
+        discs.push(source(&path));
+    }
+    for disc in &mut discs {disc.available=Path::new(&disc.rom_path).is_file();}
+    Ok(discs)
 }
 #[tauri::command]
 pub async fn pick_disc_files() -> Result<Vec<Disc>> {
@@ -611,7 +616,7 @@ mod tests {
         c
     }
     fn candidate(path: &str) -> RomCandidate {
-        RomCandidate { launch_directly: false,
+        RomCandidate { recomp: false, launch_directly: false,
             title: crate::clean_rom_title(Path::new(path).file_stem().unwrap().to_str().unwrap()),
             rom_path: path.into(),
             steam: None,
