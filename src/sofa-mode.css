@@ -1,0 +1,73 @@
+/* Fullscreen library, using the active theme's colors. */
+dialog.sofa-mode {
+  inset: 0; width: 100vw; height: 100vh; height: 100dvh;
+  max-width: none; max-height: none; margin: 0; padding: 0; border: 0;
+  border-radius: 0; color: var(--text-main); background: var(--bg-color);
+  overflow: hidden; isolation: isolate;
+}
+dialog.sofa-mode[open] { display: grid; grid-template-rows: auto minmax(170px, 1fr) auto auto auto; }
+.sofa-mode::backdrop { background: #000; }
+.sofa-backdrop { position: absolute; inset: -50px; z-index: -2; background-position: center; background-size: cover; filter: blur(28px); opacity: .2; pointer-events: none; }
+.sofa-mode::before { content: ''; position: absolute; inset: 0; z-index: -1; pointer-events: none; background: linear-gradient(0deg, var(--bg-color) 2%, transparent 70%, var(--bg-color)), radial-gradient(ellipse at center, transparent, var(--bg-color)); }
+.sofa-header { display: flex; align-items: center; justify-content: space-between; gap: 24px; padding: 22px 38px 8px; min-width: 0; }
+.sofa-brand { display: flex; align-items: baseline; gap: 16px; white-space: nowrap; }
+.sofa-brand strong { font-size: 21px; letter-spacing: -.6px; }
+.sofa-brand span { color: var(--text-muted); font-size: 14px; }
+.sofa-tools, .sofa-actions { display: flex; align-items: center; gap: 12px; }
+.sofa-mode button { font: inherit; cursor: pointer; color: var(--text-main); }
+.sofa-mode .sofa-tool { background: var(--card-bg); border: 1px solid var(--border-color); border-radius: 12px; padding: 11px 17px; font-size: 14px; white-space: nowrap; }
+.sofa-mode .sofa-tool:hover, .sofa-mode .sofa-tool:focus-visible { background: var(--card-hover-bg); }
+.sofa-search { width: clamp(160px, 19vw, 290px); background: var(--card-bg); color: var(--text-main); border: 1px solid var(--border-color); border-radius: 12px; padding: 11px 15px; font-size: 14px; }
+.sofa-deck { position: relative; min-height: 0; perspective: 1400px; overflow: hidden; }
+.sofa-cards { position: absolute; inset: 20px 0 12px; transform-style: preserve-3d; }
+.sofa-card { position: absolute; left: 50%; top: 50%; width: clamp(180px, 27vw, 410px); height: 94%; padding: 0; background: transparent; border: 0; transform: translateX(calc(-50% + var(--offset) * clamp(170px, 21vw, 320px))) translateY(-50%) scale(var(--scale)) rotateY(var(--turn)); transition: transform .23s ease, opacity .23s ease, filter .23s ease; filter: brightness(.53); opacity: .7; }
+.sofa-card.is-selected { opacity: 1; filter: brightness(1); }
+.sofa-card:hover { filter: brightness(.88); }
+.sofa-card.is-selected:hover { filter: brightness(1.05); }
+.sofa-card-art { width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; position: relative; }
+.sofa-cover { position: absolute; max-width: 100%; max-height: 100%; width: auto; height: auto; object-fit: contain; border-radius: 4px; box-shadow: 0 20px 40px #0006; }
+.sofa-card.is-selected .sofa-cover { box-shadow: 0 22px 45px #0009, 0 0 28px var(--accent-soft); }
+.sofa-cover-fallback { display: flex; align-items: center; justify-content: center; width: 72%; height: 88%; padding: 28px; background: linear-gradient(150deg, var(--card-hover-bg), var(--card-bg)); border-radius: 7px; color: var(--text-main); font-size: clamp(19px, 2.2vw, 30px); text-align: center; box-shadow: 0 20px 35px #0006; }
+.sofa-cover-fallback[hidden] { display: none; }
+.sofa-preview.game-box-stage { position: absolute; top: 4%; left: 50%; transform: translateX(-50%); width: clamp(210px, 32vw, 490px); height: 92%; min-height: 0; z-index: 11; border: 0; border-radius: 0; background: transparent; box-shadow: none; }
+.sofa-mode[data-has-box="false"] .sofa-preview { visibility: hidden; pointer-events: none; }
+.sofa-mode[data-has-box="true"] .sofa-card.is-selected .sofa-card-art { visibility: hidden; }
+.sofa-mode .sofa-arrow { position: absolute; top: 50%; transform: translateY(-50%); z-index: 14; width: 46px; height: 70px; border-radius: 15px; border: 1px solid var(--border-color); background: #0005; font-size: 42px; opacity: .55; }
+.sofa-arrow:hover, .sofa-arrow:focus-visible { opacity: 1; }
+.sofa-arrow-previous { left: 24px; } .sofa-arrow-next { right: 24px; }
+.sofa-empty { position: absolute; inset: 0; display: grid; place-content: center; color: var(--text-muted); padding: 30px; text-align: center; font-size: 20px; }
+.sofa-empty[hidden], .sofa-arrow[hidden] { display: none; }
+.sofa-no-games .sofa-preview { display: none; }
+.sofa-details { display: flex; align-items: center; justify-content: space-between; gap: 30px; width: min(1120px, 87%); margin: 5px auto 16px; min-width: 0; }
+.sofa-caption { min-width: 0; }
+.sofa-caption h1 { font-size: clamp(22px, 3.1vw, 39px); line-height: 1.15; font-weight: 600; letter-spacing: -.8px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.sofa-subtitle { color: var(--text-muted); font-size: 15px; margin-top: 9px; }
+.sofa-position { display: inline-block; margin-top: 6px; color: var(--text-muted); opacity: .7; font-size: 12px; }
+.sofa-mode .sofa-play { min-width: 170px; max-width: 280px; padding: 15px 30px; border: 0; border-radius: 13px; background: var(--accent-color); color: var(--button-text); font-size: 20px; font-weight: 600; box-shadow: 0 8px 25px var(--accent-soft); }
+.sofa-mode .sofa-play:hover { background: var(--accent-hover); }
+.sofa-variants { display: block; margin-top: 5px; font-size: 11px; font-weight: normal; opacity: .85; }
+.sofa-mode .sofa-play:disabled, .sofa-mode .sofa-tool:disabled { opacity: .5; cursor: default; }
+.sofa-mode .sofa-random { font-size: 24px; padding: 12px 16px; }
+.sofa-platform-section { min-width: 0; border-top: 1px solid var(--border-color); background: linear-gradient(0deg, var(--sidebar-bg), transparent); }
+.sofa-platforms { display: flex; align-items: stretch; gap: 12px; overflow-x: auto; overflow-y: hidden; padding: 13px max(32px, calc(50vw - 640px)) 10px; scroll-behavior: smooth; scrollbar-width: thin; }
+.sofa-mode .sofa-platform { flex: 0 0 154px; min-width: 0; height: 108px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; position: relative; padding: 10px 12px; border: 1px solid transparent; border-radius: 14px; background: transparent; opacity: .5; transition: opacity .18s ease, background .18s ease, transform .18s ease; }
+.sofa-mode .sofa-platform:hover, .sofa-mode .sofa-platform[aria-pressed="true"] { opacity: 1; background: var(--accent-soft); }
+.sofa-mode .sofa-platform[aria-pressed="true"] { border-color: var(--accent-border); }
+.sofa-platform-art { height: 48px; width: 122px; display: flex; align-items: center; justify-content: center; font-size: 35px; }
+.sofa-platform-art img { max-height: 100%; max-width: 100%; object-fit: contain; }
+.sofa-platform-name { max-width: 100%; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-size: 12px; }
+.sofa-platform-count { color: var(--text-muted); font-size: 10px; }
+.sofa-footer { display: flex; align-items: center; justify-content: space-between; gap: 15px; padding: 10px 38px 14px; font-size: 12px; color: var(--text-muted); background: var(--sidebar-bg); }
+.sofa-pad-status { white-space: nowrap; opacity: .7; }
+@media (max-height: 700px) {
+  .sofa-header { padding-top: 13px; }.sofa-details { margin-bottom: 8px; }.sofa-platforms { padding-top: 7px; padding-bottom: 4px; }
+  .sofa-mode .sofa-platform { height: 86px; }.sofa-platform-art { height: 35px; }.sofa-footer { padding-top: 6px; padding-bottom: 8px; }
+}
+@media (max-width: 850px) {
+  .sofa-header { padding-left: 20px; padding-right: 20px; }.sofa-brand span { display: none; }.sofa-tools { gap: 7px; }
+  .sofa-search { width: 155px; }.sofa-mode .sofa-tool { padding: 10px 12px; }.sofa-details { width: 89%; gap: 15px; }
+  .sofa-mode .sofa-play { min-width: 135px; padding: 13px 20px; }.sofa-subtitle { font-size: 12px; }.sofa-footer { padding-left: 22px; padding-right: 22px; font-size: 10px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .sofa-card, .sofa-platform { transition: none; }.sofa-platforms { scroll-behavior: auto; }
+}

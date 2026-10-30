@@ -22,6 +22,8 @@ async function main(){
   const nativeGame=path.join(root,'Native game ñ 日本.sh');
   const launchedFrom=path.join(root,'launched-from.txt'),quotedOutput="'"+launchedFrom.replaceAll("'","'\\''")+"'";
   fs.writeFileSync(nativeGame,'#!/bin/sh\nprintf \'%s\' "$PWD" > '+quotedOutput+'\nsleep 2\n',{mode:0o755});
+  const otherGames=[path.join(root,'Second native.sh'),path.join(root,'Wii native.sh')];
+  for(const file of otherGames)fs.copyFileSync(nativeGame,file);
   const cbz=path.join(root,'Manual.cbz');manualCbz(cbz);
   const fakeBin=path.join(root,'fake-bin'),openLog=path.join(root,'desktop-open.txt');fs.mkdirSync(fakeBin);
   fs.writeFileSync(path.join(fakeBin,'xdg-open'),'#!/bin/sh\nprintf \'%s|%s|%s\\n\' "$1" "${APPDIR:-}" "${LD_LIBRARY_PATH:-}" >> "$OPENCABINET_OPEN_LOG"\n',{mode:0o755});
@@ -123,7 +125,62 @@ async function main(){
     const targets=fs.readFileSync(openLog,'utf8').trim().split('\n').map(line=>line.split('|'));
     assert.equal(targets.length,2);assert.ok(targets.some(([url])=>url==='https://github.com/Utogu9/OpenCabinet'));
     for(const [,appdir,libraries]of targets){assert.equal(appdir,'');assert.doesNotMatch(libraries,/appimage_extracted|\/\.mount_/);}
-    console.log('Linux WebKitGTK startup, desktop icon/identity, fullscreen, IPC, XDG storage, desktop opening, Unicode native game/session, PDF/CBZ manuals and 3D boxes passed:',JSON.stringify(boxes.value));
+    const sofaSeed=await script(`
+      const invoke=window.__TAURI__.core.invoke,progress=new window.__TAURI__.core.Channel();progress.onmessage=()=>{};
+      for(const [index,file]of ${JSON.stringify(otherGames)}.entries()){
+        const platform=index?'Nintendo Wii':'PC';
+        const preview=await invoke('preview_single_game',{platform,filePath:file,title:index?'Wii fixture':'Second native fixture',launchDirectly:true});
+        await invoke('import_scanned_roms',{preview,platform,jobId:null,mediaSelections:[],onProgress:progress});
+      }
+      setTimeout(()=>window.location.reload(),0);return true;
+    `);if(sofaSeed.error)throw Error(sofaSeed.error);
+    await sleep(900);
+    const sofa=await script(`
+      for(let n=0;n<100&&document.querySelectorAll('#games-grid .game-card').length<3;n++)await new Promise(r=>setTimeout(r,100));
+      const pause=ms=>new Promise(r=>setTimeout(r,ms));
+      await window.__TAURI__.window.getCurrentWindow().setFocus();
+      document.getElementById('btn-sofa-mode').click();await pause(500);
+      const modal=document.getElementById('sofa-mode'),name=()=>document.getElementById('sofa-game-title').textContent;
+      const initially=name(),platforms=modal.querySelectorAll('.sofa-platform').length;
+      modal.querySelector('.sofa-card.is-selected').dispatchEvent(new KeyboardEvent('keydown',{key:'ArrowRight',bubbles:true}));await pause(60);
+      const keyboard=name();
+      await window.__TAURI__.window.getCurrentWindow().setFocus();
+      window.sofaTestPad={id:'Test controller',index:0,connected:true,mapping:'standard',axes:[0,0],buttons:Array.from({length:17},()=>({pressed:false,value:0}))};
+      const nativeGamepadApi=typeof navigator.getGamepads;
+      Object.defineProperty(navigator,'getGamepads',{configurable:true,value:()=>[window.sofaTestPad]});await pause(200);
+      window.sofaTestPad.buttons[15]={pressed:true,value:1};await pause(150);const controller=name();
+      window.sofaTestPad.buttons[15]={pressed:false,value:0};await pause(40);
+      const wii=modal.querySelector('.sofa-platform[data-platform="Nintendo Wii"]');wii.click();await pause(50);
+      const filtered=modal.querySelectorAll('.sofa-card').length;
+      const search=modal.querySelector('.sofa-search');search.value='No fixture has this title';search.dispatchEvent(new Event('input',{bubbles:true}));
+      const empty=modal.querySelectorAll('.sofa-card').length;search.value='';search.dispatchEvent(new Event('input',{bubbles:true}));
+      if(document.getElementById('sofa-view').getAttribute('aria-pressed')!=='true')document.getElementById('sofa-view').click();
+      for(let n=0;n<150&&modal.dataset.hasBox!=='true';n++)await pause(50);
+      document.getElementById('sofa-exit').focus();
+      return {open:modal.open,fullscreen:await window.__TAURI__.window.getCurrentWindow().isFullscreen(),initially,keyboard,controller,platforms,filtered,empty,box:modal.dataset.hasBox,nativeGamepadApi,focused:document.hasFocus(),padStatus:modal.querySelector('.sofa-pad-status').textContent};
+    `);
+    if(sofa.error)throw Error(sofa.error);
+    console.log('Couch mode navigation:',JSON.stringify(sofa.value));
+    assert.equal(sofa.value.open,true);assert.equal(sofa.value.fullscreen,true);assert.equal(sofa.value.platforms,3);
+    assert.notEqual(sofa.value.initially,sofa.value.keyboard);assert.notEqual(sofa.value.keyboard,sofa.value.controller);
+    assert.equal(sofa.value.filtered,1);assert.equal(sofa.value.empty,0);assert.equal(sofa.value.box,'true');
+    const couchScreenshot=await request('GET',`/session/${session}/screenshot`);fs.writeFileSync('target/linux-sofa-smoke.png',Buffer.from(couchScreenshot,'base64'));
+    const sofaPlay=await script(`
+      const pause=ms=>new Promise(r=>setTimeout(r,ms)),invoke=window.__TAURI__.core.invoke;
+      const game=(await invoke('get_games')).find(game=>game.title==='Wii fixture'),sessions=game.session_count;
+      document.getElementById('sofa-play').click();
+      for(let n=0;n<150;n++){
+        await pause(100);const current=(await invoke('get_games')).find(item=>item.id===game.id);
+        if(current.session_count>sessions&&!current.is_running){
+          await pause(500);return {played:true,open:document.getElementById('sofa-mode').open,minimized:await window.__TAURI__.window.getCurrentWindow().isMinimized(),title:document.getElementById('sofa-game-title').textContent};
+        }
+      }
+      throw Error('Couch mode did not launch the selected game');
+    `);
+    if(sofaPlay.error)throw Error(sofaPlay.error);assert.equal(sofaPlay.value.played,true);assert.equal(sofaPlay.value.open,true);assert.equal(sofaPlay.value.minimized,false);assert.equal(sofaPlay.value.title,'Wii fixture');
+    const sofaClose=await script(`document.getElementById('sofa-mode').dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',bubbles:true}));await new Promise(r=>setTimeout(r,200));return {open:document.getElementById('sofa-mode').open,fullscreen:await window.__TAURI__.window.getCurrentWindow().isFullscreen()};`);
+    if(sofaClose.error)throw Error(sofaClose.error);assert.equal(sofaClose.value.open,false);assert.equal(sofaClose.value.fullscreen,false);
+    console.log('Linux WebKitGTK startup, desktop icon/identity, fullscreen, native sessions, manuals, 3D and couch mode passed:',JSON.stringify({boxes:boxes.value,sofa:sofa.value}));
   }finally{
     if(session)await request('DELETE',`/session/${session}`).catch(()=>{});
     driver.kill();await new Promise(resolve=>driver.exitCode!==null?resolve():driver.once('exit',resolve));

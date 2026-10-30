@@ -4,6 +4,7 @@ const { invoke } = window.__TAURI__.core;
 let allGames = [];
 let allEmulators = [];
 let allPlatforms = [];
+let sofaMode = null;
 let toastTimeout = null;
 let selectedGameId = null;
 let focusedGameId = null;
@@ -1212,6 +1213,7 @@ function loadInitialLibrary() {
     if (categoryButton) categoryButton.disabled = navigation.status === "rejected";
     populateEmulatorPlatformDropdown(); renderPlatformsTable(); renderEmulatorsTable(allEmulators);
     renderPlatformFilters(); applyLibraryFilters();
+    sofaMode?.refresh();
   })().finally(() => { initialLibraryLoad = null; });
   return initialLibraryLoad;
 }
@@ -1224,6 +1226,7 @@ async function loadGames() {
     renderPlatformFilters();
     applyLibraryFilters();
     void refreshBoxBrandImages();
+    sofaMode?.refresh();
   } catch (error) {
     console.error("Error al cargar juegos:", error);
     showToast(globalThis.OpenCabinetI18n.t("msg.81b6556ed4"), true);
@@ -1982,6 +1985,7 @@ function applyPlayStatistics(stats) {
   }
   const contextPlay = document.getElementById("context-play-game");
   if (Number(contextPlay.dataset.gameId) === game.id) contextPlay.disabled = Boolean(game.is_running);
+  sofaMode?.updateStatistics(game);
 }
 
 async function setupPlayStatistics() {
@@ -3494,6 +3498,7 @@ async function launchGame(gameId, gameTitle) {
     const result = await invoke("launch_game", { gameId, ...(regionId !== null ? { regionId } : {}), ...(discId !== null ? { discId } : {}) });
     applyPlayStatistics({ ...result, id: gameId });
     showToast(`🎮 ${result.message}`);
+    return result;
   } catch (error) {
     console.error("Error al lanzar juego:", error);
     getLibraryTools()?.diagnostic(String(error));
@@ -5758,6 +5763,46 @@ async function setupTitlebar() {
   }
 }
 
+function setupSofaMode() {
+  if (!window.OpenCabinetSofa) return;
+  const appWindow = window.__TAURI__?.window?.getCurrentWindow?.();
+  sofaMode = window.OpenCabinetSofa.create({
+    document, window,
+    games: () => allGames, platforms: () => allPlatforms,
+    images: displayGameImages, sourceGame: game => ({ ...regionalGame(game), title: game.title }),
+    imageSource, formatPlayTime, variantLabel: gameVariantLabel,
+    getCoverPreview: path => catalogCoverCache?.get(path),
+    sortGames: games => {
+      const sorted = [...games].sort((a, b) => a.title.localeCompare(b.title));
+      return window.OpenCabinetOrder?.apply(sorted, allGames) || sorted;
+    },
+    platformDetails: getPlatformDetails,
+    boxSettings: async game => {
+      const platform = allPlatforms.find(item => item.name === game.platform);
+      return platform ? (await getPlatformDetails(platform)).box_3d || null : null;
+    },
+    createViewer: stage => window.OpenCabinet3D.createViewer(stage, {
+      imageSource,
+      getCoverPreview: path => catalogCoverCache?.get(path),
+      loadCoverPreview: (path, signal) => catalogCoverCache?.load(path, signal),
+    }),
+    availability: game => invoke('get_game_availability', { gameId: game.id }),
+    launch: game => launchGame(game.id, game.title),
+    minimize: () => appWindow?.minimize(),
+    focus: () => appWindow?.setFocus(),
+    restoreFocus: async () => { await appWindow?.unminimize(); await appWindow?.show(); await appWindow?.setFocus(); },
+    fullscreen: window.OpenCabinetWindowFullscreen?.forWindow(appWindow),
+    onError: error => showToast(String(error), true),
+  });
+  const open = () => sofaMode.open({ gameId: selectedGameId, platform: selectedPlatform });
+  document.getElementById('btn-sofa-mode')?.addEventListener('click', open);
+  window.addEventListener('keydown', event => {
+    if (event.key !== 'F11' || event.defaultPrevented || event.repeat || sofaMode.active
+      || document.querySelector('dialog[open], .modal-overlay:not(.hidden)')) return;
+    event.preventDefault(); void open();
+  });
+}
+
 // --- Inicialización ---
 function setupDetailsResizer() {
   const panel = document.getElementById("game-details-panel");
@@ -5859,6 +5904,7 @@ window.addEventListener("DOMContentLoaded", async () => {
   setupSearch();
   // Wire import and menus before any database or recovery work can delay them.
   setupScannerModal();
+  setupSofaMode();
   window.OpenCabinetKeyboard?.setup({ document, window });
   await languageReady;
   const loading = loadInitialLibrary();

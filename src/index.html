@@ -6,6 +6,7 @@
     <title>OpenCabinet</title>
     <link rel="icon" type="image/webp" href="assets/OpenCabinetLogo.webp" />
     <link rel="stylesheet" href="styles.css" />
+    <link rel="stylesheet" href="sofa-mode.css" />
   </head>
   <body>
     <!-- Barra de Menú Superior Estilo Escritorio -->
@@ -34,6 +35,7 @@
           </button>
         </div>
       </div>
+      <button class="menu-title" id="btn-sofa-mode" type="button" aria-keyshortcuts="F11" data-i18n-title="sofa.shortcut"><span data-i18n="sofa.title"></span></button>
       <button class="menu-title" id="btn-open-about" type="button"><span data-i18n="msg.26ff89f034"></span></button>
       <div class="titlebar-drag-space" data-tauri-drag-region></div>
       <div class="window-controls" role="group" aria-label="" data-i18n-aria-label="msg.652e42644d">
@@ -1439,6 +1441,7 @@
     <script src="game-order.js"></script>
     <script src="keyboard-navigation.js"></script>
     <script src="platform-runtime.js"></script>
+    <script src="sofa-mode.js"></script>
     <script type="module" src="main.js"></script>
   </body>
 </html>

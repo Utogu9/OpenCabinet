@@ -39,6 +39,8 @@ Dale permisos de ejecución al AppImage antes de abrirlo. Consultá la
   qué ejecutar sin mover ni eliminar los archivos originales de los juegos.
 - Explorar plataformas, categorías personalizadas y agrupaciones por metadatos,
   con búsqueda, selección múltiple y orden personalizado para las sagas.
+- Usar el [modo sofá](docs/couch-mode.md) a pantalla completa, con logos de
+  consolas, carrusel de juegos, cajas 3D y navegación con mando o teclado.
 - Descargar los datos e imágenes de juegos y consolas disponibles en
   [OpenCabinet-BDD](https://github.com/Utogu9/OpenCabinet-BDD), o agregar imágenes locales.
 - Girar y ampliar cajas 3D, abrir los modelos compatibles, mostrar la imagen del

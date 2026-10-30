@@ -39,6 +39,8 @@ for native games, Steam, Wine and Proton/UMU.
   what to launch without moving or deleting the original game files.
 - Browse platforms, custom categories and metadata-based groups, with search,
   multi-selection and custom ordering for game series.
+- Use [couch mode](docs/couch-mode.md) in fullscreen with platform logos, a game
+  carousel, 3D previews and controller or keyboard navigation.
 - Download available game and console metadata and artwork from
   [OpenCabinet-BDD](https://github.com/Utogu9/OpenCabinet-BDD), or add local media.
 - Rotate and zoom 3D boxes, open supported case models, display disc artwork and
