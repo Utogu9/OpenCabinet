@@ -1,6 +1,6 @@
 [package]
 name = "opencabinet"
-version = "0.1.3"
+version = "0.2.0"
 description = "OpenCabinet: a desktop game library and launcher with interactive 3D game boxes."
 authors = ["Utogu"]
 license = "MIT"

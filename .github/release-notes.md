@@ -1,24 +1,24 @@
-## What's new in v0.1.3
+## What's new in v0.2.0
 
-- Read CBZ manuals alongside PDFs, with on-demand image loading and numerical page ordering.
-- Display manuals inside Xbox, Xbox 360, Nintendo DS, GameCube, Wii, Wii U and PS3 cases; improve the legacy PSP manual and inlay support.
-- Improve manual sizing, retaining clips, folded scans and reading order, including square DS booklets.
-- Relocate missing ROMs from the Play button, game editor or region/disc selectors without losing game data.
-- Save library folders and find new games directly from a platform's context menu or editor.
-- View individual play sessions from the playtime icon, context menu or the game editor's dedicated history category.
-- Improve RetroArch launch diagnostics, emulator name and argument detection, and catalog matching using original ROM filenames.
-- Offer catalog titles as an import preference and Restart now / Later after changing the language.
+- Customize colors, sidebar placement and game detail sections with themes. Create, import and export your own themes, or try the included layouts.
+- Use the detailed Three.js CD case for PlayStation games, with a dedicated insert, inlays, folded back covers and readable manuals.
+- Improve spine sharpness and colors on Dreamcast and PlayStation cases.
+- Mark directly launched console games as recomp/decomp builds and group them with their emulated originals. Choose the version to play, followed by its disc when needed.
+- Show disc, region and version counts on the Play button.
+- See total playtime and session counts in Session history, delete individual sessions or reset statistics with confirmation. Regional statistics and saved recovery data stay consistent.
+- Preserve scroll positions when editing images or removing games during import, and prevent duplicate download actions.
+- Improve dialog spacing and apply theme colors to menu bar dropdowns.
 
-## Novedades de v0.1.3
+## Novedades de v0.2.0
 
-- Lectura de manuales CBZ además de PDF, con carga de imágenes bajo demanda y orden numérico de páginas.
-- Manuales dentro de las cajas de Xbox, Xbox 360, Nintendo DS, GameCube, Wii, Wii U y PS3; mejoras en manuales e inlays del visor clásico de PSP.
-- Ajustes de tamaño, pestañas, escaneos desplegados y orden de lectura, incluidos los manuales cuadrados de DS.
-- Reubicación de ROMs ausentes desde Jugar, Editar juego o los selectores de región y disco, conservando los datos del juego.
-- Carpetas de biblioteca guardadas y búsqueda de juegos nuevos desde el menú contextual o la edición de consola.
-- Historial de partidas desde el icono junto al tiempo jugado, el menú contextual o su categoría en Editar juego.
-- Mejores diagnósticos de RetroArch, detección del nombre y argumentos del emulador y coincidencias mediante el nombre original de la ROM.
-- Preferencia para usar los títulos del catálogo al importar y botones Reiniciar ahora / Más tarde al cambiar de idioma.
+- Temas para personalizar colores, posición de las barras laterales y secciones de detalles. Creá, importá y exportá temas propios o probá los diseños incluidos.
+- Caja de CD detallada con Three.js para PlayStation, con inserto propio, inlays, contraportadas desplegadas y manuales que se pueden leer.
+- Mejor nitidez y colores en los lomos de las cajas de Dreamcast y PlayStation.
+- Clasificación recomp/decomp al importar ejecutables sin emulador y fusión con sus originales emulados. Al jugar se elige la versión y después el disco, si corresponde.
+- Indicadores de cantidad de discos, regiones y versiones en el botón Jugar.
+- Tiempo total y cantidad de partidas en el historial de sesiones, con borrado individual y reinicio de estadísticas mediante confirmación. Se mantienen coherentes las estadísticas regionales y los datos guardados para recuperación.
+- Se conserva el scroll al editar imágenes o quitar juegos durante la importación y se evitan acciones de descarga duplicadas.
+- Ajustes de márgenes en ventanas y colores de los menús de la barra superior según el tema seleccionado.
 
 ## Downloads / Descargas
 
