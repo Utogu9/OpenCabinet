@@ -5,9 +5,8 @@ Native Linux games, installed Steam libraries, emulators, Wine and Proton/UMU
 are supported by the Linux implementation. Epic import is currently Windows-only.
 AppImage builds and WebKitGTK smoke tests have been exercised in Ubuntu 22.04 and
 26.04 on WSL2, including running the 22.04-built AppImage on 26.04. The native test
-suite has also been run on 26.04. Real desktop graphics, installed game launches
-and a signed update between test versions still need validation before the first
-Linux release.
+suite has also been run on 26.04. See the checklist below for testing graphics,
+installed games and signed updates on a real Linux desktop.
 
 ## Running an AppImage
 

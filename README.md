@@ -23,9 +23,11 @@ collection through interactive 3D game boxes and PDF and CBZ manuals.
 
 </details>
 
-The project is in active development. Windows x64 builds are available in releases.
-Linux x86_64 AppImage support is being validated; see the [Linux guide](docs/linux.md)
-for building, testing and configuring native games, Wine and Proton/UMU.
+The project is in active development. Download builds for **Windows x64** and
+**Linux x86_64 (AppImage)** from [GitHub Releases](https://github.com/Utogu9/OpenCabinet/releases/latest).
+The Linux AppImage targets Ubuntu 22.04 or newer and compatible distributions.
+Make the AppImage executable before opening it. See the [Linux guide](docs/linux.md)
+for native games, Steam, Wine and Proton/UMU.
 
 ## Features
 
@@ -87,12 +89,16 @@ library.
 
 ## User data
 
-By default, a `data` directory next to the executable holds the SQLite library,
-managed images, manuals, metadata caches and emulator downloads.
+The library stores your games, managed images, manuals, metadata caches and
+emulator downloads:
+
+- **Windows:** a `data` directory next to the executable. The
+  `opencabinet.config.json` file beside it records a custom data location.
+- **Linux:** `~/.local/share/opencabinet` for data and `~/.config/opencabinet`
+  for configuration, respecting `XDG_DATA_HOME` and `XDG_CONFIG_HOME` when set.
 
 User data and cover cache locations can be configured in Preferences. A data
-location change is applied after restarting the app. A small
-`opencabinet.config.json` file next to the executable records a custom location.
+location change is applied after restarting the app.
 
 Back up this folder to preserve your library, media and play statistics.
 
@@ -102,7 +108,7 @@ Back up this folder to preserve your library, media and play statistics.
 - `src-tauri/src/`: native commands, storage, imports and process tracking.
 - `tests/` and `src-tauri/tests/fixtures/`: automated tests and sample data.
 - `scripts/`: preparation of translations, PDF.js and application icons.
-- `docs/`: implementation details and feature documentation, currently in Spanish.
+- `docs/`: implementation details and feature documentation in English and Spanish.
 
 Start with [game imports](docs/importing-games.md),
 [metadata and artwork](docs/metadata-sources.md),

@@ -35,12 +35,12 @@ subir una etiqueta `v...`. Antes deben coincidir las versiones de:
 - `src-tauri/tauri.conf.json`;
 - `src-tauri/Cargo.toml` y la entrada `opencabinet` de `src-tauri/Cargo.lock`.
 
-Por ejemplo, después de ajustar esas versiones a `0.2.0`, probar y hacer el commit:
+Por ejemplo, después de ajustar esas versiones a `0.2.1`, probar y hacer el commit:
 
 ```sh
 git push origin main
-git tag v0.2.0
-git push origin v0.2.0
+git tag v0.2.1
+git push origin v0.2.1
 ```
 
 Actualizá `.github/release-notes.md` con los cambios antes de crear la etiqueta;
@@ -53,7 +53,7 @@ antes de subir todos los archivos a un borrador.
 **Publica automáticamente ese borrador solo después de completar las subidas**.
 También puede ejecutarse manualmente desde Actions indicando una etiqueta existente.
 
-Los tags con sufijo, como `v0.2.0-beta.1`, generan prereleases y no se ofrecen por
+Los tags con sufijo, como `v0.2.1-beta.1`, generan prereleases y no se ofrecen por
 el canal estable. Las releases estables se marcan como `latest`. Publicá las
 versiones estables en orden creciente para que ese canal siempre apunte a la más reciente.
 

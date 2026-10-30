@@ -23,10 +23,11 @@ colección mediante cajas 3D interactivas y manuales PDF y CBZ.
 
 </details>
 
-El proyecto está en desarrollo activo. Las releases incluyen versiones para Windows x64.
-El soporte de Linux x86_64 mediante AppImage está en validación; consultá la
-[guía de Linux](docs/linux.md) para compilar, probar y configurar juegos nativos,
-Wine y Proton/UMU.
+El proyecto está en desarrollo activo. Descargá las versiones para **Windows x64**
+y **Linux x86_64 (AppImage)** desde [GitHub Releases](https://github.com/Utogu9/OpenCabinet/releases/latest).
+El AppImage de Linux requiere Ubuntu 22.04 o posterior, o una distribución compatible.
+Dale permisos de ejecución al AppImage antes de abrirlo. Consultá la
+[guía de Linux](docs/linux.md) para juegos nativos, Steam, Wine y Proton/UMU.
 
 ## Funciones
 
@@ -88,14 +89,16 @@ una cuenta.
 
 ## Datos de usuario
 
-De forma predeterminada, la carpeta `data` junto al ejecutable guarda la base
-SQLite, las imágenes administradas, los manuales, los catálogos y los emuladores
-descargados.
+La biblioteca guarda tus juegos, imágenes administradas, manuales, catálogos
+y emuladores descargados:
+
+- **Windows:** la carpeta `data` junto al ejecutable. El archivo
+  `opencabinet.config.json`, a su lado, registra una ubicación personalizada.
+- **Linux:** `~/.local/share/opencabinet` para los datos y `~/.config/opencabinet`
+  para la configuración, respetando `XDG_DATA_HOME` y `XDG_CONFIG_HOME` si están definidas.
 
 Las ubicaciones de los datos y de la caché de portadas se configuran en
 Preferencias. Los cambios de ubicación de datos se aplican al reiniciar la app.
-El archivo `opencabinet.config.json`, junto al ejecutable, registra una ubicación
-personalizada.
 
 Hacé un backup de esta carpeta para conservar tu biblioteca, imágenes y estadísticas.
 
@@ -105,7 +108,7 @@ Hacé un backup de esta carpeta para conservar tu biblioteca, imágenes y estad�
 - `src-tauri/src/`: comandos nativos, almacenamiento, importación y seguimiento de procesos.
 - `tests/` y `src-tauri/tests/fixtures/`: pruebas automatizadas y datos de ejemplo.
 - `scripts/`: preparación de traducciones, PDF.js e íconos de la aplicación.
-- `docs/`: detalles de implementación y documentación de las funciones, en español.
+- `docs/`: detalles de implementación y documentación de las funciones, en inglés y español.
 
 Podés empezar por [importar juegos](docs/importing-games.md),
 [datos e imágenes](docs/metadata-sources.md),
