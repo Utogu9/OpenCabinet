@@ -10,6 +10,19 @@ con Tauri, Rust, SQLite y HTML/CSS/JavaScript.
 Organizá tus juegos, configurá emuladores, descargá imágenes y explorá tu
 colección mediante cajas 3D interactivas y manuales PDF y CBZ.
 
+[![Biblioteca de juegos y visor de cajas 3D de OpenCabinet](screenshot1.webp)](screenshot1.webp)
+
+<details>
+<summary>Ver más capturas</summary>
+
+[![Captura 2 de OpenCabinet](screenshot2.webp)](screenshot2.webp)
+
+[![Captura 3 de OpenCabinet](screenshot3.webp)](screenshot3.webp)
+
+[![Captura 4 de OpenCabinet](screenshot4.webp)](screenshot4.webp)
+
+</details>
+
 El proyecto está en desarrollo activo. Windows es la plataforma actualmente
 soportada y probada; las demás plataformas de escritorio no fueron validadas.
 

@@ -10,6 +10,19 @@ with Tauri, Rust, SQLite and HTML/CSS/JavaScript.
 Organize your games, configure emulators, download artwork and explore your
 collection through interactive 3D game boxes and PDF and CBZ manuals.
 
+[![OpenCabinet game library and 3D case viewer](screenshot1.webp)](screenshot1.webp)
+
+<details>
+<summary>View more screenshots</summary>
+
+[![OpenCabinet screenshot 2](screenshot2.webp)](screenshot2.webp)
+
+[![OpenCabinet screenshot 3](screenshot3.webp)](screenshot3.webp)
+
+[![OpenCabinet screenshot 4](screenshot4.webp)](screenshot4.webp)
+
+</details>
+
 The project is in active development. Windows is the current supported and
 tested platform; other desktop platforms have not been validated.
 
