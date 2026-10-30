@@ -20,7 +20,7 @@ fn err(e: impl std::fmt::Display) -> String {
     e.to_string()
 }
 fn key(s: &str) -> String {
-    s.replace('\\', "/").to_lowercase()
+    crate::platform_runtime::path_key(s)
 }
 fn filename(s: &str) -> String {
     s.rsplit(['/', '\\']).next().unwrap_or(s).to_string()
@@ -1144,7 +1144,7 @@ mod tests {
     }
     fn preview(path: &str) -> ScanPreview {
         ScanPreview {
-            games: vec![crate::RomCandidate { recomp: false, launch_directly: false, discs: Vec::new(), existing_game_id: None,
+            games: vec![crate::RomCandidate { linux_execution: None, recomp: false, launch_directly: false, discs: Vec::new(), existing_game_id: None,
                 title: "Reviewed title".into(),
                 rom_path: path.into(),
                 steam: None,
@@ -1743,7 +1743,7 @@ mod tests {
         };
         assert!(validate_selections(&p, &[wrong]).is_err());
         let mut p = p;
-        p.games.push(crate::RomCandidate { recomp: false, launch_directly: false, discs: Vec::new(), existing_game_id: None,
+        p.games.push(crate::RomCandidate { linux_execution: None, recomp: false, launch_directly: false, discs: Vec::new(), existing_game_id: None,
             title: "Two".into(),
             rom_path: "two.iso".into(),
             steam: None,

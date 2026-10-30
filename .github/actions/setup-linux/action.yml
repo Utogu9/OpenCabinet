@@ -1,0 +1,9 @@
+name: Linux build dependencies
+description: Install the Linux desktop and WebKitGTK build/test dependencies
+runs:
+  using: composite
+  steps:
+    - shell: bash
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y build-essential pkg-config libssl-dev libgtk-3-dev libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev patchelf libfuse2 xvfb webkit2gtk-driver libgl1-mesa-dri mesa-utils gstreamer1.0-plugins-base gstreamer1.0-plugins-good gstreamer1.0-tools xdg-utils

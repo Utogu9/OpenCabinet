@@ -23,13 +23,15 @@ colección mediante cajas 3D interactivas y manuales PDF y CBZ.
 
 </details>
 
-El proyecto está en desarrollo activo. Windows es la plataforma actualmente
-soportada y probada; las demás plataformas de escritorio no fueron validadas.
+El proyecto está en desarrollo activo. Las releases incluyen versiones para Windows x64.
+El soporte de Linux x86_64 mediante AppImage está en validación; consultá la
+[guía de Linux](docs/linux.md) para compilar, probar y configurar juegos nativos,
+Wine y Proton/UMU.
 
 ## Funciones
 
 - Importar juegos individuales, buscar ROMs en carpetas y detectar juegos de
-  Steam y Epic Games instalados en el equipo.
+  Steam y Epic Games instalados en el equipo (Epic Games, por ahora, solo en Windows).
 - Configurar emuladores por consola, personalizar la ejecución de cada juego y
   preparar RetroArch con descargas opcionales del emulador y sus núcleos.
 - Revisar los títulos detectados, agrupar discos o ediciones regionales y elegir
@@ -48,6 +50,7 @@ soportada y probada; las demás plataformas de escritorio no fueron validadas.
 - Windows con los [requisitos de Tauri 2](https://v2.tauri.app/start/prerequisites/):
   Microsoft C++ Build Tools con **Desarrollo para el escritorio con C++**, el SDK
   de Windows y Microsoft Edge WebView2 Runtime.
+- Linux x86_64: consultá las dependencias e instrucciones de la [guía de Linux](docs/linux.md).
 - [Rust](https://www.rust-lang.org/tools/install) 1.90 o posterior, con el
   toolchain MSVC en Windows.
 - [Node.js](https://nodejs.org/) 22.13 o posterior, con npm.
@@ -112,7 +115,7 @@ Podés empezar por [importar juegos](docs/importing-games.md),
 ## Colaborar
 
 Podés contribuir con reportes de errores, traducciones y código. Al informar un
-problema, indicá la versión de Windows, cómo reproducirlo y qué resultado esperabas.
+problema, indicá el sistema operativo y su versión, cómo reproducirlo y qué resultado esperabas.
 Usá ejemplos sintéticos pequeños en lugar de subir tu biblioteca o archivos de juegos.
 
 Ejecutá las pruebas correspondientes antes de proponer un cambio. Conservá los

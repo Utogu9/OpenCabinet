@@ -493,15 +493,7 @@ pub async fn choose_backup() -> Result<Option<String>> {
 
 #[tauri::command]
 pub fn open_backup_directory(app: tauri::AppHandle) -> Result<()> {
-    use tauri_plugin_opener::OpenerExt;
-    app.opener()
-        .open_path(
-            backup_dir(&crate::storage::active_directory()?)?
-                .to_string_lossy()
-                .into_owned(),
-            None::<&str>,
-        )
-        .map_err(err)
+    crate::platform_runtime::open_path(&app,&backup_dir(&crate::storage::active_directory()?)?)
 }
 fn allowed(name: &str) -> bool {
     if name.contains(['\\', ':']) {

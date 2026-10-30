@@ -287,7 +287,7 @@ fn scan(
                 if exists {
                     skipped += 1;
                 } else {
-                    games.push(RomCandidate { recomp: false, launch_directly: false, discs: Vec::new(), existing_game_id: None,
+                    games.push(RomCandidate { linux_execution: None, recomp: false, launch_directly: false, discs: Vec::new(), existing_game_id: None,
                         title: manifest.display_name.trim().to_owned(),
                         rom_path,
                         steam: None,
@@ -357,6 +357,7 @@ pub async fn scan_epic_games(
     manifests_path: Option<String>,
     on_progress: tauri::ipc::Channel<ScanProgress>,
 ) -> Result<EpicScan, String> {
+    if cfg!(target_os="linux"){return Err(crate::i18n::text("linux.epicUnavailable").into());}
     tauri::async_runtime::spawn_blocking(move || {
         let folder = manifests_path
             .filter(|path| !path.trim().is_empty())
@@ -703,6 +704,7 @@ pub(super) mod tests {
         }
     }
 
+    #[cfg(windows)]
     #[test]
     fn imports_survive_restart_and_manifest_replacement_launch_through_epic_and_never_run_manifest_arguments()
      {
@@ -765,6 +767,7 @@ pub(super) mod tests {
         );
     }
 
+    #[cfg(windows)]
     #[test]
     fn invalid_sources_uninstalls_and_sql_errors_roll_back_the_whole_import_without_touching_epic_files()
      {

@@ -1,4 +1,4 @@
-# Releases y actualizaciones de Windows
+# Releases y actualizaciones de escritorio
 
 El repositorio previsto es `Utogu9/OpenCabinet`. La app consulta en segundo plano:
 
@@ -47,7 +47,9 @@ Actualizá `.github/release-notes.md` con los cambios antes de crear la etiqueta
 su texto se usa en la Release y en el visor de novedades de la app.
 
 El workflow `.github/workflows/release-windows.yml` ejecuta las pruebas, compila
-Windows x64, firma el instalador y sube todos los archivos a un borrador.
+Windows x64 y Linux x86_64 en trabajos separados, y firma el instalador y el AppImage.
+Un único trabajo reúne los paquetes y el índice de actualización de ambas plataformas
+antes de subir todos los archivos a un borrador.
 **Publica automáticamente ese borrador solo después de completar las subidas**.
 También puede ejecutarse manualmente desde Actions indicando una etiqueta existente.
 
@@ -63,9 +65,10 @@ los paquetes durante 14 días.
 
 - `OpenCabinet_v<versión>_windows_x64_setup.exe`: instalador NSIS.
 - El mismo archivo con extensión `.exe.sig`: firma de actualización.
-- `latest.json`: versión, notas, fecha, URL y firma para Windows x64.
+- `OpenCabinet_v<versión>_linux_x86_64.AppImage` y su `.sig`: aplicación Linux y firma.
+- `latest.json`: versión, notas, fecha, URL y firma para Windows x64 y Linux x86_64.
 - `OpenCabinet_v<versión>_windows_x64_portable.zip`: ejecutable y avisos de licencia.
-- `SHA256SUMS.txt`: hashes de los cuatro archivos anteriores.
+- `SHA256SUMS.txt`: hashes de los seis archivos de distribución anteriores.
 
 No se incluyen bibliotecas personales, juegos, catálogos, credenciales ni imágenes.
 La firma del updater es independiente de un certificado Authenticode de Windows:
@@ -86,7 +89,12 @@ Los fallos de descarga o firma permiten reintentar y no reemplazan el ejecutable
 
 El portable necesita Microsoft Edge WebView2 Runtime. El instalador lo prepara
 si falta. La instalación integrada está habilitada en builds de distribución
-Windows x64; en desarrollo se puede consultar, pero no instalar actualizaciones.
+Windows x64 y AppImage de Linux x86_64 con permiso de escritura; en desarrollo se
+puede consultar, pero no instalar actualizaciones. Linux conserva su configuración
+y biblioteca en las carpetas XDG del usuario, fuera del AppImage.
+
+El workflow `linux-check.yml` valida las ramas y pull requests sin publicar releases.
+Sus artefactos permiten probar Linux antes de crear una etiqueta. Ver [Linux](linux.md).
 
 Para compilar localmente los paquetes firmados en PowerShell:
 

@@ -154,9 +154,7 @@ fn clean_legacy_cores(root: &Path, warnings: &mut Vec<String>) {
                     for value in rows.flatten() {
                         let path = PathBuf::from(value);
                         if path.is_absolute()
-                            && path.file_name().is_some_and(|name| {
-                                name.to_string_lossy().eq_ignore_ascii_case("retroarch.exe")
-                            })
+                            && crate::platform_runtime::is_retroarch(&path)
                         {
                             executables.insert(path);
                         }
@@ -166,6 +164,7 @@ fn clean_legacy_cores(root: &Path, warnings: &mut Vec<String>) {
         }
     }
     executables.insert(root.join("emulators/RetroArch/retroarch.exe"));
+    executables.insert(root.join("emulators/RetroArch").join(crate::platform_runtime::retroarch_name()));
     for executable in executables {
         let directory = crate::retroarch::directories(&executable).0;
         if !ordinary_directory(&directory) {

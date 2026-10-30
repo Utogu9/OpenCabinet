@@ -10,6 +10,7 @@ let focusedGameId = null;
 let fileAvailabilityRequest = 0;
 let selectedFileAvailability = null;
 let libraryTools = null, savedFolderImport = null, savedFolderScan = null;
+let importRuntimeEditor=null;
 function createSavedFolderScan() {
   return {
     cancelled:false,committing:false,cancelStep:null,
@@ -560,7 +561,7 @@ function setupAppUpdates() {
       const keys = { idle: 'update.hint', checking: 'update.checking', current: 'update.current',
         available: 'update.available', downloading: 'update.downloading', installing: 'update.installing', error: 'update.checkFailed' };
       status.textContent = t(keys[state.phase], state.update?.version || '');
-      if (state.update && !state.update.install_allowed) status.textContent += ' ' + t('update.releaseOnly');
+      if (state.update && !state.update.install_allowed) status.textContent += ' ' + (state.update.install_unavailable_reason || t('update.releaseOnly'));
       progress.hidden = !['downloading', 'installing'].includes(state.phase);
       if (state.total > 0) {
         progress.value = Math.min(100, state.downloaded / state.total * 100);
@@ -598,7 +599,7 @@ function setupAbout() {
   dialog.addEventListener('cancel', event => { if (appUpdates?.busy) event.preventDefault(); });
   document.getElementById("btn-close-about").addEventListener("click", close);
   document.getElementById("btn-project-github").addEventListener("click", async () => {
-    try { await invoke("plugin:opener|open_url", { url: "https://github.com/Utogu9/OpenCabinet" }); }
+    try { await invoke(window.OpenCabinetRuntime?.linux?"open_project_repository":"plugin:opener|open_url", { url: "https://github.com/Utogu9/OpenCabinet" }); }
     catch (reason) { showToast(String(reason), true); }
   });
   dialog.addEventListener("close", () => button.focus());
@@ -2866,6 +2867,7 @@ function setupGameEditor() {
   const customArguments = document.getElementById("game-edit-custom-arguments");
   const argumentsInput = document.getElementById("game-edit-arguments");
   let editingDirectly = false, editingStore = false;
+  const linuxEditor=window.OpenCabinetRuntime?.createEditor(document.getElementById("game-linux-execution"),{invoke,document,prefix:"game"});
   const sourceSelect=document.getElementById('game-edit-source-select');
   function syncExecutionSources(){
     sourceSelect.replaceChildren();
@@ -3273,6 +3275,7 @@ function setupGameEditor() {
       orderEditor?.setGame(game);
       editingStore = Boolean(game.steam_app_id || game.epic_app_id);
       editingDirectly = Boolean(game.launch_directly) && !editingStore;
+      linuxEditor?.show(editingDirectly);linuxEditor?.set(game.execution?.linux,game.rom_path);
       editorTabs.find(item => item.name === "discs").tab.disabled = editingStore || editingDirectly;
       editorTabs.find(item => item.name === "regions").tab.disabled = editingStore || (editingDirectly&&!group.regions?.length);
       const variants=window.OpenCabinetRegions?.hasLaunchVariants?.(group);
@@ -3362,6 +3365,9 @@ function setupGameEditor() {
     let orderPatch;
     try { orderPatch = orderEditor?.value(); }
     catch(error) { showEditorTab("order"); showToast(String(error),true); return; }
+    let linuxExecution=null;
+    try {linuxExecution=editingDirectly?linuxEditor?.value(draftRomPath||editingSourceGame?.rom_path)??null:null;}
+    catch(error){showEditorTab("execution");showToast(String(error),true);return;}
     const details = {
       ...(orderPatch !== undefined ? { orderGroup:orderPatch } : {}),
       ...(gameBox !== undefined ? { box3d: gameBox } : {}),
@@ -3372,6 +3378,7 @@ function setupGameEditor() {
       execution: {
         emulator_id: emulatorSelect.value ? Number(emulatorSelect.value) : null,
         arguments: customArguments.checked && !editingStore ? argumentsInput.value : null,
+        ...(linuxExecution ? {linux:linuxExecution} : {}),
       },
       discs: discEditor?.value() ?? null,
       catalogId: draftCatalogId,
@@ -4035,7 +4042,7 @@ function showToast(message, isError = false) {
 
 // --- Flujo del Escaneador de ROMs ---
 function isPcPlatform(platform) {
-  return ["pc", "pcgames", "pcwindows", "windows", "windowsgames", "microsoftwindows"].includes(String(platform).toLowerCase().replace(/[^a-z0-9]/g, ""));
+  return ["pc", "pcgames", "pcwindows", "windows", "windowsgames", "microsoftwindows", "linux", "pclinux", "linuxgames"].includes(String(platform).toLowerCase().replace(/[^a-z0-9]/g, ""));
 }
 
 function importRunsDirectly() {
@@ -4048,12 +4055,16 @@ function importUsesFileSelection() {
 
 function markRecompCandidates(preview) {
   const recomp=importRunsDirectly()&&!isPcPlatform(getSelectedPlatformName())&&!!document.getElementById('scan-recomp')?.checked;
-  for(const game of preview.games)game.recomp=recomp&&!!game.launch_directly;
+  for(const game of preview.games){
+    game.recomp=recomp&&!!game.launch_directly;
+    if(!game.steam&&!game.epic&&(game.launch_directly||isPcPlatform(getSelectedPlatformName()))) game.linux_execution=importRuntimeEditor?.value(game.rom_path)??null;
+  }
 }
 
 function updateImportSourceUI() {
   const single = importUsesFileSelection(), steam = importMode === "steam", epic = importMode === "epic", store = steam || epic, pc = isPcPlatform(getSelectedPlatformName());
   const visible = (id, show) => { const item = document.getElementById(id); if (show) item?.classList.remove("hidden"); else item?.classList.add("hidden"); };
+  importRuntimeEditor?.show(!store&&(pc||importRunsDirectly()));
   const files = importConfigPage === "files";
   for (const [id, active] of [["import-platform-step", !files], ["import-files-step", files]]) {
     visible(id, active);
@@ -4072,7 +4083,7 @@ function updateImportSourceUI() {
   for (const id of ["scan-folder-input", "scan-extensions-input"]) { const input = document.getElementById(id); if (input) input.disabled = single || store; }
   const folder = document.getElementById("scan-folder-input"); if (folder) folder.required = !single && !store;
   for (const id of ["scan-file-input", "scan-single-title"]) { const input = document.getElementById(id); if (input) { input.disabled = !single; input.required = single; } }
-  const label = document.getElementById("scan-file-label"); if (label) label.textContent = (pc || importRunsDirectly()) ? globalThis.OpenCabinetI18n.t("msg.215b9a8198") : globalThis.OpenCabinetI18n.t("msg.8aafd7c83d");
+  const label = document.getElementById("scan-file-label"); if (label) label.textContent = (pc || importRunsDirectly()) ? globalThis.OpenCabinetI18n.t(window.OpenCabinetRuntime?.linux?"linux.gameExecutable":"msg.215b9a8198") : globalThis.OpenCabinetI18n.t("msg.8aafd7c83d");
   const submit = document.getElementById("btn-execute-scan");
   if (submit && !scanInProgress) { submit.textContent = store ? globalThis.OpenCabinetI18n.t("msg.649475b2ef", epic ? "Epic Games" : "Steam") : single ? globalThis.OpenCabinetI18n.t("msg.36f227205d") : globalThis.OpenCabinetI18n.t("msg.cd70ffa805"); submit.disabled = (!single && !store && pc) || !!inlineRetroarchSetup?.busy || savingInlineEmulator; }
 }
@@ -4086,6 +4097,7 @@ function warmImportCatalog() {
 function chooseImportMode(mode) {
   if (scanInProgress || inlineRetroarchSetup?.busy || savingInlineEmulator) return;
   ++singleFileRequest; importMode = mode;
+  importRuntimeEditor?.set();
   const directChoice = document.getElementById("scan-launch-directly"); if (directChoice) directChoice.checked = false;
   const recompChoice=document.getElementById('scan-recomp');if(recompChoice)recompChoice.checked=true;
   if (mode) warmImportCatalog();
@@ -4103,6 +4115,7 @@ function chooseImportMode(mode) {
 }
 
 function setupScannerModal() {
+  importRuntimeEditor=window.OpenCabinetRuntime?.createEditor(document.getElementById("scan-linux-execution"),{invoke,document,prefix:"import"});
   document.getElementById("scan-launch-directly")?.addEventListener("change", () => {
     document.getElementById('scan-recomp').checked=!!document.getElementById('scan-launch-directly').checked;
     ++singleFileRequest;
@@ -4165,6 +4178,7 @@ function setupScannerModal() {
       const selected = await invoke("select_game_file", { platform, launchDirectly: importRunsDirectly(), extensions: document.getElementById("scan-extensions-input").value.split(",").map(value => value.trim()).filter(Boolean) });
       if (token !== singleFileRequest || !importUsesFileSelection() || !selected) return;
       document.getElementById("scan-file-input").value = selected.rom_path;
+      importRuntimeEditor?.forPath(selected.rom_path);
       document.getElementById("scan-single-title").value = selected.title;
       document.getElementById("scan-single-title").focus();
     } catch (error) { if (token === singleFileRequest) showToast(globalThis.OpenCabinetI18n.t("msg.b11f414346", error), true); }
@@ -4595,7 +4609,7 @@ function reviewScannedGames(preview,operation=null) {
           extra = await invoke("prepare_disc_import", { preview: extra, platform });
           if (!alive) return;
         }
-        const key = path => path.replace(/\\/g, "/").toLowerCase();
+        const key = path => window.OpenCabinetRuntime?.pathKey(path) ?? path.replace(/\\/g, "/").toLowerCase();
         const paths = game => game.discs?.length ? game.discs.map(disc => disc.rom_path) : [game.rom_path];
         const seen = new Set(entries.filter(entry => !entry.removed).flatMap(entry => paths(entry.game).map(key)));
         preview.total_found += extra.total_found;
@@ -5823,6 +5837,7 @@ window.addEventListener("DOMContentLoaded", async () => {
       window.location.reload(); return;
     }
   } catch (error) { console.error("Could not apply restored preferences", error); }
+  try { await window.OpenCabinetRuntime?.initialize(invoke,document); } catch(error) { console.error("Could not detect host capabilities",error); }
   globalThis.OpenCabinetI18n.translateDOM();
   appThemes = window.OpenCabinetThemes?.create({ document, window, invoke, confirm: confirmDeletion });
   void appThemes?.load();

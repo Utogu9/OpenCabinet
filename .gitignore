@@ -96,3 +96,6 @@ opencabinet.config.json.*
 *.msi
 *.msix
 *.appx
+*.AppImage
+*.deb
+*.rpm

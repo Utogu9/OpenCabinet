@@ -46,12 +46,12 @@ fn lookup(code: &str, key: &str) -> Option<&'static str> {
 pub fn initialize() {
     let _ = set_locale(system_locale());
     let root=crate::storage::active_directory().ok().or_else(|| {
-        let exe=std::env::current_exe().ok()?; let program=exe.parent()?;
+        let (program, default_directory)=crate::platform_runtime::locations().ok()?;
         let current=program.join("opencabinet.config.json");
         let config=if current.exists() { current } else { program.join(crate::profile_compat::CONFIG_FILE) };
         let configured=std::fs::read(config).ok().and_then(|bytes|serde_json::from_slice::<serde_json::Value>(&bytes).ok())
             .and_then(|value|value["data_directory"].as_str().map(std::path::PathBuf::from));
-        Some(configured.unwrap_or_else(||program.join("data")))
+        Some(configured.unwrap_or(default_directory))
     });
     if let Some(root)=root {
         if let Ok(bytes)=std::fs::read(root.join("language.json")) {

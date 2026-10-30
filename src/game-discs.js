@@ -1,6 +1,6 @@
 (function (root) {
   const filename = path => path.split(/[\\/]/).pop();
-  const pathKey = path => path.replace(/\\/g, "/").toLowerCase();
+  const pathKey = path => globalThis.OpenCabinetRuntime?.pathKey(path) ?? path.replace(/\\/g, "/").toLowerCase();
   const copy = discs => discs.map(disc => ({ ...disc }));
   function button(text, action, title = text) {
     const el = document.createElement("button");

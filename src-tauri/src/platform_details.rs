@@ -836,6 +836,7 @@ mod tests {
         pe[60..64].copy_from_slice(&64u32.to_le_bytes());
         pe[64..68].copy_from_slice(b"PE\0\0");
         pe[68..70].copy_from_slice(&0x8664u16.to_le_bytes());
+        if cfg!(target_os="linux"){pe[..4].copy_from_slice(b"\x7fELF");pe[4]=2;pe[5]=1;pe[18..20].copy_from_slice(&62u16.to_le_bytes());}
         let exe = library.root.join("retroarch.exe");
         let core = library.root.join("snes9x_libretro.dll");
         fs::write(&exe, &pe).unwrap();

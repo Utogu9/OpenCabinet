@@ -1,13 +1,14 @@
 use rusqlite::{Connection, OptionalExtension};
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
-use tauri_plugin_opener::OpenerExt;
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(default)]
 pub struct ExecutionOptions {
     pub emulator_id: Option<i64>,
     pub arguments: Option<String>,
+    #[serde(skip_serializing_if="Option::is_none")]
+    pub linux: Option<crate::linux_execution::Options>,
 }
 
 pub fn init_schema(conn: &Connection) -> rusqlite::Result<()> {
@@ -30,6 +31,7 @@ pub fn read(conn: &Connection, id: i32) -> Result<ExecutionOptions, String> {
             Ok(ExecutionOptions {
                 emulator_id: r.get(0)?,
                 arguments: r.get(1)?,
+                linux: crate::linux_execution::read(conn,id).map_err(|e|rusqlite::Error::ToSqlConversionFailure(e.into()))?,
             })
         },
     )
@@ -68,6 +70,7 @@ pub fn save(
         (&options.emulator_id, &options.arguments, id),
     )
     .map_err(|e| e.to_string())?;
+    crate::linux_execution::save(conn,id,options.linux.as_ref())?;
     Ok(())
 }
 
@@ -145,6 +148,7 @@ pub async fn open_game_emulator(id: i32) -> Result<(), String> {
         open_emulator_with(&conn,id,|executable| {
             let executable = executable.canonicalize().map_err(|e|crate::i18n::i18n_format!("msg.bddaf7dd2a", e = e))?;
             let mut command = std::process::Command::new(&executable);
+            crate::platform_runtime::configure_child(&mut command);
             if let Some(parent) = executable.parent() { command.current_dir(parent); }
             command.spawn().map_err(|e|crate::i18n::i18n_format!("msg.52a4fc6777", e = e))?;
             Ok(())
@@ -184,9 +188,7 @@ pub async fn open_game_files(app: tauri::AppHandle, id: i32) -> Result<(), Strin
     tauri::async_runtime::spawn_blocking(move || {
         let conn = crate::get_db_connection().map_err(|e| e.to_string())?;
         for folder in folders(&conn, id)? {
-            app.opener()
-                .open_path(folder.to_string_lossy().into_owned(), None::<String>)
-                .map_err(|e| e.to_string())?;
+            crate::platform_runtime::open_path(&app,&folder)?;
         }
         Ok(())
     })

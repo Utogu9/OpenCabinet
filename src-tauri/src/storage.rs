@@ -75,6 +75,7 @@ struct MoveMarker {
 
 pub struct Storage {
     program: PathBuf,
+    default_directory: PathBuf,
     active: PathBuf,
     config: Mutex<Config>,
     startup_message: Option<String>,
@@ -452,6 +453,8 @@ pub(crate) fn rebase_library(path: &Path, source: &Path, destination: &Path) -> 
         ("emulators", "executable_path"),
         ("emulators", "retroarch_core_path"),
         ("retroarch_settings", "executable_path"),
+        ("game_linux_execution", "runner_path"), ("game_linux_execution", "umu_path"),
+        ("game_linux_execution", "prefix"), ("game_linux_execution", "working_directory"),
     ] {
         let columns = tx
             .prepare(&format!("PRAGMA table_info({table})"))
@@ -485,16 +488,17 @@ pub(crate) fn rebase_library(path: &Path, source: &Path, destination: &Path) -> 
                     continue;
                 }
                 if let Some(relative) = inside(&original, source) {
+                    let relocated=if relative.as_os_str().is_empty(){destination.to_path_buf()}else{destination.join(&relative)};
                     tx.execute(
                         &format!("UPDATE {table} SET {column}=?1 WHERE rowid=?2"),
-                        (destination.join(&relative).to_string_lossy().as_ref(), id),
+                        (relocated.to_string_lossy().as_ref(), id),
                     )
                     .map_err(err)?;
                     if table == "game_discs" {
-                        tx.execute("UPDATE game_discs SET path_key=?1 WHERE rowid=?2",(crate::discs::key(&destination.join(&relative).to_string_lossy()),id)).map_err(err)?;
+                        tx.execute("UPDATE game_discs SET path_key=?1 WHERE rowid=?2",(crate::discs::key(&relocated.to_string_lossy()),id)).map_err(err)?;
                     }
                     if table == "library_folders" {
-                        tx.execute("UPDATE library_folders SET path_key=?1 WHERE rowid=?2",(crate::discs::key(&destination.join(&relative).to_string_lossy()),id)).map_err(err)?;
+                        tx.execute("UPDATE library_folders SET path_key=?1 WHERE rowid=?2",(crate::discs::key(&relocated.to_string_lossy()),id)).map_err(err)?;
                     }
                 }
             }
@@ -659,7 +663,11 @@ fn instance_lock(path: &Path) -> Result<File> {
     Ok(instance_lock)
 }
 
+#[cfg(test)]
 fn open_storage(program: &Path) -> Result<Storage> {
+    open_storage_at(program, &program.join("data"))
+}
+fn open_storage_at(program: &Path, default_directory: &Path) -> Result<Storage> {
     let program = canonical(program)?;
     let mut instance_locks = vec![instance_lock(&program.join(".opencabinet-instance.lock"))?];
     // Do not allow the previous executable to access the same data concurrently.
@@ -684,7 +692,7 @@ fn open_storage(program: &Path) -> Result<Storage> {
     let selected = config
         .data_directory
         .clone()
-        .unwrap_or_else(|| program.join("data"));
+        .unwrap_or_else(|| default_directory.to_path_buf());
     if !selected.is_absolute() {
         return Err(crate::i18n::text("msg.7e40df5042").into());
     }
@@ -721,6 +729,7 @@ fn open_storage(program: &Path) -> Result<Storage> {
     let active = canonical(config.data_directory.as_deref().unwrap_or(&source))?;
     Ok(Storage {
         program,
+        default_directory: default_directory.to_path_buf(),
         active,
         config: Mutex::new(config),
         startup_message,
@@ -729,11 +738,9 @@ fn open_storage(program: &Path) -> Result<Storage> {
 }
 
 pub fn initialize() -> Result<()> {
-    let exe = std::env::current_exe().map_err(err)?;
-    let storage = open_storage(
-        exe.parent()
-            .ok_or(crate::i18n::text("msg.3079e9e5f0"))?,
-    )?;
+    let (program, default_directory) = crate::platform_runtime::locations()?;
+    fs::create_dir_all(&program).map_err(err)?;
+    let storage = open_storage_at(&program, &default_directory)?;
     STORAGE
         .set(storage)
         .map_err(|_| crate::i18n::text("msg.7f75fc49f9").to_string())
@@ -753,7 +760,7 @@ impl Storage {
         let config = self.config.lock().map_err(err)?;
         Ok(DataLocation {
             active_directory: self.active.clone(),
-            default_directory: self.program.join("data"),
+            default_directory: self.default_directory.clone(),
             pending_directory: config.pending_move.as_ref().map(|m| m.destination.clone()),
             pending_action: config.pending_move.as_ref().map(|m| m.action),
             config_file: self.program.join(CONFIG_FILE),
@@ -1045,6 +1052,30 @@ mod tests {
         }
     }
 
+    #[test]
+    fn separate_configuration_and_data_roots_do_not_adopt_a_library_next_to_the_program() {
+        let sandbox=Sandbox::new();
+        let default=sandbox.root.join("xdg-data/opencabinet");
+        let storage=open_storage_at(&sandbox.program,&default).unwrap();
+        assert_eq!(storage.active,canonical(&default).unwrap());
+        assert_ne!(storage.active,sandbox.source);
+        assert_eq!(storage.location().unwrap().config_file,sandbox.program.join(CONFIG_FILE));
+        assert_eq!(storage.location().unwrap().default_directory,default);
+        assert!(database_path(&sandbox.source).is_file());
+    }
+    #[test]
+    fn relocating_data_rebases_managed_prefixes_but_preserves_external_runners() {
+        let sandbox=Sandbox::new();let database=database_path(&sandbox.source);
+        let conn=Connection::open(&database).unwrap();crate::linux_execution::init(&conn).unwrap();
+        let prefix=sandbox.source.join("compatibility/1");let external=sandbox.root.join("external/wine");
+        conn.execute("INSERT INTO game_linux_execution(game_id,mode,runner_path,prefix,working_directory) VALUES(1,'wine',?1,?2,?3)",
+            (external.to_string_lossy().as_ref(),prefix.to_string_lossy().as_ref(),sandbox.source.to_string_lossy().as_ref())).unwrap();drop(conn);
+        rebase_library(&database,&sandbox.source,&sandbox.destination).unwrap();
+        let conn=Connection::open(database).unwrap();let options=crate::linux_execution::read(&conn,1).unwrap().unwrap();
+        assert_eq!(options.prefix.as_ref().map(PathBuf::from),Some(sandbox.destination.join("compatibility/1")));
+        assert_eq!(options.runner_path,Some(external.to_string_lossy().into_owned()));
+        assert_eq!(options.working_directory,Some(sandbox.destination.to_string_lossy().into_owned()));
+    }
     #[test]
     fn default_location_and_scheduling_do_not_move_live_data() {
         let sandbox = Sandbox::new();

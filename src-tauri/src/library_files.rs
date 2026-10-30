@@ -94,7 +94,7 @@ pub fn replace_source(
     let key = crate::discs::key(&path);
     let owner: Option<i32> = conn
         .query_row(
-            "SELECT id FROM games WHERE lower(replace(rom_path,char(92),'/'))=?1 AND id<>?2",
+            if cfg!(windows){"SELECT id FROM games WHERE lower(replace(rom_path,char(92),'/'))=?1 AND id<>?2"}else{"SELECT id FROM games WHERE rom_path=?1 COLLATE BINARY AND id<>?2"},
             params![key, id],
             |r| r.get(0),
         )

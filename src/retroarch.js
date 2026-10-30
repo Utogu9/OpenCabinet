@@ -183,7 +183,7 @@
       },
       edit(emulator) {
         if (busy) return;
-        session++; desiredCore=emulator.retroarch_core_path?.replace(/\\/g,'/').split('/').pop()?.replace(/\.dll$/i,'') || '';
+        session++; desiredCore=emulator.retroarch_core_path?.replace(/\\/g,'/').split('/').pop()?.replace(/\.(dll|so)$/i,'') || '';
         type.value=emulator.retroarch_core_path?'retroarch':'standalone';
         activate();
       },

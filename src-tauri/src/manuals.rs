@@ -6,7 +6,6 @@ use std::{
     io::{Read, Write},
     path::{Path, PathBuf},
 };
-use tauri_plugin_opener::OpenerExt;
 
 type Result<T> = std::result::Result<T, String>;
 fn err(e: impl std::fmt::Display) -> String {
@@ -231,9 +230,7 @@ pub async fn open_game_folder(app: tauri::AppHandle, id: i64, kind: String) -> R
         let mut conn = crate::get_db_connection().map_err(err)?;
         let root = crate::data_directory().map_err(err)?;
         let path = prepare_folder(&mut conn, &root, id, &kind)?;
-        app.opener()
-            .open_path(path.to_string_lossy().into_owned(), None::<String>)
-            .map_err(err)
+        crate::platform_runtime::open_path(&app,&path)
     })
     .await
     .map_err(err)?
@@ -253,9 +250,7 @@ pub async fn open_game_manual(app: tauri::AppHandle, id: i64, path: String) -> R
         if !allowed {
             return Err(crate::i18n::text("msg.52ae8b6cfe").into());
         }
-        app.opener()
-            .open_path(requested.to_string_lossy().into_owned(), None::<String>)
-            .map_err(err)
+        crate::platform_runtime::open_path(&app,&requested)
     })
     .await
     .map_err(err)?

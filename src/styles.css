@@ -2860,3 +2860,6 @@ html[data-i18n-pending] body { visibility: hidden; }
 .app-updates details p { white-space: pre-wrap; overflow-wrap: anywhere; }
 .app-updates .error-message { color: var(--danger-color); overflow-wrap: anywhere; }
 #btn-open-about.update-available::after { content: ' •'; color: #7edfa0; }
+.linux-launch-options { margin-top: 18px; padding-top: 14px; border-top: 1px solid var(--border-color); }
+.linux-launch-options .form-group { margin-top: 12px; }
+.linux-launch-options input { min-width: 0; }

@@ -1,0 +1,52 @@
+name: Linux validation
+on:
+  pull_request:
+  push:
+    branches: ['**']
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: linux-check-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  linux:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 120
+    env:
+      CARGO_INCREMENTAL: '0'
+      LIBGL_ALWAYS_SOFTWARE: '1'
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup-linux
+      - uses: actions/setup-node@v7.1.0
+        with:
+          node-version: '24'
+          cache: npm
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-unknown-linux-gnu
+      - run: npm ci
+      - run: npm run prepare:icons
+      - run: npm test
+      - run: cargo test --manifest-path src-tauri/Cargo.toml --lib --locked --target x86_64-unknown-linux-gnu
+      - name: Build an unsigned test AppImage
+        run: npm run build -- --ci --target x86_64-unknown-linux-gnu --bundles appimage --config '{"bundle":{"createUpdaterArtifacts":false}}' -- --locked
+      - name: Build the WebDriver application
+        run: npm run build -- --ci --debug --no-bundle --target x86_64-unknown-linux-gnu --config '{"bundle":{"createUpdaterArtifacts":false}}' -- --locked
+      - run: cargo install tauri-driver --locked
+      - name: Test the real WebKitGTK webview
+        run: xvfb-run -a node scripts/linux-webdriver-smoke.cjs src-tauri/target/x86_64-unknown-linux-gnu/debug/opencabinet
+      - name: Test the packaged AppImage
+        run: |
+          images=(src-tauri/target/x86_64-unknown-linux-gnu/release/bundle/appimage/*.AppImage)
+          test "${#images[@]}" -eq 1
+          APPIMAGE_EXTRACT_AND_RUN=1 xvfb-run -a node scripts/linux-webdriver-smoke.cjs "${images[0]}"
+      - uses: actions/upload-artifact@v7.0.2
+        with:
+          name: OpenCabinet-linux-x86_64-${{ github.sha }}
+          path: src-tauri/target/x86_64-unknown-linux-gnu/release/bundle/appimage/*.AppImage
+          if-no-files-found: error
+          retention-days: 14

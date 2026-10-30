@@ -23,13 +23,14 @@ collection through interactive 3D game boxes and PDF and CBZ manuals.
 
 </details>
 
-The project is in active development. Windows is the current supported and
-tested platform; other desktop platforms have not been validated.
+The project is in active development. Windows x64 builds are available in releases.
+Linux x86_64 AppImage support is being validated; see the [Linux guide](docs/linux.md)
+for building, testing and configuring native games, Wine and Proton/UMU.
 
 ## Features
 
 - Import individual games, scan ROM folders and detect locally installed Steam
-  and Epic Games titles.
+  and Epic Games titles (Epic Games is currently Windows-only).
 - Configure emulators by platform, override launch settings per game and set up
   RetroArch with optional emulator and core downloads.
 - Review detected titles, group multiple discs or regional releases and choose
@@ -48,6 +49,7 @@ tested platform; other desktop platforms have not been validated.
 - Windows with the [Tauri 2 prerequisites](https://v2.tauri.app/start/prerequisites/):
   Microsoft C++ Build Tools with **Desktop development with C++**, the Windows
   SDK and Microsoft Edge WebView2 Runtime.
+- Linux x86_64: see the dependencies and build instructions in the [Linux guide](docs/linux.md).
 - [Rust](https://www.rust-lang.org/tools/install) 1.90 or later, using the MSVC
   toolchain on Windows.
 - [Node.js](https://nodejs.org/) 22.13 or later, with npm.
@@ -110,7 +112,7 @@ Start with [game imports](docs/importing-games.md),
 ## Contributing
 
 Bug reports, translations and code contributions are welcome. For a bug, include
-your Windows version, the steps to reproduce it and the expected behavior. Use
+your operating system and version, the steps to reproduce it and the expected behavior. Use
 small synthetic examples rather than uploading your library or game files.
 
 Run the relevant tests before proposing a change. Preserve existing user data

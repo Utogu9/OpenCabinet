@@ -34,6 +34,7 @@ pub struct UpdateInfo {
     version: String,
     notes: String,
     install_allowed: bool,
+    install_unavailable_reason: Option<String>,
 }
 
 #[derive(Clone, Serialize)]
@@ -44,7 +45,24 @@ pub struct Progress {
 }
 
 fn supported_install() -> bool {
-    !cfg!(debug_assertions) && cfg!(all(windows, target_arch = "x86_64"))
+    if cfg!(debug_assertions) {return false;}
+    if cfg!(all(windows,target_arch="x86_64")){return true;}
+    if cfg!(all(target_os="linux",target_arch="x86_64")) {
+        return std::env::var_os("APPIMAGE").map(std::path::PathBuf::from).is_some_and(|path|appimage_writable(&path));
+    }
+    false
+}
+
+fn appimage_writable(path:&std::path::Path)->bool {
+    let Ok(path)=path.canonicalize()else{return false};
+    if !path.is_file(){return false;}
+    let Some(parent)=path.parent()else{return false};
+    // An executing AppImage may reject opening its ELF for writing (ETXTBSY).
+    // The updater replaces it through its parent directory instead.
+    let token=std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_nanos();
+    let probe=parent.join(format!(".opencabinet-update-probe-{}-{token}",std::process::id()));
+    let Ok(file)=std::fs::OpenOptions::new().write(true).create_new(true).open(&probe)else{return false};
+    drop(file);std::fs::remove_file(probe).is_ok()
 }
 
 fn ensure_idle(app: &tauri::AppHandle) -> Result<(), String> {
@@ -89,6 +107,7 @@ pub async fn check_app_update(
         version: update.version.clone(),
         notes: update.body.clone().unwrap_or_default(),
         install_allowed: supported_install(),
+        install_unavailable_reason: if cfg!(target_os="linux")&&!cfg!(debug_assertions)&&!supported_install(){Some(crate::i18n::text("linux.updateReadOnly").into())}else{None},
     });
     *state.available.lock().map_err(|e| e.to_string())? = update;
     Ok(info)
@@ -103,6 +122,7 @@ pub async fn install_app_update(
 ) -> Result<(), String> {
     let _operation = state.begin()?;
     if !supported_install() {
+        if cfg!(target_os="linux")&&!cfg!(debug_assertions){return Err(crate::i18n::text("linux.updateReadOnly").into());}
         return Err(crate::i18n::text("update.releaseOnly").into());
     }
     ensure_idle(&app)?;
@@ -150,6 +170,9 @@ pub async fn install_app_update(
         .map_err(|e| e.to_string())?
         .map_err(|e| format!("{} {e}", crate::i18n::text("update.installFailed")))?;
     // The Windows plugin exits only after successfully launching the installer, which restarts the app.
+    #[cfg(target_os="linux")]
+    app.restart();
+    #[cfg(not(target_os="linux"))]
     Ok(())
 }
 
@@ -163,5 +186,14 @@ mod tests {
         assert!(state.begin().is_err());
         drop(first);
         assert!(state.begin().is_ok());
+    }
+    #[cfg(target_os="linux")]
+    #[test]
+    fn running_appimage_can_be_replaced_without_opening_its_executable_for_writing(){
+        let root=std::env::temp_dir().join(format!("opencabinet-update-test-{}-{}",std::process::id(),std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos()));
+        std::fs::create_dir(&root).unwrap();let path=root.join("Test.AppImage");std::fs::copy("/bin/sleep",&path).unwrap();
+        let mut child=std::process::Command::new(&path).arg("5").spawn().unwrap();
+        let allowed=appimage_writable(&path);child.kill().unwrap();child.wait().unwrap();
+        assert!(allowed);assert_eq!(std::fs::read_dir(&root).unwrap().count(),1);std::fs::remove_file(path).unwrap();std::fs::remove_dir(root).unwrap();
     }
 }

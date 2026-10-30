@@ -14,7 +14,7 @@ pub(super) fn is_pc_platform(platform: &str) -> bool {
         "pcwindows",
         "windows",
         "windowsgames",
-        "microsoftwindows",
+        "microsoftwindows", "linux", "pclinux", "linuxgames",
     ]
     .contains(&name.as_str())
 }
@@ -23,11 +23,9 @@ pub(super) fn validate_pc_executable(path: &str) -> Result<(), String> {
     let path = Path::new(path);
     if !path.is_absolute()
         || !path.is_file()
-        || !path
-            .extension()
-            .is_some_and(|ext| ext.eq_ignore_ascii_case("exe"))
+        || !(crate::platform_runtime::is_windows_executable(path) || cfg!(target_os="linux") && crate::platform_runtime::executable(path))
     {
-        return Err(crate::i18n::text("msg.035e4bce3e").into());
+        return Err(crate::i18n::text(if cfg!(target_os="linux"){"linux.fileSelect"}else{"msg.035e4bce3e"}).into());
     }
     Ok(())
 }
@@ -49,7 +47,7 @@ pub async fn select_game_file(
     // A native dialog yields while it is open; no executable is run by importing.
     let mut dialog = rfd::AsyncFileDialog::new().set_title(crate::i18n::text("msg.24772d158f"));
     if launch_directly.unwrap_or(false) || is_pc_platform(&platform) {
-        dialog = dialog.add_filter(crate::i18n::text("msg.d446c9cf66"), &["exe"]);
+        if cfg!(windows) { dialog = dialog.add_filter(crate::i18n::text("msg.d446c9cf66"), &["exe"]); }
     } else {
         let mut extensions: Vec<String> = extensions
             .unwrap_or_default()
@@ -63,7 +61,7 @@ pub async fn select_game_file(
         }
         dialog = dialog.add_filter(crate::i18n::text("msg.a4a04914f5"), &["*"]);
     }
-    Ok(dialog.pick_file().await.map(|file| RomCandidate { recomp: false, launch_directly: false, discs: Vec::new(), existing_game_id: None,
+    Ok(dialog.pick_file().await.map(|file| RomCandidate { linux_execution: None, recomp: false, launch_directly: false, discs: Vec::new(), existing_game_id: None,
         steam: None, epic: None,
         title: if crate::folder_games::supported(&platform) && file.path().file_name().is_some_and(|s| s.eq_ignore_ascii_case("eboot.bin")) {
             crate::folder_games::title(file.path().parent().unwrap_or(file.path()), file.path())
@@ -123,7 +121,7 @@ fn preview_file(
         games: if exists {
             vec![]
         } else {
-            vec![RomCandidate { recomp: false, launch_directly: false, discs: if !is_pc_platform(platform) && crate::discs::identify(file_path).is_some() { vec![crate::discs::source(file_path)] } else { Vec::new() }, existing_game_id: None,
+            vec![RomCandidate { linux_execution: None, recomp: false, launch_directly: false, discs: if !is_pc_platform(platform) && crate::discs::identify(file_path).is_some() { vec![crate::discs::source(file_path)] } else { Vec::new() }, existing_game_id: None,
                 steam: None, epic: None,
                 title: title.into(),
                 rom_path: file_path.into(),
@@ -258,7 +256,7 @@ mod tests {
         let conn = files.database();
         crate::game_execution::save(&conn, 1, "Windows", &crate::game_execution::ExecutionOptions {
             emulator_id: None, arguments: Some("--windowed --profile \"My Profile\"".into()),
-        }).unwrap();
+         linux: None }).unwrap();
         conn.execute("UPDATE games SET platform='My renamed platform'", [])
             .unwrap();
         let (launch, ()) =

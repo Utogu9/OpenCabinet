@@ -12,7 +12,7 @@ fn err(e: impl std::fmt::Display) -> String {
     e.to_string()
 }
 pub fn key(path: &str) -> String {
-    path.replace('\\', "/").to_lowercase()
+    crate::platform_runtime::path_key(path)
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -129,7 +129,7 @@ pub fn paths(conn: &Connection) -> Result<HashSet<String>> {
 pub fn owner(conn: &Connection, path: &str) -> Result<Option<i64>> {
     let primary = conn
         .query_row(
-            "SELECT id FROM games WHERE lower(replace(rom_path,char(92),'/'))=?1",
+            if cfg!(windows){"SELECT id FROM games WHERE lower(replace(rom_path,char(92),'/'))=?1"}else{"SELECT id FROM games WHERE rom_path=?1 COLLATE BINARY"},
             [key(path)],
             |r| r.get(0),
         )
@@ -616,7 +616,7 @@ mod tests {
         c
     }
     fn candidate(path: &str) -> RomCandidate {
-        RomCandidate { recomp: false, launch_directly: false,
+        RomCandidate { linux_execution: None, recomp: false, launch_directly: false,
             title: crate::clean_rom_title(Path::new(path).file_stem().unwrap().to_str().unwrap()),
             rom_path: path.into(),
             steam: None,
@@ -745,6 +745,7 @@ mod tests {
         pe[60..64].copy_from_slice(&64u32.to_le_bytes());
         pe[64..68].copy_from_slice(b"PE\0\0");
         pe[68..70].copy_from_slice(&0x8664u16.to_le_bytes());
+        if cfg!(target_os="linux"){pe[..4].copy_from_slice(b"\x7fELF");pe[4]=2;pe[5]=1;pe[18..20].copy_from_slice(&62u16.to_le_bytes());}
         std::fs::write(&exe, &pe).unwrap();
         std::fs::write(&core, &pe).unwrap();
         conn.execute("UPDATE emulators SET executable_path=?1,arguments='%ROM%',retroarch_core_path=?2 WHERE id=1",params![exe.to_string_lossy(),core.to_string_lossy()]).unwrap();
@@ -764,7 +765,7 @@ mod tests {
         .unwrap();
         crate::game_execution::save(&conn, id as i32, "PS1", &crate::game_execution::ExecutionOptions {
             emulator_id: Some(1), arguments: Some("--verbose \"%ROM%\"".into()),
-        }).unwrap();
+         linux: None }).unwrap();
         crate::launch_game_record_with_disc(&conn, id as i32, discs[1].id, |_, args, _| {
             assert_eq!(args, &["-L".to_string(), core.to_string_lossy().into_owned(), "--verbose".into(), b.clone()]);
             Ok(())

@@ -1,4 +1,4 @@
-name: Windows release
+name: Desktop release
 
 on:
   push:
@@ -15,16 +15,14 @@ permissions:
   contents: read
 
 concurrency:
-  group: windows-release-${{ inputs.tag || github.ref_name }}
+  group: desktop-release-${{ inputs.tag || github.ref_name }}
   cancel-in-progress: false
 
 jobs:
-  release:
-    name: Build, sign and publish Windows x64
+  windows:
+    name: Build and sign Windows x64
     runs-on: windows-latest
     timeout-minutes: 90
-    permissions:
-      contents: write
     defaults:
       run:
         shell: pwsh
@@ -92,37 +90,98 @@ jobs:
           node scripts/release-windows.cjs stage
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           Compress-Archive -LiteralPath target/release-portable/OpenCabinet -DestinationPath "target/release-assets/OpenCabinet_$($env:RELEASE_TAG)_windows_x64_portable.zip" -CompressionLevel Optimal
-          node scripts/release-windows.cjs checksums
+          Move-Item -LiteralPath target/release-assets/latest.json -Destination target/release-assets/windows.json
 
       - name: Keep a copy of the build artifacts
         uses: actions/upload-artifact@v7.0.2
         with:
-          name: OpenCabinet-${{ env.RELEASE_TAG }}-windows-x64
+          name: windows
           path: target/release-assets/*
           if-no-files-found: error
           retention-days: 14
 
+
+  linux:
+    name: Build and sign Linux x86_64
+    runs-on: ubuntu-22.04
+    timeout-minutes: 120
+    env:
+      RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
+      CARGO_INCREMENTAL: '0'
+      LIBGL_ALWAYS_SOFTWARE: '1'
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          ref: refs/tags/${{ env.RELEASE_TAG }}
+          persist-credentials: false
+      - uses: ./.github/actions/setup-linux
+      - uses: actions/setup-node@v7.1.0
+        with:
+          node-version: '24'
+          cache: npm
+      - run: node scripts/release-windows.cjs verify
+      - name: Verify signing configuration
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+        run: test -n "$TAURI_SIGNING_PRIVATE_KEY"
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-unknown-linux-gnu
+      - run: npm ci
+      - run: npm run prepare:icons
+      - run: npm test
+      - run: cargo test --manifest-path src-tauri/Cargo.toml --lib --locked --target x86_64-unknown-linux-gnu
+      - name: Build and sign the AppImage
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: npm run build -- --ci --target x86_64-unknown-linux-gnu --bundles appimage -- --locked
+      - run: cargo install tauri-driver --locked
+      - name: Verify the packaged Linux application before staging
+        run: |
+          images=(src-tauri/target/x86_64-unknown-linux-gnu/release/bundle/appimage/*.AppImage)
+          test "${#images[@]}" -eq 1
+          APPIMAGE_EXTRACT_AND_RUN=1 xvfb-run -a node scripts/linux-webdriver-smoke.cjs "${images[0]}"
+      - run: node scripts/release-artifacts.cjs linux
+      - uses: actions/upload-artifact@v7.0.2
+        with:
+          name: linux
+          path: target/release-assets/*
+          if-no-files-found: error
+          retention-days: 14
+
+  publish:
+    name: Publish both platforms together
+    needs: [windows, linux]
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: write
+    env:
+      RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          ref: refs/tags/${{ env.RELEASE_TAG }}
+          persist-credentials: false
+      - uses: actions/setup-node@v7.1.0
+        with:
+          node-version: '24'
+      - uses: actions/download-artifact@v8.0.2
+        with:
+          path: target/release-download
+      - run: node scripts/release-artifacts.cjs combine
       - name: Upload all assets and publish the release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          IS_PRERELEASE: ${{ steps.version.outputs.prerelease }}
         run: |
-          $existingDraft = & gh release view $env:RELEASE_TAG --repo $env:GITHUB_REPOSITORY --json isDraft --jq .isDraft 2>$null
-          $exists = $LASTEXITCODE -eq 0
-          if ($exists -and "$existingDraft".Trim() -ne 'true') {
-            throw 'This release is already published. Create a new version instead of replacing its assets.'
-          }
-          if (-not $exists) {
-            $createArgs = @('release', 'create', $env:RELEASE_TAG, '--repo', $env:GITHUB_REPOSITORY, '--verify-tag', '--draft', '--title', "OpenCabinet $($env:RELEASE_TAG)", '--notes-file', '.github/release-notes.md')
-            if ($env:IS_PRERELEASE -eq 'true') { $createArgs += '--prerelease' }
-            & gh @createArgs
-            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          }
-          $assets = @(Get-ChildItem -LiteralPath target/release-assets -File | ForEach-Object { $_.FullName })
-          $uploadArgs = @('release', 'upload', $env:RELEASE_TAG, '--repo', $env:GITHUB_REPOSITORY, '--clobber') + $assets
-          & gh @uploadArgs
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          $latest = if ($env:IS_PRERELEASE -eq 'true') { 'false' } else { 'true' }
-          & gh release edit $env:RELEASE_TAG --repo $env:GITHUB_REPOSITORY --draft=false "--latest=$latest"
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          "Published release: https://github.com/$($env:GITHUB_REPOSITORY)/releases/tag/$($env:RELEASE_TAG)" >> $env:GITHUB_STEP_SUMMARY
+          if gh release view "$RELEASE_TAG" --json isDraft --jq .isDraft > target/existing-release.txt 2>/dev/null; then
+            test "$(cat target/existing-release.txt)" = true || { echo 'Release already published; create a new version.'; exit 1; }
+          else
+            extra=()
+            if [[ "$RELEASE_TAG" == *-* ]]; then extra+=(--prerelease); fi
+            gh release create "$RELEASE_TAG" --verify-tag --draft --title "OpenCabinet $RELEASE_TAG" --notes-file .github/release-notes.md "${extra[@]}"
+          fi
+          gh release upload "$RELEASE_TAG" target/release-assets/* --clobber
+          latest=true
+          if [[ "$RELEASE_TAG" == *-* ]]; then latest=false; fi
+          gh release edit "$RELEASE_TAG" --draft=false --latest="$latest"

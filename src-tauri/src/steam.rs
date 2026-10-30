@@ -190,11 +190,12 @@ pub fn app_id(path: &str) -> Option<u32> {
 }
 
 fn valid_root(root: &Path) -> bool {
-    root.is_absolute() && root.join("steam.exe").is_file() && root.join("steamapps").is_dir()
+    root.is_absolute() && root.join("steamapps").is_dir() && if cfg!(windows) {root.join("steam.exe").is_file()}
+        else {root.join("config").is_dir()||root.join("steam.sh").is_file()||root.join("steam.exe").is_file()}
 }
 fn normalize(path: &Path) -> String {
     let path = fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf());
-    let text = path.to_string_lossy().replace('\\', "/");
+    let text = crate::platform_runtime::path_key(&path.to_string_lossy());
     if cfg!(windows) {
         text.to_lowercase()
     } else {
@@ -226,8 +227,27 @@ fn default_roots() -> Vec<PathBuf> {
             roots.push(PathBuf::from(path).join("Steam"));
         }
     }
+    if cfg!(target_os="linux") { roots.extend(linux_roots()); }
     roots
 }
+
+pub fn linux_roots()->Vec<PathBuf>{
+    let mut roots=Vec::new();
+    if let Ok(data)=crate::platform_runtime::xdg("XDG_DATA_HOME",".local/share"){roots.push(data.join("Steam"));}
+    if let Some(home)=std::env::var_os("HOME"){roots.extend(linux_home_roots(Path::new(&home)));}
+    roots
+}
+fn linux_home_roots(home: &Path) -> Vec<PathBuf> {
+    [
+        ".steam/steam", ".steam/root", ".steam/debian-installation", ".local/share/Steam",
+        ".var/app/com.valvesoftware.Steam/.local/share/Steam",
+        ".var/app/com.valvesoftware.Steam/.local/share/steam",
+        ".var/app/com.valvesoftware.Steam/data/Steam",
+        ".var/app/com.valvesoftware.Steam/data/steam",
+    ].into_iter().map(|path| home.join(path)).collect()
+}
+pub fn library_roots(root:&Path)->Vec<PathBuf>{libraries(root,&mut Vec::new())}
+fn source_client(root:&Path)->PathBuf{if cfg!(windows){root.join("steam.exe")}else{root.to_path_buf()}}
 
 fn libraries(root: &Path, warnings: &mut Vec<String>) -> Vec<PathBuf> {
     let mut paths = vec![root.to_path_buf()];
@@ -328,12 +348,9 @@ pub fn validate(candidate: &RomCandidate) -> Result<(), String> {
         return Err(crate::i18n::text("msg.0ba8e97d83").into());
     }
     let client = Path::new(&source.client_path);
-    if !client
-        .file_name()
-        .is_some_and(|name| name.eq_ignore_ascii_case("steam.exe"))
-        || !client.is_file()
-        || !client.is_absolute()
-    {
+    if !client.is_absolute() || if cfg!(windows) {
+        !client.is_file() || !client.file_name().is_some_and(|name|name.eq_ignore_ascii_case("steam.exe"))
+    } else { !(client.is_dir() && valid_root(client) || client.is_file() && client.file_name().is_some_and(|name|name=="steam.sh"||name=="steam.exe") && client.parent().is_some_and(valid_root)) } {
         return Err(crate::i18n::text("msg.d42576482f").into());
     }
     let path = Path::new(&source.manifest_path);
@@ -420,13 +437,13 @@ fn scan(
                 if exists {
                     skipped += 1;
                 } else {
-                    games.push(RomCandidate { recomp: false, launch_directly: false, discs: Vec::new(), existing_game_id: None,
+                    games.push(RomCandidate { linux_execution: None, recomp: false, launch_directly: false, discs: Vec::new(), existing_game_id: None,
                         epic: None,
                         title,
                         rom_path,
                         steam: Some(SteamSource {
                             app_id: id,
-                            client_path: root.join("steam.exe").to_string_lossy().into_owned(),
+                            client_path: source_client(root).to_string_lossy().into_owned(),
                             manifest_path: path.to_string_lossy().into_owned(),
                         }),
                     });
@@ -508,6 +525,17 @@ pub fn launch_plan(
     game_id: i32,
     id: u32,
 ) -> Result<(PathBuf, Vec<String>), String> {
+    let root=installed_root(conn,game_id,id)?;
+    #[cfg(target_os="linux")] {
+        if root.components().any(|c|c.as_os_str()=="com.valvesoftware.Steam") {
+            return Ok((crate::platform_runtime::find_program("flatpak").ok_or(crate::i18n::text("linux.flatpakMissing"))?,vec!["run".into(),"com.valvesoftware.Steam".into(),uri(id)]));
+        }
+        let client=crate::platform_runtime::executable(&root.join("steam.sh")).then(||root.join("steam.sh")).or_else(||crate::platform_runtime::find_program("steam")).ok_or(crate::i18n::text("linux.steamMissing"))?;
+        return Ok((client,vec!["-applaunch".into(),id.to_string()]));
+    }
+    #[cfg(not(target_os="linux"))] { Ok((root.join("steam.exe"),vec!["-applaunch".into(),id.to_string()])) }
+}
+fn installed_root(conn:&Connection,game_id:i32,id:u32)->Result<PathBuf,String>{
     let saved: Option<String> = conn
         .query_row(
             "SELECT steam_client_path FROM games WHERE id=?1",
@@ -517,7 +545,8 @@ pub fn launch_plan(
         .map_err(|e| e.to_string())?;
     let mut roots = Vec::new();
     if let Some(saved) = saved {
-        if let Some(parent) = Path::new(&saved).parent() {
+        if Path::new(&saved).is_dir(){roots.push(PathBuf::from(&saved));}
+        else if let Some(parent) = Path::new(&saved).parent() {
             roots.push(parent.to_path_buf());
         }
     }
@@ -533,10 +562,7 @@ pub fn launch_plan(
                 .flatten()
                 .is_some_and(|(installed_id, _, _)| installed_id == id)
             {
-                return Ok((
-                    root.join("steam.exe"),
-                    vec!["-applaunch".into(), id.to_string()],
-                ));
+                return Ok(root);
             }
         }
     }
@@ -544,9 +570,8 @@ pub fn launch_plan(
 }
 
 pub fn installed_directory(conn: &Connection, game_id: i32, id: u32) -> Result<PathBuf, String> {
-    let (client, _) = launch_plan(conn, game_id, id)?;
-    let root = client.parent().ok_or(crate::i18n::text("msg.68bc559556"))?;
-    for library in libraries(root, &mut vec![]) {
+    let root = installed_root(conn, game_id, id)?;
+    for library in libraries(&root, &mut vec![]) {
         if let Some((installed_id, _, directory)) = manifest(&library.join(format!("steamapps/appmanifest_{id}.acf"))).ok().flatten() {
             if installed_id == id { return Ok(directory); }
         }
@@ -564,10 +589,10 @@ fn running(id: u32) -> Option<bool> {
         .ok()
         .map(|value| value != 0)
 }
-#[cfg(not(windows))]
-fn running(_: u32) -> Option<bool> {
-    None
-}
+#[cfg(target_os="linux")]
+fn running(id:u32)->Option<bool>{crate::linux_process::steam_running(id)}
+#[cfg(not(any(windows,target_os="linux")))]
+fn running(_:u32)->Option<bool>{None}
 
 // Steam's command process can exit immediately or stay open with the client.
 // Track the individual app's Running state instead; startup time is not playtime.
@@ -637,6 +662,11 @@ mod tests {
                 b"fake Steam client - never executed",
             )
             .unwrap();
+            #[cfg(unix)] {
+                use std::os::unix::fs::PermissionsExt;
+                fs::write(client.join("steam.sh"),b"#!/bin/sh\nexit 0\n").unwrap();
+                fs::set_permissions(client.join("steam.sh"),fs::Permissions::from_mode(0o755)).unwrap();
+            }
             fs::write(client.join("steamapps/libraryfolders.vdf"),format!(r#""libraryfolders" {{ "0" {{ "path" {} }} "1" {{ "path" {} "apps" {{ "20" "1234" }} }} }}"#,quoted(&client),quoted(&second))).unwrap();
             Self {
                 root,
@@ -798,7 +828,7 @@ mod tests {
             .unwrap();
         let (result, ()) =
             crate::launch_game_record(&conn, 1, |executable, args, working_directory| {
-                assert_eq!(Path::new(executable), fixture.client.join("steam.exe"));
+                assert_eq!(Path::new(executable), fixture.client.join(if cfg!(target_os="linux"){"steam.sh"}else{"steam.exe"}));
                 assert_eq!(args, &["-applaunch", "10"]);
                 assert_eq!(working_directory, Some(fixture.client.as_path()));
                 Ok(())
@@ -871,5 +901,18 @@ mod tests {
         let mut missing = SteamSession::new(20);
         assert!(!missing.observe(None, missing.requested + Duration::from_secs(121)));
         assert_eq!(missing.elapsed(), Duration::ZERO);
+    }
+
+    #[test]
+    fn steam_home_roots_include_current_and_legacy_flatpak_layouts() {
+        let home = Path::new("/home/player");
+        let roots = linux_home_roots(home);
+        for relative in [
+            ".var/app/com.valvesoftware.Steam/.local/share/Steam",
+            ".var/app/com.valvesoftware.Steam/data/Steam",
+            ".var/app/com.valvesoftware.Steam/data/steam",
+        ] {
+            assert!(roots.contains(&home.join(relative)));
+        }
     }
 }

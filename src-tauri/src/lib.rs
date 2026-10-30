@@ -26,6 +26,9 @@ mod manuals;
 mod cbz;
 mod discs;
 mod game_execution;
+mod platform_runtime;
+mod linux_execution;
+mod linux_process;
 mod emulator_defaults;
 mod folder_games;
 mod library_navigation;
@@ -173,6 +176,8 @@ pub struct RomCandidate {
     steam: Option<steam::SteamSource>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     epic: Option<epic::EpicSource>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    linux_execution: Option<linux_execution::Options>,
 }
 
 fn candidate_launch_mode(candidate: &RomCandidate, platform: &str) -> Result<bool, String> {
@@ -192,6 +197,13 @@ fn candidate_launch_mode(candidate: &RomCandidate, platform: &str) -> Result<boo
         steam::launch_mode(candidate, platform)?
     };
     if candidate.recomp && (!candidate.launch_directly || !direct) { return Err(crate::i18n::text("recomp.invalidImport").into()); }
+    if cfg!(target_os="linux") {
+        if candidate.epic.is_some(){return Err(crate::i18n::text("linux.epicUnavailable").into());}
+        if let Some(options)=&candidate.linux_execution {
+            if !direct||candidate.steam.is_some(){return Err(crate::i18n::text("linux.directOnly").into());}
+            linux_execution::validate(options)?;
+        }
+    }
     if !candidate.discs.is_empty() {
         if direct || discs::key(&candidate.discs[0].rom_path)!=discs::key(&candidate.rom_path) {
             return Err(crate::i18n::text("msg.83d5697d91").into());
@@ -290,6 +302,7 @@ fn init_database(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>> {
 }
 
 fn init_game_metadata(conn: &Connection) -> rusqlite::Result<()> {
+    linux_execution::init(conn)?;
     game_order::init(conn)?;
     game_box_settings::init(conn)?;
     let columns: std::collections::HashSet<String> = conn.prepare("PRAGMA table_info(games)")?
@@ -371,7 +384,7 @@ fn read_library_games(conn: &Connection, root: &Path, tracker: &PlayTracker) -> 
         .map_err(|e| e.to_string())?;
     let games_iter = stmt
         .query_map([], |row| {
-            Ok(Game { order_group:None, box_3d:None, regions:Vec::new(), default_region_id:None, execution: game_execution::ExecutionOptions { emulator_id: row.get(17)?, arguments: row.get(18)? }, discs: Vec::new(),
+            Ok(Game { order_group:None, box_3d:None, regions:Vec::new(), default_region_id:None, execution: game_execution::ExecutionOptions { emulator_id: row.get(17)?, arguments: row.get(18)? , linux: None }, discs: Vec::new(),
                 id: row.get(0)?,
                 title: row.get(1)?,
                 platform: row.get(2)?,
@@ -403,10 +416,12 @@ fn read_library_games(conn: &Connection, root: &Path, tracker: &PlayTracker) -> 
         let (id, image) = row.map_err(|e| e.to_string())?;
         by_game.entry(id).or_default().push(image);
     }
+    let mut linux_options = linux_execution::all(conn)?;
     let mut disc_lists = discs::all(conn)?;
     for game in games_iter {
         let mut game = game.map_err(|e| e.to_string())?;
         game.discs = disc_lists.remove(&game.id).unwrap_or_default();
+        game.execution.linux = linux_options.remove(&game.id);
         game.recomp = entity_variables::truth(variables.get(&game.id).and_then(|values|values.get("recomp")));
         game.box_3d = box_settings.remove(&game.id);
         game.order_group = order_index.get(&game_order::key(&game.title)).map(|index|order_groups[*index].clone());
@@ -747,7 +762,7 @@ fn save_game_details_in_transaction(conn: &Connection, details: GameDetails) -> 
     }
     let mut game = tx.query_row(
         "SELECT id, title, platform, rom_path, cover_path, play_time, release_date, developer, publisher, genre, game_mode, max_players, description, last_played, play_time_seconds, session_count, launch_directly, emulator_override_id, arguments_override FROM games WHERE id = ?1",
-        [details.id], |row| Ok(Game { order_group:None, box_3d:None, regions:Vec::new(), default_region_id:None, execution: game_execution::ExecutionOptions { emulator_id: row.get(17)?, arguments: row.get(18)? }, discs: Vec::new(),
+        [details.id], |row| Ok(Game { order_group:None, box_3d:None, regions:Vec::new(), default_region_id:None, execution: game_execution::ExecutionOptions { emulator_id: row.get(17)?, arguments: row.get(18)? , linux: None }, discs: Vec::new(),
             id: row.get(0)?, title: row.get(1)?, platform: row.get(2)?,
             rom_path: row.get(3)?, cover_path: row.get(4)?, play_time: row.get(5)?,
             release_date: row.get(6)?, developer: row.get(7)?, publisher: row.get(8)?,
@@ -761,6 +776,7 @@ fn save_game_details_in_transaction(conn: &Connection, details: GameDetails) -> 
             epic_app_id: None,
         }),
     ).map_err(|e| e.to_string())?;
+    game.execution.linux = linux_execution::read(tx, game.id)?;
     game.steam_app_id = steam::app_id(&game.rom_path);
     game.recomp = entity_variables::truth(entity_variables::read(tx,"game",details.id)?.get("recomp"));
     game.epic_app_id = epic::app_id(&game.rom_path);
@@ -932,22 +948,37 @@ async fn launch_game(game_id: i32, disc_id: Option<i64>, region_id: Option<i32>,
     tauri::async_runtime::spawn_blocking(move || {
         let conn = get_db_connection().map_err(|e| e.to_string())?;
         let source_id = game_regions::selected(&conn,game_id,region_id)?;
-        let steam_id = conn.query_row("SELECT rom_path FROM games WHERE id=?1", [game_id], |row| row.get::<_, String>(0)).ok().and_then(|path| steam::app_id(&path));
-        let game_path: String = conn.query_row("SELECT rom_path FROM games WHERE id=?1", [game_id], |row| row.get(0)).map_err(|e| e.to_string())?;
+        let steam_id = conn.query_row("SELECT rom_path FROM games WHERE id=?1", [source_id], |row| row.get::<_, String>(0)).ok().and_then(|path| steam::app_id(&path));
+        let game_path: String = conn.query_row("SELECT rom_path FROM games WHERE id=?1", [source_id], |row| row.get(0)).map_err(|e| e.to_string())?;
+        let direct:bool=conn.query_row("SELECT launch_directly FROM games WHERE id=?1",[source_id],|r|r.get(0)).map_err(|e|e.to_string())?;
+        let linux_options=linux_execution::read(&conn,source_id)?.unwrap_or_default();
         let epic_directory = if epic::app_id(&game_path).is_some() { Some(epic::launch_plan(&conn, game_id, &game_path)?.install_directory) } else { None };
-        let (mut result, (mut child, started, diagnostic_log)) = launch_game_record_with_region(&conn, game_id, region_id, disc_id, |emu_path, args, working_directory| {
+        let (mut result, (mut child, started, diagnostic_log, process_session, error_output)) = launch_game_record_with_region(&conn, game_id, region_id, disc_id, |emu_path, args, working_directory| {
             let mut args=args.to_vec();let log=retroarch::diagnostic_log(emu_path,&mut args,game_id);
-            let mut command = std::process::Command::new(emu_path);
-            command.args(&args);
-            if let Some(parent) = working_directory { command.current_dir(parent); }
-            let child = command.spawn()
+            let runtime=if cfg!(target_os="linux")&&direct&&steam_id.is_none()&&epic::app_id(&game_path).is_none(){Some(linux_execution::plan(&data_directory().map_err(|e|e.to_string())?,source_id,emu_path,&args,&linux_options)?)}else{None};
+            let mut command = std::process::Command::new(runtime.as_ref().map(|p|p.executable.as_path()).unwrap_or(Path::new(emu_path)));
+            platform_runtime::configure_child(&mut command);
+            if let Some(plan)=&runtime {
+                if let Some(prefix)=&plan.prefix {fs::create_dir_all(prefix).map_err(|e|e.to_string())?;}
+                command.args(&plan.args).envs(&plan.environment).current_dir(&plan.directory);
+            } else {command.args(&args);if let Some(parent) = working_directory { command.current_dir(parent); }}
+            let token=format!("{}-{}-{}",std::process::id(),source_id,std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_nanos());
+            #[cfg(target_os="linux")] {
+                use std::os::unix::process::CommandExt;
+                if !platform_runtime::executable(command.get_program().as_ref()) {return Err(crate::i18n::text("linux.notExecutable").into());}
+                command.process_group(0).env("OPENCABINET_SESSION",&token).stderr(std::process::Stdio::piped());
+            }
+            let mut child = command.spawn()
                 .map_err(|e| crate::i18n::i18n_format!("msg.ebe0ff502e", emu_path, e))?;
-            Ok((child, Instant::now(),log))
+            let errors=child.stderr.take().map(linux_process::capture_errors);
+            let session=cfg!(target_os="linux").then(||linux_process::Session::new(child.id(),token));
+            Ok((child, Instant::now(),log,session,errors))
         })?;
         result.stats = game_regions::statistics(&conn,game_id,result.stats)?;
         tauri::async_runtime::spawn_blocking(move || {
             let mut active = Some(active);
             let mut diagnostic_sent=false;
+            let process_session=std::cell::RefCell::new(process_session);
             let steam_session = std::cell::RefCell::new(steam_id.map(steam::SteamSession::new));
             let epic_session = std::cell::RefCell::new(epic_directory.map(epic::EpicSession::new));
             if let Err(error) = playtime::monitor_session(&conn, source_id,
@@ -956,6 +987,12 @@ async fn launch_game(game_id: i32, disc_id: Option<i64>, region_id: Option<i32>,
                     else if let Some(session) = epic_session.borrow_mut().as_mut() { let _ = child.try_wait(); Ok(session.poll()) }
                     else {
                         let status=child.try_wait().map_err(|e|e.to_string())?;
+                        let running=process_session.borrow_mut().as_mut().map(|s|s.poll(status.is_none())).unwrap_or(status.is_none());
+                        if cfg!(target_os="linux")&&!running&&!diagnostic_sent&&started.elapsed()<Duration::from_secs(20)&&status.as_ref().is_some_and(|s|!s.success()) {
+                            diagnostic_sent=true;
+                            let message=crate::i18n::i18n_format!("linux.launchFailed",linux_process::error_text(&error_output));
+                            let _=app.emit("launch-diagnostic",serde_json::json!({"game_id":game_id,"message":message}));
+                        }
                         if !diagnostic_sent&&diagnostic_log.is_some()&&started.elapsed()<Duration::from_secs(15) {
                             let details=retroarch::failure_details(diagnostic_log.as_deref());
                             if details.is_some()||status.as_ref().is_some_and(|status|!status.success()) {
@@ -965,11 +1002,11 @@ async fn launch_game(game_id: i32, disc_id: Option<i64>, region_id: Option<i32>,
                                 let _=app.emit("launch-diagnostic",serde_json::json!({"game_id":game_id,"message":message}));
                             }
                         }
-                        Ok(status.is_none())
+                        Ok(running)
                     }
                 },
                 || steam_session.borrow().as_ref().map(|session| session.elapsed())
-                    .or_else(|| epic_session.borrow().as_ref().map(|session| session.elapsed())).unwrap_or_else(|| started.elapsed()), || std::thread::sleep(Duration::from_secs(1)),
+                    .or_else(|| epic_session.borrow().as_ref().map(|session| session.elapsed())).or_else(||process_session.borrow().as_ref().map(|session|session.elapsed())).unwrap_or_else(|| started.elapsed()), || std::thread::sleep(Duration::from_secs(1)),
                 |stats| {
                     if !stats.is_running { drop(active.take()); }
                     if let Ok(stats) = game_regions::statistics(&conn,game_id,stats) { let _ = app.emit("play-statistics-updated", stats); }
@@ -1073,7 +1110,7 @@ fn launch_game_record_with_region<T>(
         retroarch::validate_firmware(&emu_path,&core,&raw_args)?;
         raw_args.splice(0..0, ["-L".to_owned(), core]);
     }
-    let working_directory = if Path::new(&emu_path).is_absolute() && Path::new(&emu_path).file_name().is_some_and(|name| name.eq_ignore_ascii_case("retroarch.exe")) {
+    let working_directory = if Path::new(&emu_path).is_absolute() && platform_runtime::is_retroarch(Path::new(&emu_path)) {
         Path::new(&emu_path).parent()
     } else { None };
     let process = spawn(&emu_path, &raw_args, working_directory)?;
@@ -1096,11 +1133,10 @@ fn select_folder() -> Result<Option<String>, String> {
 
 #[tauri::command]
 async fn select_emulator_executable() -> Result<Option<String>, String> {
-    Ok(rfd::FileDialog::new()
-        .set_title(crate::i18n::text("msg.aa9498be60"))
-        .add_filter(crate::i18n::text("msg.7043823cee"), &["exe"])
-        .pick_file()
-        .map(|path| path.to_string_lossy().into_owned()))
+    let dialog=rfd::AsyncFileDialog::new().set_title(crate::i18n::text("msg.aa9498be60"));
+    let dialog=if cfg!(windows) {dialog.add_filter(crate::i18n::text("msg.7043823cee"), &["exe"])}else{dialog};
+    Ok(dialog.pick_file().await
+        .map(|path| path.path().to_string_lossy().into_owned()))
 }
 
 fn clean_rom_title(file_stem: &str) -> String {
@@ -1209,7 +1245,7 @@ fn discover_roms_for_platform(
                 skipped_count += 1;
             } else {
                 let file_stem = entry_path.file_stem().and_then(|name| name.to_str()).unwrap_or(crate::i18n::text("msg.4d1a7c9832"));
-                candidates.push(RomCandidate { recomp: false, launch_directly: false, discs: Vec::new(), existing_game_id: None, title: clean_rom_title(file_stem), rom_path, steam: None, epic: None });
+                candidates.push(RomCandidate { linux_execution: None, recomp: false, launch_directly: false, discs: Vec::new(), existing_game_id: None, title: clean_rom_title(file_stem), rom_path, steam: None, epic: None });
             }
         }
         if last_update.elapsed() >= Duration::from_millis(100) {
@@ -1231,7 +1267,7 @@ fn discover_roms_for_platform(
             let rom_path = file.to_string_lossy().into_owned();
             total_found += 1;
             if existing.contains(&discs::key(&rom_path)) { skipped_count += 1; }
-            else { candidates.push(RomCandidate { recomp: false, launch_directly: false, discs: Vec::new(), existing_game_id: None, title, rom_path, steam: None, epic: None }); }
+            else { candidates.push(RomCandidate { linux_execution: None, recomp: false, launch_directly: false, discs: Vec::new(), existing_game_id: None, title, rom_path, steam: None, epic: None }); }
         }
     }
     let mut candidates = discs::group(candidates);
@@ -1334,6 +1370,7 @@ fn import_roms_with_media(
                 added_count += 1;
                 let id = tx.last_insert_rowid();
                 entity_variables::save_recomp(&tx,id as i32,candidate.recomp)?;
+                linux_execution::save(&tx,id as i32,candidate.linux_execution.as_ref())?;
                 if !direct { discs::replace(&tx,id,&sources)?; }
                 if let Some((root,selections)) = recovery {
                     if let Some(collection)=media_library::selection_for(selections, &candidate.rom_path) {
@@ -1379,6 +1416,7 @@ fn scan_roms(
 }
 
 fn shlex_split(input: &str) -> Vec<String> {
+    if cfg!(target_os="linux"){return platform_runtime::split_arguments(input);}
     let mut args = Vec::new();
     let mut current = String::new();
     let mut in_quotes = false;
@@ -2187,7 +2225,7 @@ mod game_edit_tests {
         discs::init(&conn).unwrap();
         discs::replace(&conn,1,&[discs::source(&first),discs::source(&second)]).unwrap();
         let mut edit = details(); edit.platform="SNES".into();
-        edit.execution=Some(game_execution::ExecutionOptions { emulator_id:Some(2),arguments:Some("--custom \"%ROM%\"".into()) });
+        edit.execution=Some(game_execution::ExecutionOptions { emulator_id:Some(2),arguments:Some("--custom \"%ROM%\"".into()) , linux: None });
         let saved=save_game_details(&mut conn,edit).unwrap();
         assert_eq!(saved.execution.emulator_id,Some(2));
         let disc=discs::read(&conn,1).unwrap()[1].id;
@@ -2195,11 +2233,11 @@ mod game_edit_tests {
             assert_eq!(exe,"second.exe"); assert_eq!(args,&["--custom".to_string(),second.clone()]); Ok(())
         }).unwrap();
         let mut edit=details(); edit.platform="SNES".into();
-        edit.execution=Some(game_execution::ExecutionOptions { emulator_id:Some(3),arguments:None });
+        edit.execution=Some(game_execution::ExecutionOptions { emulator_id:Some(3),arguments:None , linux: None });
         assert!(save_game_details(&mut conn,edit).is_err());
         assert_eq!(game_execution::read(&conn,1).unwrap().emulator_id,Some(2));
         let mut edit=details(); edit.platform="SNES".into();
-        edit.execution=Some(game_execution::ExecutionOptions { emulator_id:Some(2),arguments:None });
+        edit.execution=Some(game_execution::ExecutionOptions { emulator_id:Some(2),arguments:None , linux: None });
         save_game_details(&mut conn,edit).unwrap();
         launch_game_record_with_disc(&conn,1,disc,|exe,args,_|{
             assert_eq!(exe,"second.exe"); assert_eq!(args,&["--second".to_string(),second.clone()]); Ok(())
@@ -2224,7 +2262,7 @@ mod game_edit_tests {
         conn.execute_batch("CREATE TABLE emulators(id INTEGER PRIMARY KEY,platform TEXT);
             INSERT INTO emulators VALUES(1,'SNES'),(2,'SNES');").unwrap();
         game_execution::init_schema(&conn).unwrap();
-        game_execution::save(&conn,1,"SNES",&game_execution::ExecutionOptions{emulator_id:Some(2),arguments:Some(String::new())}).unwrap();
+        game_execution::save(&conn,1,"SNES",&game_execution::ExecutionOptions{emulator_id:Some(2),arguments:Some(String::new()), linux: None }).unwrap();
         init_game_metadata(&conn).unwrap();
         assert_eq!(game_execution::read(&conn,1).unwrap().arguments.as_deref(),Some(""));
         conn.execute("UPDATE games SET platform='Super Nintendo'",[]).unwrap();
@@ -2232,11 +2270,11 @@ mod game_edit_tests {
         assert_eq!(game_execution::read(&conn,1).unwrap().emulator_id,Some(2));
         conn.execute("UPDATE emulators SET platform='Genesis' WHERE id=2",[]).unwrap();
         assert_eq!(game_execution::read(&conn,1).unwrap().emulator_id,None);
-        game_execution::save(&conn,1,"Super Nintendo",&game_execution::ExecutionOptions{emulator_id:Some(1),arguments:None}).unwrap();
+        game_execution::save(&conn,1,"Super Nintendo",&game_execution::ExecutionOptions{emulator_id:Some(1),arguments:None, linux: None }).unwrap();
         conn.execute("DELETE FROM emulators WHERE id=1",[]).unwrap();
         assert_eq!(game_execution::read(&conn,1).unwrap().emulator_id,None);
         conn.execute("UPDATE games SET launch_directly=1,rom_path='steam://run/42'",[]).unwrap();
-        assert!(game_execution::save(&conn,1,"PC",&game_execution::ExecutionOptions{emulator_id:None,arguments:Some("--windowed".into())}).is_err());
+        assert!(game_execution::save(&conn,1,"PC",&game_execution::ExecutionOptions{emulator_id:None,arguments:Some("--windowed".into()), linux: None }).is_err());
     }
 
     #[test]
@@ -2523,6 +2561,13 @@ pub fn run() {
         }
     }
     let mut context = tauri::generate_context!();
+    #[cfg(target_os="linux")]
+    if let Ok((configuration,_))=platform_runtime::locations() {
+        // Keep the webview profile stable when the game library is relocated.
+        for window in &mut context.config_mut().app.windows {
+            window.data_directory=Some(configuration.join("webview"));
+        }
+    }
     #[cfg(windows)]
     if let Some(profile) = branding::legacy_webview_directory() {
         for window in &mut context.config_mut().app.windows {
@@ -2653,6 +2698,10 @@ pub fn run() {
             metadata::download_bulk_game_images,
             metadata::retry_editor_game_images,
             select_folder,
+            platform_runtime::get_runtime_capabilities,
+            platform_runtime::open_project_repository,
+            platform_runtime::choose_runtime_path,
+            linux_execution::get_linux_runners,
             select_emulator_executable
         ])
         .run(context)

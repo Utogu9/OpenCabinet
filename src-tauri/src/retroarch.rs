@@ -13,6 +13,7 @@ use std::{
     time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
 use tauri::ipc::Channel;
+use crate::platform_runtime::{core_extension, buildbot_os, retroarch_name, is_retroarch};
 
 type Result<T> = std::result::Result<T, String>;
 const BUILDBOT: &str = "https://buildbot.libretro.com";
@@ -228,7 +229,7 @@ fn parse_index(text: &str) -> HashSet<String> {
     text.lines()
         .filter_map(|line| {
             line.trim()
-                .strip_suffix(".dll.zip")
+                .strip_suffix(&format!(".{}.zip",core_extension()))
                 .filter(|s| valid_core_id(s))
                 .map(str::to_owned)
         })
@@ -332,6 +333,12 @@ fn machine(path: &Path) -> Result<&'static str> {
         File::open(path).map_err(|e| crate::i18n::i18n_format!("msg.93cf037b47", path.display(), e = e))?;
     let mut header = [0u8; 64];
     file.read_exact(&mut header).map_err(err)?;
+    if cfg!(target_os="linux") {
+        if &header[..4]!=b"\x7fELF" || header[5]!=1 {return Err(crate::i18n::text("linux.invalidElf").into());}
+        return match (header[4],u16::from_le_bytes([header[18],header[19]])) {
+            (2,62)=>Ok("x86_64"),(1,3)=>Ok("x86"),_=>Err(crate::i18n::text("linux.invalidElf").into())
+        };
+    }
     if &header[..2] != b"MZ" {
         return Err(crate::i18n::text("msg.feaab66bb6").into());
     }
@@ -357,9 +364,19 @@ fn default_arch() -> &'static str {
         "x86"
     }
 }
+fn config_path(executable:&Path)->PathBuf {
+    let parent=executable.parent().unwrap_or(Path::new("."));let local=parent.join("retroarch.cfg");
+    if local.is_file(){return local;}
+    if cfg!(target_os="linux") {
+        let portable=parent.join(format!("{}.home/.config/retroarch/retroarch.cfg",executable.file_name().unwrap_or_default().to_string_lossy()));
+        if portable.is_file(){return portable;}
+        if let Ok(root)=crate::platform_runtime::xdg("XDG_CONFIG_HOME",".config"){return root.join("retroarch/retroarch.cfg");}
+    }
+    if let Some(appdata)=std::env::var_os("APPDATA"){return PathBuf::from(appdata).join("retroarch.cfg");}local
+}
 pub(crate) fn directories(executable: &Path) -> (PathBuf, PathBuf) {
     let parent = executable.parent().unwrap_or(Path::new("."));
-    let cfg = fs::read_to_string(parent.join("retroarch.cfg"))
+    let cfg = fs::read_to_string(config_path(executable))
         .map(|s| settings(&s))
         .unwrap_or_default();
     let resolve = |key, fallback| {
@@ -373,19 +390,23 @@ pub(crate) fn directories(executable: &Path) -> (PathBuf, PathBuf) {
             .or_else(|| value.strip_prefix(":\\"))
         {
             parent.join(relative)
+        } else if cfg!(target_os="linux")&&value.starts_with("~/") {
+            std::env::var_os("HOME").map(PathBuf::from).unwrap_or_else(||parent.to_path_buf()).join(&value[2..])
         } else if Path::new(value).is_absolute() {
             PathBuf::from(value)
         } else {
             parent.join(value)
         }
     };
-    (
-        resolve("libretro_directory", "cores"),
-        resolve("libretro_info_path", "info"),
-    )
+    let local=parent.join("retroarch.cfg").is_file();
+    let managed=||crate::storage::active_directory().map(|root|root.join("emulators/RetroArch")).unwrap_or_else(|_|parent.to_path_buf());
+    let writable=|path:PathBuf,kind:&str| {
+        if cfg!(target_os="linux") && (!local || path.starts_with("/usr") || path.starts_with("/opt") || path.starts_with("/app")) {managed().join(kind)}else{path}
+    };
+    (writable(resolve("libretro_directory", "cores"),"cores"),writable(resolve("libretro_info_path", "info"),"info"))
 }
 fn cache_path(root: &Path, arch: &str) -> PathBuf {
-    root.join(format!("metadata/retroarch-cores-{arch}.json"))
+    root.join(format!("metadata/retroarch-cores-{}-{arch}.json",buildbot_os()))
 }
 fn catalog(
     root: &Path,
@@ -409,7 +430,7 @@ fn catalog(
     let info = job.directory.join("info.zip");
     download(
         job,
-        &format!("{BUILDBOT}/nightly/windows/{arch}/latest/.index"),
+        &format!("{BUILDBOT}/nightly/{}/{arch}/latest/.index",buildbot_os()),
         &index,
         1024 * 1024,
         crate::i18n::text("msg.794c2b5030"),
@@ -443,7 +464,7 @@ fn executable_setting(conn: &Connection, root: &Path) -> Result<Option<String>> 
     if saved.as_ref().is_some_and(|s| Path::new(s).is_file()) {
         return Ok(saved);
     }
-    let managed = root.join("emulators/RetroArch/retroarch.exe");
+    let managed = root.join("emulators/RetroArch").join(retroarch_name());
     if managed.is_file() {
         return Ok(Some(managed.to_string_lossy().into_owned()));
     }
@@ -455,9 +476,7 @@ fn executable_setting(conn: &Connection, root: &Path) -> Result<Option<String>> 
         .collect::<rusqlite::Result<Vec<_>>>()
         .map_err(err)?;
     Ok(candidates.into_iter().find(|s| {
-        Path::new(s)
-            .file_name()
-            .is_some_and(|n| n.to_string_lossy().eq_ignore_ascii_case("retroarch.exe"))
+        is_retroarch(Path::new(s))
             && Path::new(s).is_file()
     }))
 }
@@ -510,7 +529,7 @@ pub async fn get_retroarch_cores(
         if let Some(exe) = executable {
             let (directory, _) = directories(exe);
             for core in &mut cores {
-                let path = directory.join(format!("{}.dll", core.id));
+                let path = directory.join(format!("{}.{}", core.id,core_extension()));
                 core.installed = path.is_file();
                 core.path = path.to_string_lossy().into_owned();
             }
@@ -596,7 +615,7 @@ fn extract_portable(
                 let bundled_core = relative
                     .components()
                     .any(|p| p.as_os_str().eq_ignore_ascii_case("cores"))
-                    && relative.to_string_lossy().ends_with("_libretro.dll");
+                    && relative.to_string_lossy().ends_with(&format!("_libretro.{}",core_extension()));
                 if entry.is_directory() {
                     fs::create_dir_all(&path).map_err(err)?;
                 } else if !bundled_core {
@@ -623,10 +642,8 @@ fn extract_portable(
                     if written != entry.size() {
                         return Err("Archivo incompleto en el paquete.".into());
                     }
-                    if path
-                        .file_name()
-                        .is_some_and(|n| n.eq_ignore_ascii_case("retroarch.exe"))
-                    {
+                    if is_retroarch(&path) {
+                        #[cfg(unix)] {use std::os::unix::fs::PermissionsExt; fs::set_permissions(&path,fs::Permissions::from_mode(0o755)).map_err(err)?;}
                         executables.push(path);
                     }
                 } else {
@@ -660,19 +677,19 @@ pub async fn install_retroarch(
         operation.job.prepare()?;
         let job = &operation.job;
         let target = root.join("emulators/RetroArch");
-        if target.exists() { if target.join("retroarch.exe").is_file() { return Ok(target.join("retroarch.exe").to_string_lossy().into_owned()); } return Err("La carpeta de RetroArch ya existe y está incompleta. Selecciona una instalación existente o revisa esa carpeta.".into()); }
+        if target.exists() { if target.join(retroarch_name()).is_file() { return Ok(target.join(retroarch_name()).to_string_lossy().into_owned()); } return Err("La carpeta de RetroArch ya existe y está incompleta. Selecciona una instalación existente o revisa esa carpeta.".into()); }
         let index = job.directory.join("stable.html");
         download(job, &format!("{BUILDBOT}/stable/"), &index, 2*1024*1024, "Buscando versión estable", &on_progress)?;
         let version = latest_version(&fs::read_to_string(index).map_err(err)?)?;
         let archive = job.directory.join("RetroArch.7z");
-        download(job, &format!("{BUILDBOT}/stable/{version}/windows/{}/RetroArch.7z", default_arch()), &archive, 512*1024*1024, "Descargando RetroArch", &on_progress)?;
+        download(job, &format!("{BUILDBOT}/stable/{version}/{}/{}/RetroArch.7z", buildbot_os(),default_arch()), &archive, 512*1024*1024, "Descargando RetroArch", &on_progress)?;
         let extracted = job.directory.join("portable"); fs::create_dir(&extracted).map_err(err)?;
         let source = extract_portable(&archive, &extracted, job, &on_progress)?;
-        if machine(&source.join("retroarch.exe"))? != default_arch() { return Err("El paquete no coincide con la arquitectura solicitada.".into()); }
+        if machine(&source.join(retroarch_name()))? != default_arch() { return Err("El paquete no coincide con la arquitectura solicitada.".into()); }
         let _gate = job.gate.lock().map_err(err)?; job.check()?;
         fs::create_dir_all(target.parent().unwrap()).map_err(err)?;
         fs::rename(source, &target).map_err(err)?;
-        let executable = target.join("retroarch.exe").to_string_lossy().into_owned();
+        let executable = target.join(retroarch_name()).to_string_lossy().into_owned();
         remember(&super::get_db_connection().map_err(err)?, &executable)?;
         Ok(executable)
     }).await.map_err(err)?
@@ -682,7 +699,7 @@ fn extract_core(archive: &Path, id: &str, destination: &Path, arch: &str, job: &
     if zip.len() > 20 {
         return Err("Paquete de núcleo inválido.".into());
     }
-    let filename = format!("{id}.dll");
+    let filename = format!("{id}.{}",core_extension());
     let mut found = false;
     for i in 0..zip.len() {
         job.check()?;
@@ -744,7 +761,7 @@ pub async fn install_retroarch_core(
             .find(|c| c.id == core_id)
             .ok_or("El núcleo no está en el catálogo de Libretro. Actualiza la lista.")?;
         let (directory, info_directory) = directories(executable);
-        let target = directory.join(format!("{core_id}.dll"));
+        let target = directory.join(format!("{core_id}.{}",core_extension()));
         if target.is_file() {
             if machine(&target)? != arch {
                 return Err(
@@ -756,13 +773,13 @@ pub async fn install_retroarch_core(
         let archive = job.directory.join("core.zip");
         download(
             job,
-            &format!("{BUILDBOT}/nightly/windows/{arch}/latest/{core_id}.dll.zip"),
+            &format!("{BUILDBOT}/nightly/{}/{arch}/latest/{core_id}.{}.zip",buildbot_os(),core_extension()),
             &archive,
             256 * 1024 * 1024,
             "Descargando núcleo",
             &on_progress,
         )?;
-        let staged = job.directory.join("core.dll");
+        let staged = job.directory.join(format!("core.{}",core_extension()));
         extract_core(&archive, &core_id, &staged, arch, job)?;
         let _gate = job.gate.lock().map_err(err)?;
         job.check()?;
@@ -825,12 +842,11 @@ pub fn validate_configuration(executable: &str, arguments: &str, core: Option<&s
 pub fn validate_firmware(executable:&str,core:&str,arguments:&[String])->Result<()> {
     if arguments.iter().any(|arg|arg=="--config"||arg=="-c"||arg.starts_with("--config=")||arg.starts_with("--appendconfig")){return Ok(());}
     let executable=Path::new(executable);let parent=executable.parent().unwrap_or(Path::new("."));
-    let mut cfg=parent.join("retroarch.cfg");
-    if !cfg.is_file(){if let Some(appdata)=std::env::var_os("APPDATA"){cfg=PathBuf::from(appdata).join("retroarch.cfg");}}
+    let cfg=config_path(executable);
     let values=fs::read_to_string(cfg).map(|s|settings(&s)).unwrap_or_default();
     let system=values.get("system_directory").filter(|p|!p.is_empty()&&p.as_str()!="default").map(|p|{
-        if let Some(relative)=p.strip_prefix(":/").or_else(||p.strip_prefix(":\\")){parent.join(relative)}else if Path::new(p).is_absolute(){PathBuf::from(p)}else{parent.join(p)}
-    }).unwrap_or_else(||parent.join("system"));
+        if let Some(relative)=p.strip_prefix(":/").or_else(||p.strip_prefix(":\\")){parent.join(relative)}else if cfg!(target_os="linux")&&p.starts_with("~/"){std::env::var_os("HOME").map(PathBuf::from).unwrap_or_else(||parent.to_path_buf()).join(&p[2..])}else if Path::new(p).is_absolute(){PathBuf::from(p)}else{parent.join(p)}
+    }).unwrap_or_else(||if cfg!(target_os="linux"){config_path(executable).parent().unwrap_or(parent).join("system")}else{parent.join("system")});
     let (_,info_dir)=directories(executable);
     let stem=Path::new(core).file_stem().unwrap_or_default().to_string_lossy();
     let Ok(text)=fs::read_to_string(info_dir.join(format!("{stem}.info"))) else{return Ok(());};
@@ -849,7 +865,7 @@ pub fn validate_firmware(executable:&str,core:&str,arguments:&[String])->Result<
     Ok(())
 }
 pub fn diagnostic_log(executable:&str,args:&mut Vec<String>,game_id:i32)->Option<PathBuf>{
-    if !Path::new(executable).file_name().is_some_and(|name|name.eq_ignore_ascii_case("retroarch.exe"))||args.iter().any(|arg|arg=="--log-file"||arg.starts_with("--log-file=")){return None;}
+    if !is_retroarch(Path::new(executable))||args.iter().any(|arg|arg=="--log-file"||arg.starts_with("--log-file=")){return None;}
     let path=crate::data_directory().ok()?.join("logs").join(format!("retroarch-{game_id}-last-launch.log"));
     fs::create_dir_all(path.parent()?).ok()?;fs::write(&path,[]).ok()?;
     args.splice(0..0,["--verbose".into(),"--log-file".into(),path.to_string_lossy().to_string()]);Some(path)
@@ -947,8 +963,12 @@ mod tests {
     fn channel() -> Channel<Progress> {
         Channel::new(|_| Ok(()))
     }
-    fn pe(machine: u16) -> Vec<u8> {
+    fn binary(machine: u16) -> Vec<u8> {
         let mut bytes = vec![0u8; 80];
+        if cfg!(target_os="linux") {
+            bytes[..4].copy_from_slice(b"\x7fELF");bytes[4]=if machine==0x8664{2}else{1};bytes[5]=1;
+            bytes[18..20].copy_from_slice(&(if machine==0x8664{62u16}else{3u16}).to_le_bytes());return bytes;
+        }
         bytes[..2].copy_from_slice(b"MZ");
         bytes[60..64].copy_from_slice(&64u32.to_le_bytes());
         bytes[64..68].copy_from_slice(b"PE\0\0");
@@ -958,7 +978,7 @@ mod tests {
     fn archive(path: &Path, entries: &[(&str, &[u8])]) {
         let mut zip = zip::ZipWriter::new(File::create(path).unwrap());
         for (name, bytes) in entries {
-            zip.start_file(*name, zip::write::SimpleFileOptions::default())
+            zip.start_file(if cfg!(target_os="linux"){name.replace(".dll",".so")}else{name.to_string()}, zip::write::SimpleFileOptions::default())
                 .unwrap();
             zip.write_all(bytes).unwrap();
         }
@@ -970,7 +990,7 @@ mod tests {
         let path = sandbox.0.join("info.zip");
         archive(&path, &[("snes9x_libretro.info", b"display_name = \"Snes9x\"\ndatabase = \"SNES|Sufami Turbo\"\nfirmware_count = 2\nfirmware0_opt = \"false\"\nfirmware0_desc = \"Required.bin\"\nfirmware1_opt = \"true\"\nfirmware1_desc = \"Optional.bin\""), ("absent_libretro.info", b"display_name = \"Unavailable\"")]);
         let cores = parse_catalog(
-            "snes9x_libretro.dll.zip\n../evil_libretro.dll.zip\nmissing_libretro.dll.zip\n",
+            &format!("snes9x_libretro.{0}.zip\n../evil_libretro.{0}.zip\nmissing_libretro.{0}.zip\n",core_extension()),
             &path,
         )
         .unwrap();
@@ -1024,7 +1044,7 @@ mod tests {
         let operation = sandbox.operation();
         let zip = sandbox.0.join("core.zip");
         let target = sandbox.0.join("core.dll");
-        let dll = pe(0x8664);
+        let dll = binary(0x8664);
         archive(&zip, &[("snes9x_libretro.dll", &dll)]);
         extract_core(&zip, "snes9x_libretro", &target, "x86_64", &operation.job).unwrap();
         assert_eq!(fs::read(&target).unwrap(), dll);
@@ -1122,8 +1142,8 @@ mod tests {
         let sandbox = Sandbox::new();
         let exe = sandbox.0.join("Retro Arch.exe");
         let core = sandbox.0.join("core with spaces.dll");
-        fs::write(&exe, pe(0x8664)).unwrap();
-        fs::write(&core, pe(0x8664)).unwrap();
+        fs::write(&exe, binary(0x8664)).unwrap();
+        fs::write(&core, binary(0x8664)).unwrap();
         let conn = Connection::open_in_memory().unwrap();
         conn.execute_batch("CREATE TABLE games(id INTEGER PRIMARY KEY,title TEXT,platform TEXT,rom_path TEXT,play_time INTEGER DEFAULT 0); INSERT INTO games(id,title,platform,rom_path) VALUES(1,'Reviewed title','SNES','C:/Games/Game with spaces.sfc'); CREATE TABLE emulators(id INTEGER PRIMARY KEY,name TEXT,platform TEXT,executable_path TEXT,arguments TEXT);").unwrap();
         super::super::init_game_metadata(&conn).unwrap();
@@ -1158,7 +1178,7 @@ mod tests {
             )
             .is_err()
         );
-        fs::write(&core, pe(0x14c)).unwrap();
+        fs::write(&core, binary(0x14c)).unwrap();
         assert!(
             validate_configuration(exe.to_str().unwrap(), "%ROM%", Some(core.to_str().unwrap()))
                 .is_err()
@@ -1242,8 +1262,8 @@ mod tests {
         download(
             job,
             &format!(
-                "{BUILDBOT}/stable/{version}/windows/{}/RetroArch.7z",
-                default_arch()
+                "{BUILDBOT}/stable/{version}/{}/{}/RetroArch.7z",
+                buildbot_os(),default_arch()
             ),
             &archive,
             512 * 1024 * 1024,
@@ -1255,15 +1275,15 @@ mod tests {
         fs::create_dir(&destination).unwrap();
         let installation = extract_portable(&archive, &destination, job, &channel()).unwrap();
         assert_eq!(
-            machine(&installation.join("retroarch.exe")).unwrap(),
+            machine(&installation.join(retroarch_name())).unwrap(),
             default_arch()
         );
         let core = job.directory.join("core.zip");
         download(
             job,
             &format!(
-                "{BUILDBOT}/nightly/windows/{}/latest/snes9x_libretro.dll.zip",
-                default_arch()
+                "{BUILDBOT}/nightly/{}/{}/latest/snes9x_libretro.{}.zip",
+                buildbot_os(),default_arch(),core_extension()
             ),
             &core,
             256 * 1024 * 1024,
@@ -1271,7 +1291,7 @@ mod tests {
             &channel(),
         )
         .unwrap();
-        let dll = job.directory.join("snes9x.dll");
+        let dll = job.directory.join(format!("snes9x.{}",core_extension()));
         extract_core(&core, "snes9x_libretro", &dll, default_arch(), job).unwrap();
         println!(
             "Official RetroArch {version} portable and Snes9x extracted and validated successfully"
