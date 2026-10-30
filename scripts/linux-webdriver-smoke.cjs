@@ -1,6 +1,6 @@
 // Runs against Tauri/WebKitGTK, not a Chromium imitation. Uses a disposable Linux profile.
 const fs=require('node:fs'),os=require('node:os'),path=require('node:path'),assert=require('node:assert/strict');
-const {spawn}=require('node:child_process');
+const {spawn,execFileSync}=require('node:child_process');
 function manualPdf(){
   const stream='0.2 0.4 0.7 rg 0 0 200 300 re f\n';
   const objects=['<< /Type /Catalog /Pages 2 0 R >>','<< /Type /Pages /Kids [3 0 R] /Count 1 >>','<< /Type /Page /Parent 2 0 R /MediaBox [0 0 200 300] /Resources << >> /Contents 4 0 R >>',`<< /Length ${stream.length} >>\nstream\n${stream}endstream`];
@@ -49,6 +49,19 @@ async function main(){
     if(result.error)throw Error(result.error);const state=result.value;
     assert.equal(state.capabilities.os,'linux');assert.equal(state.os,'linux');assert.equal(state.count,0);assert.equal(state.epicHidden,true);assert.equal(state.css3d,true);assert.equal(state.title,'OpenCabinet');
     assert.ok(state.location.active_directory.startsWith(path.join(root,'data')));assert.ok(state.location.config_file.startsWith(path.join(root,'config')));
+    if(process.argv[2].endsWith('.AppImage')){
+      const entry=fs.readFileSync(path.join(root,'data/applications/opencabinet.desktop'),'utf8');
+      assert.match(entry,/^X-OpenCabinet-Managed=true$/m);assert.match(entry,/^StartupWMClass=opencabinet$/m);
+      assert.ok(entry.includes(path.resolve(process.argv[2])));
+      const icon=path.join(root,'data/icons/hicolor/256x256/apps/opencabinet.png');
+      assert.deepEqual(fs.readFileSync(icon),fs.readFileSync('src-tauri/icons/128x128@2x.png'));
+      const tree=execFileSync('xwininfo',['-root','-tree'],{encoding:'utf8'});
+      const windowId=tree.match(/\b(0x[0-9a-f]+)\s+"OpenCabinet"/i)?.[1];assert.ok(windowId,tree);
+      const identity=execFileSync('xprop',['-id',windowId,'WM_CLASS'],{encoding:'utf8'});
+      assert.match(identity,/"opencabinet"/i);
+      const windowIcon=execFileSync('xprop',['-id',windowId,'_NET_WM_ICON'],{encoding:'utf8',maxBuffer:2*1024*1024});
+      assert.doesNotMatch(windowIcon,/not found|no such atom/i);
+    }
     const theme=await script(`document.getElementById('btn-open-preferences').click();return {open:document.getElementById('preferences-dialog').open};`);
     if(theme.error)throw Error(theme.error);assert.equal(theme.value.open,true);
     const fullscreen=await script(`
@@ -110,7 +123,7 @@ async function main(){
     const targets=fs.readFileSync(openLog,'utf8').trim().split('\n').map(line=>line.split('|'));
     assert.equal(targets.length,2);assert.ok(targets.some(([url])=>url==='https://github.com/Utogu9/OpenCabinet'));
     for(const [,appdir,libraries]of targets){assert.equal(appdir,'');assert.doesNotMatch(libraries,/appimage_extracted|\/\.mount_/);}
-    console.log('Linux WebKitGTK startup, fullscreen, IPC, XDG storage, desktop opening, Unicode native game/session, PDF/CBZ manuals and 3D boxes passed:',JSON.stringify(boxes.value));
+    console.log('Linux WebKitGTK startup, desktop icon/identity, fullscreen, IPC, XDG storage, desktop opening, Unicode native game/session, PDF/CBZ manuals and 3D boxes passed:',JSON.stringify(boxes.value));
   }finally{
     if(session)await request('DELETE',`/session/${session}`).catch(()=>{});
     driver.kill();await new Promise(resolve=>driver.exitCode!==null?resolve():driver.once('exit',resolve));

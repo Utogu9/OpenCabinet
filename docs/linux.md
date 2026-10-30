@@ -16,6 +16,12 @@ Extract the workflow artifact ZIP first, then grant the AppImage execute permiss
 in your file manager and open it. Keep it in a directory writable by your user
 if you want to use the integrated updater.
 
+On first launch, the AppImage registers its launcher and icon in the user's XDG
+data directory so the desktop can identify the running application. Moving the
+AppImage and opening it again updates this launcher. A custom user-created
+`opencabinet.desktop` is preserved. The file manager's thumbnail for the AppImage
+itself depends on the desktop's AppImage thumbnail support.
+
 Some distributions require the FUSE 2 compatibility library to run AppImages.
 Install the appropriate package for your distribution if the AppImage reports
 that FUSE is missing. OpenCabinet does not require administrator permissions.
@@ -76,7 +82,7 @@ On Ubuntu 22.04, install the build dependencies:
 sudo apt-get update
 sudo apt-get install build-essential pkg-config libssl-dev libgtk-3-dev \
   libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev patchelf \
-  libfuse2 xvfb webkit2gtk-driver libgl1-mesa-dri xdg-utils \
+  libfuse2 xvfb webkit2gtk-driver libgl1-mesa-dri xdg-utils x11-utils \
   gstreamer1.0-plugins-base gstreamer1.0-plugins-good gstreamer1.0-tools
 ```
 

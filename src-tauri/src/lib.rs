@@ -29,6 +29,8 @@ mod game_execution;
 mod platform_runtime;
 mod linux_execution;
 mod linux_process;
+#[cfg(target_os="linux")]
+mod linux_desktop;
 mod emulator_defaults;
 mod folder_games;
 mod library_navigation;
@@ -2547,6 +2549,10 @@ mod game_edit_tests {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     i18n::initialize();
+    #[cfg(target_os="linux")]
+    if let Err(error) = linux_desktop::initialize() {
+        eprintln!("Could not register the OpenCabinet desktop launcher: {error}");
+    }
     if let Err(error) = storage::initialize() {
         rfd::MessageDialog::new().set_title(crate::i18n::text("msg.47dd28ae40"))
             .set_description(&error).set_level(rfd::MessageLevel::Error).show();
