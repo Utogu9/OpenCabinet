@@ -29,6 +29,7 @@ zip = { version = "9", default-features = false, features = ["deflate"] }
 unicode-normalization = "0.1"
 sevenz-rust = { version = "0.6.1", default-features = false }
 tauri-plugin-updater = "2"
+webp = { version = "0.3.1", default-features = false }
 
 [target.'cfg(windows)'.dependencies]
 winreg = "0.56"

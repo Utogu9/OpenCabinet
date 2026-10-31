@@ -28,7 +28,9 @@ fn directory(custom: Option<&str>) -> Result<PathBuf, String> {
     if !root.is_absolute() {
         return Err(crate::i18n::text("msg.bba1ffc4e9").into());
     }
-    Ok(root.join("covers-v2"))
+    // Linux thumbnails now use independent CPU pixel buffers. Rebuild previews
+    // produced by the previous WebKitGTK graphics-surface transfer path.
+    Ok(root.join(if cfg!(target_os = "linux") { "covers-v3" } else { "covers-v2" }))
 }
 
 fn hash(value: impl Hash) -> String {
@@ -146,6 +148,39 @@ fn validate_thumbnail(bytes: &[u8]) -> Result<(), String> {
         return Err(invalid());
     }
     Ok(())
+}
+
+fn encode_rgba(pixels: &[u8], width: u32, height: u32) -> Result<Vec<u8>, String> {
+    if width == 0 || height == 0 || width > 1280 || height > 800
+        || pixels.len() != width as usize * height as usize * 4 {
+        return Err(crate::i18n::text("msg.e8627b5d9f").into());
+    }
+    let bytes = webp::Encoder::from_rgba(pixels, width, height)
+        .encode_simple(false, 90.0).map_err(|e| format!("{e:?}"))?.to_vec();
+    validate_thumbnail(&bytes)?;
+    Ok(bytes)
+}
+
+// WebKitGTK can decode WebP but may encode PNG when asked for WebP. Accept
+// bounded RGBA bytes through binary IPC and encode away from the UI thread.
+#[tauri::command]
+pub async fn encode_cover_thumbnail(request: tauri::ipc::Request<'_>) -> Result<tauri::ipc::Response, String> {
+    let dimension = |name: &str| request.headers().get(name).and_then(|v| v.to_str().ok())
+        .and_then(|v| v.parse::<u32>().ok()).ok_or_else(|| crate::i18n::text("msg.e8627b5d9f").to_string());
+    let width = dimension("x-thumbnail-width")?;
+    let height = dimension("x-thumbnail-height")?;
+    let tauri::ipc::InvokeBody::Raw(pixels) = request.body() else {
+        return Err(crate::i18n::text("msg.b6879469aa").into());
+    };
+    // Check the payload before cloning or spawning any work.
+    if width == 0 || height == 0 || width > 1280 || height > 800
+        || pixels.len() != width as usize * height as usize * 4 {
+        return Err(crate::i18n::text("msg.e8627b5d9f").into());
+    }
+    let pixels = pixels.clone();
+    let bytes = tauri::async_runtime::spawn_blocking(move || encode_rgba(&pixels, width, height))
+        .await.map_err(error)??;
+    Ok(tauri::ipc::Response::new(bytes))
 }
 
 fn store(source: &Path, root: &Path, expected: &str, thumbnail_bytes: &[u8]) -> Result<(), String> {
@@ -304,6 +339,23 @@ mod tests {
     }
     const PNG: &[u8] = include_bytes!("../icons/32x32.png");
     const WEBP: &[u8] = include_bytes!("../tests/fixtures/cover-thumbnail.webp");
+
+    #[test]
+    fn native_encoder_produces_valid_webp_from_bounded_rgba_pixels() {
+        let pixels = [180, 60, 30, 128].repeat(40 * 56);
+        let bytes = encode_rgba(&pixels, 40, 56).unwrap();
+        validate_thumbnail(&bytes).unwrap();
+        let decoded = webp::Decoder::new(&bytes).decode().unwrap();
+        assert_eq!((decoded.width(), decoded.height()), (40, 56));
+        assert!(decoded.is_alpha());
+        assert!(decoded.chunks_exact(4).all(|pixel|
+            (pixel[0] as i16 - 180).abs() <= 5 && (pixel[1] as i16 - 60).abs() <= 5
+            && (pixel[2] as i16 - 30).abs() <= 5 && pixel[3] == 128));
+        for (width, height) in [(0, 1), (1, 0), (1281, 1), (1, 801), (u32::MAX, u32::MAX)] {
+            assert!(encode_rgba(&[], width, height).is_err());
+        }
+        assert!(encode_rgba(&[0; 3], 1, 1).is_err());
+    }
 
     fn riff(kind: &[u8; 4], data: &[u8]) -> Vec<u8> {
         let mut bytes = b"RIFF".to_vec();

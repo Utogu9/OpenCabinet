@@ -2630,6 +2630,7 @@ pub fn run() {
             i18n::save_ui_language,
             cover_cache::cover_cache_entry,
             cover_cache::store_cover_thumbnail,
+            cover_cache::encode_cover_thumbnail,
             cover_cache::validate_cover_cache_directory,
             cover_cache::choose_cache_directory,
             storage::get_data_location,

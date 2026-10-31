@@ -7,11 +7,42 @@
     return error;
   }
 
-  function createDecoder() {
+  function createDecoder({ transferPixels = window.OpenCabinetRuntime?.linux === true,
+    encodePixels = window.__TAURI__?.core?.invoke ? async ({ pixels, width, height }) => new Uint8Array(
+      await window.__TAURI__.core.invoke('encode_cover_thumbnail', pixels, {
+        headers: { 'x-thumbnail-width': String(width), 'x-thumbnail-height': String(height) },
+      })) : null } = {}) {
     let worker = null;
     let workerUnavailable = false;
     let nextId = 0;
     const requests = new Map();
+
+    async function finishPreview(bitmap, persist, fullCover, bytes = null, pixels = null) {
+      if (!persist && !fullCover) return;
+      // Browser encoders silently fall back to PNG when WebP is unsupported.
+      // The native encoder preserves the WebP cache format and quality.
+      if (!bytes && encodePixels) {
+        let canvas = bitmap, temporary = false;
+        try {
+          if (!pixels) {
+            canvas = document.createElement('canvas'); temporary = true;
+            canvas.width = bitmap.width; canvas.height = bitmap.height;
+            const context = canvas.getContext('2d', { willReadFrequently: true });
+            context.drawImage(bitmap, 0, 0);
+            pixels = context.getImageData(0, 0, canvas.width, canvas.height).data.buffer;
+          }
+          bytes = await encodePixels({ pixels, width: bitmap.width, height: bitmap.height });
+        } catch { /* A preview still works in RAM when encoding fails. */ }
+        finally { if (temporary) canvas.width = canvas.height = 0; }
+      }
+      if (!bytes) return;
+      if (fullCover) {
+        bitmap.previewBlob = new Blob([bytes], { type: 'image/webp' });
+        bitmap.previewSize = { width: bitmap.width, height: bitmap.height };
+      }
+      try { if (persist) await persist(bytes); }
+      catch { /* A cache write must never prevent displaying the cover. */ }
+    }
 
     function getWorker() {
       if (worker || workerUnavailable) return worker;
@@ -21,16 +52,20 @@
           const request = requests.get(data.id);
           if (!request) { data.bitmap?.close(); return; }
           requests.delete(data.id);
-          if (data.bitmap) {
-            if (request.fullCover && data.thumbnailBytes) {
-              data.bitmap.previewBlob = new Blob([data.thumbnailBytes], { type: "image/webp" });
-              data.bitmap.previewSize = { width: data.bitmap.width, height: data.bitmap.height };
+          let bitmap = data.bitmap;
+          try {
+            if (data.pixels) {
+              // WebKitGTK must own a separate pixel buffer for each thumbnail.
+              // Do not retain transferred GPU-backed ImageBitmaps on Linux.
+              bitmap = document.createElement("canvas"); bitmap.width = data.width; bitmap.height = data.height;
+              bitmap.getContext("2d", { willReadFrequently: true }).putImageData(
+                new ImageData(new Uint8ClampedArray(data.pixels), data.width, data.height), 0, 0);
+              bitmap.close = () => { bitmap.width = bitmap.height = 0; };
             }
-            try { if (data.thumbnailBytes && request.persist) await request.persist(data.thumbnailBytes); }
-            catch { /* A cache write must never prevent displaying the cover. */ }
-            request.resolve(data.bitmap);
-          }
-          else request.reject(new Error(data.error));
+            if (!bitmap) throw new Error(data.error);
+            await finishPreview(bitmap, request.persist, request.fullCover, data.thumbnailBytes, data.pixels);
+            request.resolve(bitmap);
+          } catch (error) { bitmap?.close?.(); request.reject(error); }
         };
         worker.onerror = (event) => {
           event.preventDefault();
@@ -66,18 +101,16 @@
         const canvas = document.createElement("canvas");
         canvas.width = Math.max(1, Math.round(image.naturalWidth * scale));
         canvas.height = Math.max(1, Math.round(image.naturalHeight * scale));
-        canvas.getContext("2d").drawImage(image, 0, 0, canvas.width, canvas.height);
-        if ((persist || fullCover) && canvas.toBlob) {
+        canvas.getContext("2d", { willReadFrequently: transferPixels }).drawImage(image, 0, 0, canvas.width, canvas.height);
+        if (persist || fullCover) {
+          let bytes = null;
           try {
-            const blob = await new Promise(resolve => canvas.toBlob(resolve, "image/webp", 0.9));
+            const blob = canvas.toBlob && await new Promise(resolve => canvas.toBlob(resolve, "image/webp", 0.9));
             if (blob?.type === "image/webp" && !signal.aborted) {
-              if (fullCover) {
-                canvas.previewBlob = blob;
-                canvas.previewSize = { width: canvas.width, height: canvas.height };
-              }
-              if (persist) await persist(new Uint8Array(await blob.arrayBuffer()));
+              bytes = new Uint8Array(await blob.arrayBuffer());
             }
           } catch { /* Images without CORS can still be displayed in RAM. */ }
+          if (!signal.aborted) await finishPreview(canvas, persist, fullCover, bytes);
         }
         canvas.close = () => { canvas.width = canvas.height = 0; };
         return canvas;
@@ -102,7 +135,7 @@
         return await new Promise((resolve, reject) => {
           requests.set(id, { resolve, reject, persist, fullCover });
           signal.addEventListener("abort", cancel, { once: true });
-          currentWorker.postMessage({ locale: globalThis.OpenCabinetI18n.locale, id, url, encode: Boolean(persist), fullCover });
+          currentWorker.postMessage({ locale: globalThis.OpenCabinetI18n.locale, id, url, encode: Boolean(persist), fullCover, transferPixels });
         });
       } catch (error) {
         if (signal.aborted) throw abortError();
@@ -178,6 +211,8 @@
         ready.delete(path);ready.set(path,bitmap);trim(path);
       },
       invalidate(path) {
+        const task = pending.get(path);
+        if (task) { task.invalidated = true; pending.delete(path); }
         ready.get(path)?.close();
         ready.delete(path);
       },
@@ -189,7 +224,7 @@
         if (previous && !previous.signal.aborted) return previous.promise;
         const task = { signal };
         task.promise = Promise.resolve().then(() => decoder(path, signal)).then((bitmap) => {
-          if (signal.aborted || disposed) { bitmap.close(); throw abortError(); }
+          if (signal.aborted || disposed || task.invalidated) { bitmap.close(); throw abortError(); }
           if (pending.get(path) === task) pending.delete(path);
           cache.put(path, bitmap);
           return bitmap;
@@ -234,7 +269,7 @@
       canvas.className = record.className;
       canvas.setAttribute("role", "img");
       canvas.setAttribute("aria-label", record.title);
-      canvas.getContext("2d").drawImage(bitmap, 0, 0);
+      canvas.getContext("2d", { willReadFrequently: window.OpenCabinetRuntime?.linux === true }).drawImage(bitmap, 0, 0);
       record.container.style.setProperty("--cover-ratio", String(bitmap.width / bitmap.height));
       record.container.classList.add("has-cover");
       record.canvas = canvas;

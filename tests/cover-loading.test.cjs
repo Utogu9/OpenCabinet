@@ -171,6 +171,48 @@ test("Disposing a cache releases a late decode instead of retaining it", async (
   assert.equal(bitmap.closed, true); assert.equal(app.cache.size, 0);
 });
 
+test('Invalidating an in-flight cover rejects its old pixels without overwriting the replacement', async () => {
+  const app = library(), signal = new AbortController().signal;
+  const old = app.cache.load('same-path', signal); const rejected = assert.rejects(old, { name: 'AbortError' });
+  await new Promise(setImmediate);
+  app.cache.invalidate('same-path');
+  const replacement = app.cache.load('same-path', signal); await new Promise(setImmediate);
+  const fresh = await app.complete(1); assert.equal(await replacement, fresh);
+  const obsolete = await app.complete(0); await rejected;
+  assert.equal(obsolete.closed, true);
+  assert.equal(app.cache.get('same-path'), fresh);
+  assert.equal(fresh.closed, false);
+});
+
+test('Linux decodes receive independent RGBA pixels and persist WebP through the native fallback', async () => {
+  const jobs = [], encoded = [], saved = [], painted = [];
+  let worker;
+  const context = vm.createContext({ AbortController, Blob, Uint8Array, Uint8ClampedArray,
+    Worker: class { constructor() { worker = this; } postMessage(message) { jobs.push(message); } terminate() {} },
+    ImageData: class { constructor(data, width, height) { Object.assign(this, { data, width, height }); } },
+    document: { createElement() { return { getContext: () => ({ putImageData(data) { painted.push([...data.data]); } }) }; } },
+    window: { OpenCabinetRuntime: { linux: true }, __TAURI__: { core: { invoke: async (command, pixels, options) => {
+      encoded.push({ command, pixels: [...new Uint8Array(pixels)], options }); return new Uint8Array([82, 73, 70, 70]).buffer;
+    } } } },
+  });
+  vm.runInContext(fs.readFileSync('src/cover-cache.js', 'utf8'), context);
+  const decode = context.window.OpenCabinetCovers.createDecoder(), signal = new AbortController().signal;
+  const first = decode('first', signal, bytes => saved.push([...bytes]), { fullCover: true });
+  const second = decode('second', signal);
+  assert.equal(jobs[0].transferPixels, true);
+  const b = new Uint8ClampedArray([0, 0, 255, 255]);
+  await worker.onmessage({ data: { id: jobs[1].id, pixels: b.buffer, width: 1, height: 1 } });
+  const a = new Uint8ClampedArray([255, 0, 0, 255]);
+  await worker.onmessage({ data: { id: jobs[0].id, pixels: a.buffer, width: 1, height: 1 } });
+  const [red, blue] = await Promise.all([first, second]);
+  assert.notEqual(red, blue); assert.deepEqual(painted, [[0, 0, 255, 255], [255, 0, 0, 255]]);
+  assert.equal(encoded[0].command, 'encode_cover_thumbnail');
+  assert.deepEqual(encoded[0].pixels, [255, 0, 0, 255]);
+  assert.equal(encoded[0].options.headers['x-thumbnail-width'], '1');
+  assert.equal(red.previewBlob.type, 'image/webp'); assert.deepEqual(saved, [[82, 73, 70, 70]]);
+  red.close(); assert.equal(red.width, 0); assert.equal(blue.width, 1);
+});
+
 test("Persistent thumbnails are reused by a new decoder session, and changed signatures regenerate", async () => {
   const {api}=library(), stored=new Map(), calls=[];
   let signature="one";

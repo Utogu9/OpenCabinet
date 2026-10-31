@@ -51,6 +51,12 @@ async function main(){
     if(result.error)throw Error(result.error);const state=result.value;
     assert.equal(state.capabilities.os,'linux');assert.equal(state.os,'linux');assert.equal(state.count,0);assert.equal(state.epicHidden,true);assert.equal(state.css3d,true);assert.equal(state.title,'OpenCabinet');
     assert.ok(state.location.active_directory.startsWith(path.join(root,'data')));assert.ok(state.location.config_file.startsWith(path.join(root,'config')));
+    const covers=await script(`${fs.readFileSync('tests/helpers/cover-cache-browser.js','utf8')};return await checkCoverCachePixels();`);
+    if(covers.error)throw Error(covers.error);
+    for(const stage of ['cold','rebuilt','restored'])assert.deepEqual(covers.value[stage],[],`Incorrect cover pixels: ${stage}`);
+    assert.equal(covers.value.writes,covers.value.count);assert.ok(covers.value.reads>0);
+    console.log('WebKitGTK thumbnail pixels passed:',JSON.stringify({count:covers.value.count,reads:covers.value.reads,writes:covers.value.writes}));
+    if(process.argv.includes('--covers-only'))return;
     if(process.argv[2].endsWith('.AppImage')){
       const entry=fs.readFileSync(path.join(root,'data/applications/opencabinet.desktop'),'utf8');
       assert.match(entry,/^X-OpenCabinet-Managed=true$/m);assert.match(entry,/^StartupWMClass=opencabinet$/m);
@@ -184,7 +190,7 @@ async function main(){
   }finally{
     if(session)await request('DELETE',`/session/${session}`).catch(()=>{});
     driver.kill();await new Promise(resolve=>driver.exitCode!==null?resolve():driver.once('exit',resolve));
-    assert.equal(path.dirname(root),os.tmpdir());fs.rmSync(root,{recursive:true,force:true});
+    assert.equal(path.dirname(root),os.tmpdir());fs.rmSync(root,{recursive:true,force:true,maxRetries:10,retryDelay:100});
   }
 }
 main().catch(error=>{console.error(error);process.exitCode=1;});

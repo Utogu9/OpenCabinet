@@ -1,5 +1,13 @@
 # Caché de portadas
 
+En Linux las miniaturas usan `covers-v3`: se regeneran las vistas previas de la
+versión anterior, conservando las imágenes originales. El worker entrega píxeles
+RGBA independientes en lugar de superficies gráficas transferidas. Esto evita
+compartir esas superficies entre miniaturas en WebKitGTK. Si el navegador no puede
+codificar WebP, Rust realiza la codificación al 90 % fuera del hilo de interfaz,
+mediante IPC binario. Se mantienen los límites de RAM y la caché persistente.
+Las rutas `covers-v2` indicadas a continuación corresponden a Windows.
+
 En **Opciones → Preferencias → Datos de usuario** se puede elegir entre:
 
 - **Disco (predeterminado):** conserva miniaturas WebP con calidad del 90 % de hasta 320 × 400 píxeles en `data/cache/covers-v2`. Prepara todas las portadas de la biblioteca en segundo plano, sin límite de archivos. Prioriza la vista actual, con dos trabajos simultáneos y pausas durante el desplazamiento. Una caché adicional en RAM mantiene fluida la navegación; su límite es configurable y vale 400 miniaturas decodificadas por defecto.

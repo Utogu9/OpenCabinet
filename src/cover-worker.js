@@ -17,14 +17,24 @@ self.onmessage = async ({ data }) => {
     original = await createImageBitmap(sourceBlob);
     const scale = Math.min(1, (data.fullCover ? 1280 : 320) / original.width, (data.fullCover ? 800 : 400) / original.height);
     const canvas = new OffscreenCanvas(Math.max(1, Math.round(original.width * scale)), Math.max(1, Math.round(original.height * scale)));
-    canvas.getContext("2d").drawImage(original, 0, 0, canvas.width, canvas.height);
+    const context = canvas.getContext("2d", { willReadFrequently: !!data.transferPixels });
+    context.drawImage(original, 0, 0, canvas.width, canvas.height);
     const blob = data.encode || data.fullCover ? (data.fullCover && !data.encode && scale === 1 && sourceBlob.type === "image/webp"
       ? sourceBlob : await canvas.convertToBlob({ type: "image/webp", quality: 0.9 })) : null;
     const thumbnailBytes = blob?.type === "image/webp" ? new Uint8Array(await blob.arrayBuffer()) : null;
-    thumbnail = canvas.transferToImageBitmap();
-    canvas.width = canvas.height = 0;
-    if (controller.signal.aborted) thumbnail.close();
-    else self.postMessage({ id, bitmap: thumbnail, thumbnailBytes }, thumbnailBytes ? [thumbnail, thumbnailBytes.buffer] : [thumbnail]);
+    if (data.transferPixels) {
+      // Transfer independent CPU pixels rather than a reusable graphics surface.
+      const width = canvas.width, height = canvas.height;
+      const pixels = context.getImageData(0, 0, width, height).data.buffer;
+      canvas.width = canvas.height = 0;
+      if (!controller.signal.aborted) self.postMessage({ id, pixels, width, height, thumbnailBytes },
+        thumbnailBytes ? [pixels, thumbnailBytes.buffer] : [pixels]);
+    } else {
+      thumbnail = canvas.transferToImageBitmap();
+      canvas.width = canvas.height = 0;
+      if (controller.signal.aborted) thumbnail.close();
+      else self.postMessage({ id, bitmap: thumbnail, thumbnailBytes }, thumbnailBytes ? [thumbnail, thumbnailBytes.buffer] : [thumbnail]);
+    }
     thumbnail = null;
   } catch (error) {
     thumbnail?.close();
