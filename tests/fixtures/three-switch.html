@@ -3,6 +3,7 @@
 <div id="stage" class="game-box-stage" tabindex="0"></div>
 <script>globalThis.OpenCabinetI18n={t:key=>key};</script>
 <script src="/src/local-models.js"></script><script src="/src/three-box-router.js"></script><script src="/src/game-box.js"></script>
+<script src="/src/cover-cache.js"></script><script src="/src/carousel-boxes.js"></script>
 <script type="module">
 window.viewer=OpenCabinet3D.createViewer(document.getElementById('stage'),{debug:state=>window.debug=state});
 window.select=(id,images=[])=>viewer.update({id,title:'Local Switch test '+id,platform:'Nintendo Switch'},images);

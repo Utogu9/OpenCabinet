@@ -239,6 +239,29 @@ test('Linux decodes receive independent RGBA pixels and persist WebP through the
   red.close(); assert.equal(red.width, 0); assert.equal(blue.width, 1);
 });
 
+test('The thumbnail worker prepares high-resolution spines without the cover-thumbnail aspect limit',async()=>{
+  const outputs=[],draws=[];let closed=0,dimensions={width:256,height:8192};
+  const context=vm.createContext({AbortController,Blob,Uint8Array,
+    fetch:async()=>({ok:true,blob:async()=>new Blob(['image'],{type:'image/png'})}),
+    createImageBitmap:async()=>({...dimensions,close(){closed++;}}),
+    OffscreenCanvas:class {
+      constructor(width,height){Object.assign(this,{width,height});}
+      getContext(){return {drawImage:(...args)=>draws.push(args),getImageData:()=>({data:new Uint8Array(this.width*this.height*4)})};}
+      async convertToBlob(){return new Blob(['webp'],{type:'image/webp'});}
+    },
+    self:{postMessage:data=>outputs.push(data)},
+  });
+  vm.runInContext(fs.readFileSync('src/cover-worker.js','utf8'),context);
+  await context.self.onmessage({data:{id:1,url:'spine.png',maxEdge:2048,fullCover:true,transferPixels:true}});
+  assert.equal(outputs[0].width,64);assert.equal(outputs[0].height,2048);assert.equal(outputs[0].pixels.byteLength,64*2048*4);
+  dimensions={width:8192,height:256};
+  await context.self.onmessage({data:{id:2,url:'horizontal-spine.png',maxEdge:2048,fullCover:true,transferPixels:true}});
+  assert.equal(outputs[1].width,2048);assert.equal(outputs[1].height,64);
+  await context.self.onmessage({data:{id:3,url:'ordinary-cover.png',transferPixels:true}});
+  assert.equal(outputs[2].width,320);assert.ok(outputs[2].height<=400,'Ordinary cover cache sizing is unchanged');
+  assert.equal(draws.length,3);assert.equal(closed,3,'Worker source bitmaps are released');
+});
+
 test("Persistent thumbnails are reused by a new decoder session, and changed signatures regenerate", async () => {
   const {api}=library(), stored=new Map(), calls=[];
   let signature="one";

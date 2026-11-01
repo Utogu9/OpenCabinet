@@ -38,6 +38,44 @@
       if (signal.aborted) cancel(); else signal.addEventListener('abort', cancel, { once: true });
     });
   }
+  let spineDecoder = null, spineActive = false;
+  const spineJobs = [];
+  function pumpSpines() {
+    if (spineActive) return;
+    const job = spineJobs.shift(); if (!job) return;
+    if (job.signal.aborted) { job.cancel(); pumpSpines(); return; }
+    spineActive = true;
+    void job.start().finally(() => { spineActive = false; pumpSpines(); });
+  }
+  function loadSpine(path, signal, imageSource, delay = 0) {
+    if (!globalThis.OpenCabinetCovers?.createDecoder) return loadOriginal(path, signal, imageSource, delay);
+    // A separate worker/queue keeps side-art preparation off the UI thread and
+    // out of the front-cover download slots. Independent pixels also suit WebKit.
+    spineDecoder ||= globalThis.OpenCabinetCovers.createDecoder({ transferPixels: true });
+    return new Promise((resolve, reject) => {
+      let done = false;
+      const finish = (error, bitmap) => {
+        if (done) { bitmap?.close?.(); return; }
+        done = true; clearTimeout(timer); signal.removeEventListener('abort', cancel);
+        if (error) { reject(error); return; }
+        const release = () => bitmap.close?.();
+        signal.addEventListener('abort', release, { once: true });
+        resolve(bitmap);
+      };
+      const cancel = () => finish(new DOMException('Aborted', 'AbortError'));
+      const job = { signal, cancel, async start() {
+        if (done) return;
+        try {
+          let image = await spineDecoder(imageSource(path), signal, null, { fullCover: true, maxEdge: 2048 });
+          if (!image.previewBlob && !signal.aborted) { image.close?.(); image = await loadOriginal(path, signal, imageSource, 0); }
+          finish(null, image);
+        }
+        catch (error) { finish(error); }
+      } };
+      const timer = setTimeout(() => { if (!done) { spineJobs.push(job); pumpSpines(); } }, delay);
+      if (signal.aborted) cancel(); else signal.addEventListener('abort', cancel, { once: true });
+    });
+  }
   function createLegacy(host, options, createViewer) {
     const api3d = globalThis.OpenCabinet3D, atlas = globalThis.OpenCabinetImages;
     let source = null, geometryKey = null, bindings = [], model = null, profile = null;
@@ -79,11 +117,12 @@
       }
       return { url: encodedPreviews.get(bitmap), width: bitmap.width, height: bitmap.height };
     }
-    async function load(path, signal) {
+    async function load(path, signal, kind) {
       const cached = options.getCoverPreview?.(path) || await options.loadCoverPreview?.(path, signal);
       if (signal.aborted) throw new DOMException('Aborted', 'AbortError');
       if (cached?.width && cached?.height) return { ...previewSource(cached), cached: true };
-      const image = await loadOriginal(path, signal, options.imageSource, 0);
+      const image = await (kind === 'spine' ? loadSpine : loadOriginal)(path, signal, options.imageSource, 0);
+      if (image.previewBlob) return previewSource(image);
       return { url: image.src, width: image.naturalWidth, height: image.naturalHeight };
     }
     function paint(kind, image, full = false, smooth = false) {
@@ -139,11 +178,11 @@
         const cached = path && options.getCoverPreview?.(path);
         if (cached?.width && cached?.height) paint('cover', previewSource(cached));
       }
-      async function upgrade(path, cached, apply) {
+      async function upgrade(path, cached, apply, kind) {
         if (!cached.cached) return;
         try {
-          const image = await loadOriginal(path, signal, options.imageSource);
-          if (current()) apply({ url: image.src, width: image.naturalWidth, height: image.naturalHeight });
+          const image = await (kind === 'spine' ? loadSpine : loadOriginal)(path, signal, options.imageSource, 650);
+          if (current()) apply(image.previewBlob ? previewSource(image) : { url: image.src, width: image.naturalWidth, height: image.naturalHeight });
         } catch { /* Retain the cached print. */ }
       }
       if (full) try {
@@ -154,7 +193,7 @@
       } catch { if (!current()) return; }
       await Promise.all(['cover', 'back_cover', 'spine'].map(async kind => {
         const path = resolved.find(image => image.kind === kind)?.path; if (!path) return;
-        try { const image = await load(path, signal); if (current()) { paint(kind, image); void upgrade(path, image, original => paint(kind, original, false, true)); } } catch { /* Keep the unprinted case. */ }
+        try { const image = await load(path, signal, kind); if (current()) { paint(kind, image); void upgrade(path, image, original => paint(kind, original, false, true), kind); } } catch { /* Keep the unprinted case. */ }
       }));
     }
     function promote() {
@@ -230,5 +269,5 @@
     canvas.getContext('2d').drawImage(bitmap, 0, 0, canvas.width, canvas.height);
     return canvas;
   }
-  globalThis.OpenCabinetCarouselBoxes = { createLegacy, cachedImage, loadOriginal, blankImage };
+  globalThis.OpenCabinetCarouselBoxes = { createLegacy, cachedImage, loadOriginal, loadSpine, blankImage };
 })();

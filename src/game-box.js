@@ -168,6 +168,7 @@
     host.dataset.rotationLock = rotationLock;
     let layoutScale = null, viewport = null, viewportFill = .86, cornerRadii = [0, 0, 0, 0];
     let revision = 0, disposed = false, faces = [], textures = [];
+    const spineLoads = [], spineUrls = [];
     let parts = null, previews = [], lastLightAt = -Infinity, lastLightKey = "", referenceDiameter = 1;
     let lightGroups=new Map(), lightPass=0;
     let opened = 0, openTarget = false, opening = null, interiorBuilt = false, layoutOpening = null;
@@ -414,6 +415,8 @@
       if (!disposed && frame === null) frame = requestAnimationFrame(paint);
     }
     function clearTextures() {
+      spineLoads.splice(0).forEach(controller => controller.abort());
+      spineUrls.splice(0).forEach(url => URL.revokeObjectURL(url));
       lightGroups=new Map();
       fullPreviewController?.abort(); fullPreviewController = null;
       if (fullPreviewUrl) URL.revokeObjectURL(fullPreviewUrl);
@@ -740,7 +743,16 @@
           textures.push(image); face.appendChild(image);
           if (wrapLayer) face.appendChild(wrapLayer);
           if (preview) face.appendChild(preview);
-          const start = () => { if (!deferArtwork && !disposed && token === revision) image.src = imageSource(artwork.path); };
+          const start = () => {
+            if (deferArtwork || disposed || token !== revision) return;
+            if (kind !== 'spine' || wrapped || !globalThis.OpenCabinetCarouselBoxes?.loadSpine) { image.src = imageSource(artwork.path); return; }
+            const controller = new AbortController(); spineLoads.push(controller);
+            void globalThis.OpenCabinetCarouselBoxes.loadSpine(artwork.path, controller.signal, imageSource).then(prepared => {
+              if (disposed || token !== revision || controller.signal.aborted) return;
+              if (prepared.previewBlob) { const url = URL.createObjectURL(prepared.previewBlob); spineUrls.push(url); image.src = url; }
+              else image.src = prepared.src;
+            }).catch(failed);
+          };
           if (kind === "cover" || coverFinished) start(); else secondaryTextures.push(start);
         }
         const spineFace = profile.spineFace === "top" ? "top" : "left";

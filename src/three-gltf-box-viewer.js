@@ -133,6 +133,7 @@ export async function createModelViewer(host,options={},definition) {
   let frame=null,opened=0,openTarget=false,animation=null,zoom=1,side='front',rotationLock='free',drag=null,menu=null;
   let rotation=initialRotation(),width=0,height=0;
   const listeners=[],dynamicTextures=new Set(),pictures={};
+  const composed=new Map();
   const retiredTextures=[],blankTextures=new Map();
   let manual=null,manualController=null,manualExtracted=false,manualBackTask=null;
   const manualTextures=new Set(),raycaster=new THREE.Raycaster(),pointer=new THREE.Vector2();
@@ -254,30 +255,41 @@ export async function createModelViewer(host,options={},definition) {
     if(line)lines.push(line);lines.slice(0,10).forEach((value,i)=>context.fillText(value,x+w/2,y+h/2+(i-lines.length/2)*h*.045,w*.85));
   }
   function compose() {
-    if(pictures.full)assign('Cover Outside',pictures.full);
-    else {
-      const atlas=document.createElement('canvas');atlas.width=options.carousel?1024:2048;atlas.height=options.carousel?790:1580;
-      const ctx=atlas.getContext('2d'),spine=atlas.width*(manifest.spine_fraction||.046),face=(atlas.width-spine)/2;
-      ctx.fillStyle='#f0efe9';ctx.fillRect(0,0,atlas.width,atlas.height);
-      for(const [kind,x] of [['back_cover',0],['cover',face+spine]]) {
-        if(pictures[kind])ctx.drawImage(pictures[kind],x,0,face,atlas.height);else label(ctx,game.title,x,0,face,atlas.height);
+    const changed=(name,values)=>{
+      const previous=composed.get(name);
+      if(previous&&values.every((value,i)=>value===previous[i]))return false;
+      composed.set(name,values);return true;
+    };
+    // A late spine only changes the outside atlas. Do not recreate/upload the
+    // inlay, cartridge, disc or fallback label for every arriving image.
+    if(changed('outside',pictures.full?[pictures.full,null,null,null]:[null,pictures.cover,pictures.back_cover,pictures.spine])) {
+      if(pictures.full)assign('Cover Outside',pictures.full);
+      else {
+        const atlas=document.createElement('canvas');atlas.width=options.carousel?1024:2048;atlas.height=options.carousel?790:1580;
+        const ctx=atlas.getContext('2d'),spine=atlas.width*(manifest.spine_fraction||.046),face=(atlas.width-spine)/2;
+        ctx.fillStyle='#f0efe9';ctx.fillRect(0,0,atlas.width,atlas.height);
+        for(const [kind,x] of [['back_cover',0],['cover',face+spine]]) {
+          if(pictures[kind])ctx.drawImage(pictures[kind],x,0,face,atlas.height);else label(ctx,game.title,x,0,face,atlas.height);
+        }
+        if(pictures.spine) {
+          const image=pictures.spine;
+          if((image.naturalWidth||image.width)>(image.naturalHeight||image.height)) {
+            ctx.save();ctx.translate(face,atlas.height);ctx.rotate(-Math.PI/2);ctx.drawImage(image,0,0,atlas.height,spine);ctx.restore();
+          } else ctx.drawImage(image,face,0,spine,atlas.height);
+        }else {ctx.fillStyle='#252b36';ctx.fillRect(face,0,spine,atlas.height);}
+        assign('Cover Outside',atlas);
       }
-      if(pictures.spine) {
-        const image=pictures.spine;
-        if((image.naturalWidth||image.width)>(image.naturalHeight||image.height)) {
-          ctx.save();ctx.translate(face,atlas.height);ctx.rotate(-Math.PI/2);ctx.drawImage(image,0,0,atlas.height,spine);ctx.restore();
-        } else ctx.drawImage(image,face,0,spine,atlas.height);
-      }else {ctx.fillStyle='#252b36';ctx.fillRect(face,0,spine,atlas.height);}
-      assign('Cover Outside',atlas);
     }
-    assign('Cover Inside',pictures.inlay||null);
-    if(materials.has('UMD Label')) {
+    if(changed('inside',[pictures.inlay]))assign('Cover Inside',pictures.inlay||null);
+    if(materials.has('UMD Label')&&changed('disc',[pictures.disc])) {
       if(pictures.disc)assign('UMD Label',pictures.disc);
       else {const disc=document.createElement('canvas');disc.width=512;disc.height=512;label(disc.getContext('2d'),game.title,0,0,512,512);assign('UMD Label',disc);}
     }
-    if(pictures.cartridge)assign('Cartridge Cover',pictures.cartridge);
-    else if(!options.useModelArtwork) {
-      const card=document.createElement('canvas');card.width=256;card.height=352;label(card.getContext('2d'),game.title,0,0,256,352);assign('Cartridge Cover',card);
+    if(changed('cartridge',[pictures.cartridge])) {
+      if(pictures.cartridge)assign('Cartridge Cover',pictures.cartridge);
+      else if(!options.useModelArtwork) {
+        const card=document.createElement('canvas');card.width=256;card.height=352;label(card.getContext('2d'),game.title,0,0,256,352);assign('Cartridge Cover',card);
+      }
     }
   }
   function imageAt(path,signal,priority='low') {
@@ -316,7 +328,9 @@ export async function createModelViewer(host,options={},definition) {
     }
     await Promise.all(Object.entries(paths).filter(([kind,path])=>path&&kind!=='cover'&&(!art.full||!['back_cover','spine'].includes(kind))).map(async([kind,path])=>{
       if(options.carousel)try {const preview=await globalThis.OpenCabinetCarouselBoxes?.cachedImage(path,signal,options);if(preview&&current()){pictures[kind]=preview;compose();}}catch{}
-      try{const image=await imageAt(path,signal);if(current()){pictures[kind]=image;compose();}}catch{/* Missing art does not block the model. */}
+      try{const image=await (kind==='spine'&&globalThis.OpenCabinetCarouselBoxes?.loadSpine
+        ? globalThis.OpenCabinetCarouselBoxes.loadSpine(path,signal,imageSource,options.carousel?650:0) : imageAt(path,signal));
+        if(current()){pictures[kind]=image;compose();}}catch{/* Missing art does not block the model. */}
     }));
   }
   function stopDrag(event) {
@@ -378,7 +392,7 @@ export async function createModelViewer(host,options={},definition) {
   listen(canvas,'webglcontextlost',event=>event.preventDefault());listen(canvas,'webglcontextrestored',schedule);
   const resize=new ResizeObserver(()=>{closeMenu();schedule();});resize.observe(host);
   const api={
-    clearArtwork(){revision++;controller?.abort();key=null;clearManual();
+    clearArtwork(){revision++;controller?.abort();key=null;clearManual();composed.clear();
       if(!options.carousel){dynamicTextures.forEach(texture=>texture.dispose());dynamicTextures.clear();}for(const kind of Object.keys(pictures))delete pictures[kind];
       for(const name of ['Cover Outside','Cover Inside','Cartridge Cover','UMD Label'])assign(name,null);
       schedule();},
@@ -419,7 +433,7 @@ export async function createModelViewer(host,options={},definition) {
       manualExtracted=true;manualGroup.visible=false;schedule();return true;},
     returnManual(){manualExtracted=false;manualGroup.visible=!!manual;schedule();},
     refreshManual(){if(game)void preloadManual();},
-    clear(){revision++;controller?.abort();controller=null;stopDrag();closeMenu();key=null;game=null;
+    clear(){revision++;controller?.abort();controller=null;stopDrag();closeMenu();key=null;game=null;composed.clear();
       clearManual();
       if(!options.carousel){dynamicTextures.forEach(texture=>texture.dispose());dynamicTextures.clear();}for(const kind of Object.keys(pictures))delete pictures[kind];
       for(const name of ['Cover Outside','Cover Inside','Cartridge Cover','UMD Label']){const material=materials.get(name);if(material){if(options.carousel)assign(name,null);else {material.map=options.useModelArtwork?[...originalMaterials].find(value=>value.name===name)?.map||null:null;material.needsUpdate=true;}}}

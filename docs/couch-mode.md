@@ -39,6 +39,12 @@ navigation does not reset a debounce timer or apply obsolete results. Existing
 compatible boxes apply RAM artwork immediately, using the same preview cache
 as cover mode. Plastic color changes reuse the molded geometry. A resident front
 cover can fill the case while its preferred full wrap is being prepared.
+Separate spine artwork has its own worker decoder and a single preparation
+slot, independent of original cover downloads. It keeps its aspect ratio and
+is bounded to 2048 pixels on the longest edge. Changing games cancels obsolete
+work and releases its prepared pixels. Applying a spine in the glTF viewer
+updates only the outside atlas, retaining the other GPU textures. If workers
+are unavailable, asynchronous image loading remains available as a fallback.
 Viewers are released when switching to covers, starting a game or closing couch
 mode. Cover sizing depends
 on aspect ratio and available space, so low-resolution images fill the same

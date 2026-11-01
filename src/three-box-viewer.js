@@ -296,7 +296,8 @@ export async function createViewer(host, options={}) {
     async function applySpines(path,full=false) {
       if(!path)return;
       if(options.carousel)try {const preview=await globalThis.OpenCabinetCarouselBoxes?.cachedImage(path,signal,options);if(preview&&current()){put('spine_left',preview,'spine',full);put('spine_right',preview,'spine',full);}}catch{}
-      try{const image=await source(path);if(!current())return;
+      try{const image=await (globalThis.OpenCabinetCarouselBoxes?.loadSpine
+        ? globalThis.OpenCabinetCarouselBoxes.loadSpine(path,signal,imageSource,options.carousel?650:0) : source(path));if(!current())return;
         put('spine_left',image,'spine',full);put('spine_right',image,'spine',full);
       }catch{/* Keep the plain side inserts. */}
     }

@@ -15,7 +15,8 @@ self.onmessage = async ({ data }) => {
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     const sourceBlob = await response.blob();
     original = await createImageBitmap(sourceBlob);
-    const scale = Math.min(1, (data.fullCover ? 1280 : 320) / original.width, (data.fullCover ? 800 : 400) / original.height);
+    const maxEdge = Number.isFinite(data.maxEdge) && data.maxEdge > 0 ? Math.min(4096, Math.round(data.maxEdge)) : null;
+    const scale = Math.min(1, (maxEdge || (data.fullCover ? 1280 : 320)) / original.width, (maxEdge || (data.fullCover ? 800 : 400)) / original.height);
     const canvas = new OffscreenCanvas(Math.max(1, Math.round(original.width * scale)), Math.max(1, Math.round(original.height * scale)));
     const context = canvas.getContext("2d", { willReadFrequently: !!data.transferPixels });
     context.drawImage(original, 0, 0, canvas.width, canvas.height);

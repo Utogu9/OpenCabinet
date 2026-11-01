@@ -39,6 +39,7 @@ function scene(options = {}) {
   }
   const context = vm.createContext({
     AbortController,
+    OpenCabinetCarouselBoxes: options.artworkLoader,
     URL: { createObjectURL(blob) { const url = `blob:preview-${previewUrls.length}`; previewUrls.push({url,blob}); return url; }, revokeObjectURL(url) { revokedUrls.push(url); } },
     matchMedia: () => ({ matches: !!options.reducedMotion }),
     document: { createElement: (tag) => new Element(tag) },
@@ -1450,6 +1451,23 @@ test('Curve lighting is continuous across adjacent facets and retains a bounded,
     assert.ok(Math.abs(+strips[i-1].style['--box-gloss-end'] - +strips[i].style['--box-gloss-start']) < 1e-10);
   }
   assert.equal(app.frames.size, 0); app.viewer.dispose();
+});
+
+test('A pending prepared spine never blocks the legacy cover or rotation, and its resources follow the game lifetime',async()=>{
+  const pending=[];
+  const app=scene({artworkLoader:{loadSpine:(path,signal)=>new Promise(resolve=>pending.push({path,signal,resolve}))}});
+  app.viewer.update(game,artwork);app.flush();app.loadCover();app.flush();
+  assert.equal(pending.length,1);assert.equal(pending[0].path,'spine.png');
+  const initial=app.model().style.transform;app.viewer.rotate(8,-4);app.flush();assert.notEqual(app.model().style.transform,initial);
+  assert.ok(app.face('front').children.find(element=>element.tag==='img').classList.contains('loaded'));
+  pending[0].resolve({previewBlob:new Blob(['spine'],{type:'image/webp'})});await new Promise(setImmediate);
+  const spine=app.face('left').children.find(element=>element.tag==='img');
+  assert.equal(spine.src,'blob:preview-0');spine.naturalWidth=64;spine.naturalHeight=2048;spine.onload();app.flush();
+  assert.ok(spine.classList.contains('loaded'));
+  app.viewer.clear();assert.equal(pending[0].signal.aborted,true);assert.ok(app.revokedUrls.includes('blob:preview-0'));
+  app.viewer.update({...game,id:2},artwork);app.flush();app.loadCover();
+  app.viewer.clear();pending[1].resolve({previewBlob:new Blob(['stale'])});await new Promise(setImmediate);
+  assert.equal(app.previewUrls.length,1,'Obsolete spines cannot install a texture or allocate a new URL');app.viewer.dispose();
 });
 
 test('Rotation locks constrain mouse and keyboard to the unlocked axis; free mode restores arcball movement', () => {

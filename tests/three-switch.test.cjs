@@ -5,8 +5,16 @@ test('The optional Switch rig opens both folds, keeps the cartridge fixed and re
   let chromium;try{({chromium}=require('playwright-core'));}catch{t.skip('Optional browser test requires playwright-core.');return;}
   const executable=process.env.OPENCABINET_CHROMIUM||(process.platform==='win32'?'C:/Program Files/Google/Chrome/Application/chrome.exe':chromium.executablePath());
   if(!fs.existsSync(executable)){t.skip('Chromium is not installed.');return;}
+  let releaseSpine,requestedSpine,spineBytes,spineReleased=false;
+  const spineRequested=new Promise(resolve=>{requestedSpine=resolve;});
   const server=http.createServer((req,res)=>{
     const pathname=new URL(req.url,'http://localhost').pathname;
+    if(pathname==='/pending-spine.png'){
+      const send=()=>{res.setHeader('Content-Type','image/png');res.end(spineBytes);};
+      releaseSpine=()=>{spineReleased=true;send();};
+      if(spineReleased){send();return;}
+      requestedSpine();return;
+    }
     if(pathname==='/favicon.ico'){res.writeHead(204).end();return;}
     const file=path.resolve(root,'.'+pathname);
     if(!file.startsWith(root+path.sep)){res.writeHead(403).end();return;}
@@ -14,7 +22,7 @@ test('The optional Switch rig opens both folds, keeps the cartridge fixed and re
       res.setHeader('Content-Type',({'.html':'text/html','.js':'text/javascript','.css':'text/css','.json':'application/json'})[path.extname(file)]||'application/octet-stream');res.end(bytes);
     });
   });
-  await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));t.after(()=>new Promise(resolve=>server.close(resolve)));
+  await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));t.after(()=>new Promise(resolve=>{server.closeAllConnections();server.close(resolve);}));
   const browser=await chromium.launch({executablePath:executable,headless:true});t.after(()=>browser.close());
   const page=await browser.newPage(),errors=[];
   page.on('pageerror',error=>errors.push(error.message));
@@ -52,6 +60,10 @@ test('The optional Switch rig opens both folds, keeps the cartridge fixed and re
   await page.evaluate(()=>viewer.setOpen(false,false));await page.waitForTimeout(50);
   (await pose()).front.forEach((value,i)=>assert.ok(Math.abs(value-closed.front[i])<1e-6));
   const canvasCount=await page.locator('#stage canvas').count();
+  spineBytes=Buffer.from((await page.evaluate(()=>{
+    const canvas=document.createElement('canvas');canvas.width=256;canvas.height=8192;
+    const ctx=canvas.getContext('2d');ctx.fillStyle='#e8ad32';ctx.fillRect(0,0,canvas.width,canvas.height);return canvas.toDataURL('image/png');
+  })).split(',')[1],'base64');
   await page.evaluate(()=>{
     const image=document.createElement('canvas');image.width=512;image.height=800;
     const ctx=image.getContext('2d');ctx.fillStyle='#c12345';ctx.fillRect(0,0,512,800);
@@ -76,6 +88,34 @@ test('The optional Switch rig opens both folds, keeps the cartridge fixed and re
   await page.waitForFunction(()=>debug.materials.get('Cartridge Cover').map?.image?.width===32);
   await page.evaluate(()=>{window.previousRotation=debug.root.quaternion.toArray();viewer.rotate(12,-8);});
   await page.waitForFunction(()=>debug.root.quaternion.toArray().some((value,i)=>Math.abs(value-previousRotation[i])>1e-5));
+  await page.evaluate(()=>{
+    const createDecoder=OpenCabinetCovers.createDecoder;
+    OpenCabinetCovers.createDecoder=config=>{
+      const decode=createDecoder(config);
+      return async(...args)=>{try{const image=await decode(...args);window.preparedSpine={width:image.width,height:image.height,webp:image.previewBlob?.type};return image;}
+        catch(error){window.spineError=String(error);throw error;}};
+    };
+    select(5,[{kind:'cover',path:redCover},{kind:'back_cover',path:redCover},{kind:'inlay',path:redCover},
+      {kind:'cart_label',path:cartLabel},{kind:'spine',path:location.origin+'/pending-spine.png'}]);
+  });
+  await spineRequested;
+  await page.waitForFunction(()=>debug.materials.get('Cover Outside').map?.image.width===2048&&debug.materials.get('Cover Inside').map?.image.width===512&&debug.materials.get('Cartridge Cover').map?.image.width===40);
+  await page.waitForTimeout(80);
+  await page.evaluate(()=>{
+    window.changedMaps=[];window.waitingRotation=debug.root.quaternion.toArray();
+    for(const name of ['Cover Outside','Cover Inside','Cartridge Cover']){
+      const material=debug.materials.get(name);let map=material.map;
+      Object.defineProperty(material,'map',{get:()=>map,set:value=>{map=value;changedMaps.push(name);},configurable:true});
+    }
+    viewer.rotate(4,-2);
+  });
+  await page.waitForFunction(()=>debug.root.quaternion.toArray().some((value,i)=>Math.abs(value-waitingRotation[i])>1e-5));
+  assert.deepEqual(await page.evaluate(()=>changedMaps),[],'The ready box can rotate while the spine is still downloading');
+  releaseSpine();
+  try{await page.waitForFunction(()=>changedMaps.includes('Cover Outside'));}
+  catch(error){console.log('Spine preparation state',await page.evaluate(()=>({prepared:window.preparedSpine,error:window.spineError,maps:changedMaps})));throw error;}
+  assert.deepEqual(await page.evaluate(()=>preparedSpine),{width:64,height:2048,webp:'image/webp'});
+  assert.deepEqual(await page.evaluate(()=>changedMaps),['Cover Outside'],'Applying a spine preserves unrelated GPU textures');
   await page.evaluate(()=>{viewer.setRotationLock('x');viewer.zoom(.1);viewer.showBack();});
   assert.equal(await page.evaluate(()=>viewer.rotationLock),'x');
   await page.evaluate(()=>viewer.setOpen(true,false));await page.waitForTimeout(100);

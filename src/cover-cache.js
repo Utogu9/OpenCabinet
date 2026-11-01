@@ -1,6 +1,8 @@
 // Decoded thumbnails are shared across library filters. Originals are only used
 // while preparing a thumbnail; the cache never retains full-size cover images.
 (() => {
+  const scriptSource = globalThis.document?.currentScript?.src;
+  const workerUrl = scriptSource ? new URL('cover-worker.js', scriptSource) : 'cover-worker.js';
   function abortError() {
     const error = new Error(globalThis.OpenCabinetI18n.t("msg.d1a690f5b6"));
     error.name = "AbortError";
@@ -47,7 +49,7 @@
     function getWorker() {
       if (worker || workerUnavailable) return worker;
       try {
-        worker = new Worker("cover-worker.js");
+        worker = new Worker(workerUrl);
         worker.onmessage = async ({ data }) => {
           const request = requests.get(data.id);
           if (!request) { data.bitmap?.close(); return; }
@@ -81,7 +83,7 @@
       return worker;
     }
 
-    async function fallback(url, signal, persist, fullCover) {
+    async function fallback(url, signal, persist, fullCover, maxEdge) {
       const image = document.createElement("img");
       image.decoding = "async";
       image.loading = "eager";
@@ -97,7 +99,7 @@
         });
         if (image.decode) await image.decode();
         if (signal.aborted) throw abortError();
-        const scale = Math.min(1, (fullCover ? 1280 : 320) / image.naturalWidth, (fullCover ? 800 : 400) / image.naturalHeight);
+        const scale = Math.min(1, (maxEdge || (fullCover ? 1280 : 320)) / image.naturalWidth, (maxEdge || (fullCover ? 800 : 400)) / image.naturalHeight);
         const canvas = document.createElement("canvas");
         canvas.width = Math.max(1, Math.round(image.naturalWidth * scale));
         canvas.height = Math.max(1, Math.round(image.naturalHeight * scale));
@@ -121,10 +123,11 @@
       }
     }
 
-    async function decode(url, signal, persist = null, { fullCover = false } = {}) {
+    async function decode(url, signal, persist = null, { fullCover = false, maxEdge = null } = {}) {
       if (signal.aborted) throw abortError();
+      maxEdge = Number.isFinite(maxEdge) && maxEdge > 0 ? Math.min(4096, Math.round(maxEdge)) : null;
       const currentWorker = getWorker();
-      if (!currentWorker) return fallback(url, signal, persist, fullCover);
+      if (!currentWorker) return fallback(url, signal, persist, fullCover, maxEdge);
       const id = ++nextId;
       const cancel = () => {
         currentWorker.postMessage({ cancel: id });
@@ -135,13 +138,13 @@
         return await new Promise((resolve, reject) => {
           requests.set(id, { resolve, reject, persist, fullCover });
           signal.addEventListener("abort", cancel, { once: true });
-          currentWorker.postMessage({ locale: globalThis.OpenCabinetI18n.locale, id, url, encode: Boolean(persist), fullCover, transferPixels });
+          currentWorker.postMessage({ locale: globalThis.OpenCabinetI18n.locale, id, url, encode: Boolean(persist), fullCover, maxEdge, transferPixels });
         });
       } catch (error) {
         if (signal.aborted) throw abortError();
         // Some remote images lack CORS headers. They can still be displayed
         // through an img without reading/exporting its canvas pixels.
-        return fallback(url, signal, persist, fullCover);
+        return fallback(url, signal, persist, fullCover, maxEdge);
       } finally {
         requests.delete(id);
         signal.removeEventListener("abort", cancel);
