@@ -1,22 +1,18 @@
-## What's new in v0.2.1
+## What's new in v0.2.2
 
-- OpenCabinet is now available for Linux x86_64 as an AppImage, built on Ubuntu 22.04.
-- Import and launch native Linux games, installed Steam games from native or Flatpak installations, and Windows games through user-installed Wine or Proton with UMU.
-- Download the Linux version of RetroArch and its cores, with session tracking and launch diagnostics.
-- Keep Linux data and configuration in the user's XDG directories, with library relocation, backups, cached artwork and PDF/CBZ manuals.
-- Register the AppImage's application icon and desktop launcher for Linux desktop integration.
-- Publish signed Windows and Linux updates together through the app's updater.
-- Group multiple recomp/decomp builds with the same original game and choose the version to play.
+- Add fullscreen couch mode with game and platform carousels, keyboard navigation and controller support.
+- Replace emoji buttons with consistent SVG icons on Windows and Linux.
+- Fix missing or mismatched library covers on Linux after importing games or rebuilding the grid.
+- Prepare Linux disk thumbnails in Rust in the background and reuse cached artwork in couch mode.
+- Reduce repaints during Linux cover hover animations while preserving zoom, reflection and selection effects.
 
-## Novedades de v0.2.1
+## Novedades de v0.2.2
 
-- OpenCabinet ahora está disponible para Linux x86_64 como AppImage, compilado sobre Ubuntu 22.04.
-- Importación y ejecución de juegos nativos de Linux, juegos instalados de Steam nativo o Flatpak y juegos de Windows mediante Wine o Proton con UMU instalados por el usuario.
-- Descarga de RetroArch para Linux y sus núcleos, con seguimiento de sesiones y diagnóstico de lanzamientos.
-- Datos y configuración en las carpetas XDG del usuario, con traslado de biblioteca, backups, caché de imágenes y manuales PDF/CBZ.
-- Registro del icono y del lanzador del AppImage para integrarlo con el escritorio de Linux.
-- Actualizaciones firmadas para Windows y Linux publicadas juntas, disponibles desde la app.
-- Posibilidad de agrupar varias recompilaciones o decompilaciones con el mismo juego original y elegir qué versión ejecutar.
+- Nuevo modo sofá en pantalla completa, con carruseles de juegos y consolas, navegación por teclado y soporte para mandos.
+- Botones con iconos SVG en Windows y Linux, en reemplazo de los emojis.
+- Corrección de portadas ausentes o asignadas a otro juego en Linux después de importar o reconstruir la grilla.
+- Preparación de miniaturas de disco en segundo plano mediante Rust y reutilización de la caché en el modo sofá de Linux.
+- Menos repintados al pasar el mouse sobre las portadas en Linux, conservando el zoom, el reflejo y los efectos de selección.
 
 ## Downloads / Descargas
 

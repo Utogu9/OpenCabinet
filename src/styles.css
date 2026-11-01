@@ -1872,7 +1872,19 @@ button:disabled {
   opacity: 1;
 }
 
+/* WebKitGTK otherwise repaints blurred shadows on every hover frame. Keep
+   those shadows static and composite the zoom, reflection and glow opacity.
+   Only loaded, visible/nearby covers receive dedicated compositing hints. */
+html[data-os="linux"] .game-cover-surface {
+  transition: transform 220ms ease;
+}
+
+html[data-os="linux"] .game-cover-surface.has-cover { will-change: transform; }
+html[data-os="linux"] .game-cover-surface.has-cover::after { will-change: opacity, transform; }
+html[data-os="linux"] .game-card:has(.game-cover-surface.has-cover)::before { will-change: opacity; }
+
 @media (prefers-reduced-motion: reduce) {
+  html[data-os="linux"] .game-cover-surface,
   .game-card::before,
   .game-cover-surface,
   .game-cover-surface::after { transition: none; }

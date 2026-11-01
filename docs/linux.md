@@ -30,6 +30,10 @@ Linux desktop is the reference for graphics and performance. WSL and virtual
 machines are useful for compilation and functional tests; their GPU behavior
 does not establish native desktop performance.
 
+The library keeps its cover zoom, reflection and selection glow on Linux.
+WebKitGTK uses compositing hints for loaded thumbnails and changes the blurred
+shadow immediately, instead of repainting an interpolated shadow on every frame.
+
 For WSLg sessions that do not report the desired fractional display scale,
 `OPENCABINET_UI_SCALE=1.7 npm run dev` explicitly renders the interface at 170%.
 The optional Linux override accepts factors from 0.5 to 3.0 and is unset by
