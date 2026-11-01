@@ -5,6 +5,7 @@
   function button(text, action, title = text) {
     const el = document.createElement("button");
     el.type = "button"; el.className = "secondary-btn"; el.textContent = text; el.title = title;
+    if (text.startsWith('@icon:')) globalThis.OpenCabinetIcons.set(el, text.slice(6));
     el.setAttribute("aria-label", title); el.onclick = action; return el;
   }
   function element(tag, text, className) {
@@ -24,7 +25,7 @@
         const up = button("↑", () => move(-1), globalThis.OpenCabinetI18n.t("msg.8a65a12ef8")); up.disabled = index === 0;
         const down = button("↓", () => move(1), globalThis.OpenCabinetI18n.t("msg.029308fef3")); down.disabled = index === get().length - 1;
         row.append(label, name, up, down);
-        if (remove) { const del = button("🗑️", () => { get().splice(index, 1); change(); render(); }, globalThis.OpenCabinetI18n.t("msg.7747d0dbb7")); del.disabled = get().length <= 1; row.append(del); }
+        if (remove) { const del = button("@icon:trash-2", () => { get().splice(index, 1); change(); render(); }, globalThis.OpenCabinetI18n.t("msg.7747d0dbb7")); del.disabled = get().length <= 1; row.append(del); }
         container.append(row);
       });
     }
@@ -51,7 +52,7 @@
         item.setAttribute("aria-label", `${disc.label} · ${filename(disc.rom_path)}${disc.available ? "" : globalThis.OpenCabinetI18n.t("msg.e0468aaaa1")}`);
         item.title = disc.rom_path;
         if(!disc.available&&repairDisc){
-          const row=element('div',null,'disc-choice-row'),repair=button('📁',async()=>{
+          const row=element('div',null,'disc-choice-row'),repair=button('@icon:folder-open',async()=>{
             if(repairing)return;repairing=true;repair.disabled=true;error.textContent='';
             try{const updated=await repairDisc(game,disc,()=>!done&&modal.open);if(updated&&!done){discs=updated;render();}}
             catch(reason){if(!done)error.textContent=String(reason);}finally{repairing=false;repair.disabled=false;}

@@ -75,7 +75,7 @@
       const input = document.createElement("input"); input.type = "text"; input.value = name; input.placeholder = "nombre_variable"; input.maxLength = 64; input.autocomplete = "off"; input.setAttribute("aria-label",globalThis.OpenCabinetI18n.t("msg.7cf9626489"));
       input.setAttribute("list",suggestions.id); input.oninput = suggest;
       const field = document.createElement("input"); field.type = "text"; field.value = value; field.placeholder = globalThis.OpenCabinetI18n.t("msg.c3962d76e9"); field.maxLength = 500; field.autocomplete = "off"; field.setAttribute("aria-label",globalThis.OpenCabinetI18n.t("msg.9f72458eb8", name || "variable"));
-      const remove = document.createElement("button"); remove.type = "button"; remove.className = "secondary-btn"; remove.textContent = "🗑️"; remove.setAttribute("aria-label",`Quitar variable ${name}`);
+      const remove = document.createElement("button"); remove.type = "button"; remove.className = "secondary-btn"; globalThis.OpenCabinetIcons.set(remove, "trash-2"); remove.setAttribute("aria-label",`Quitar variable ${name}`);
       const item = { input,field,row }; rows.push(item);
       const discard = () => { disabled.add(input.value.trim().toLowerCase()); rows = rows.filter(r => r !== item); row.remove(); suggest(); };
       remove.onclick = discard;

@@ -10,6 +10,7 @@ function createContext(...args) {
   // Existing UI fixtures use Spanish; language-detection tests supply their own navigator.
   if (!('navigator' in context)) context.navigator = { language: 'es-AR' };
   context.OpenCabinetLocaleCatalogs = catalogs;
+  vm.runInContext(fs.readFileSync(path.join(directory, 'ui-icons.js'), 'utf8'), context);
   vm.runInContext(source, context);
   return context;
 }

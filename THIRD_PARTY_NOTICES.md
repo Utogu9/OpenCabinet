@@ -54,6 +54,14 @@ repository does not include the generated vendor directory.
 `RoomEnvironment` helper under `src/vendor/three/`, including Three.js's MIT
 `LICENSE`. These generated dependency files accompany the static frontend.
 
+### Lucide interface icons
+
+The local SVG icons in `src/assets/icons/` come from
+[Lucide](https://github.com/lucide-icons/lucide), version 0.468.0. Their pinned
+source revision and included icons are recorded in `sources.json`. The complete
+upstream ISC/MIT notice is included alongside the SVGs in `LICENSE` and ships
+with the application. These icons replace font-dependent emoji decorations.
+
 ### Native WebP encoder
 
 The `webp` wrapper is used under its MIT license:

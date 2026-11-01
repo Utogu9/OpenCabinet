@@ -16,14 +16,14 @@
         <button class="menu-title" id="btn-menu-options"><span data-i18n="msg.a6ed6dbae7"></span></button>
         <div class="dropdown-menu" id="dropdown-options-menu">
           <button class="dropdown-item" id="btn-open-emulators">
-            <span>🕹️</span> <span data-i18n="msg.b302f50687"></span>
+            <span><span class="ui-icon" data-icon="joystick" aria-hidden="true"></span></span> <span data-i18n="msg.b302f50687"></span>
           </button>
           <button class="dropdown-item" id="btn-open-platforms">
-            <span>🎮</span> <span data-i18n="msg.3df52e855a"></span>
+            <span><span class="ui-icon" data-icon="gamepad-2" aria-hidden="true"></span></span> <span data-i18n="msg.3df52e855a"></span>
           </button>
-          <button class="dropdown-item" id="btn-library-categories" type="button"><span>🗂️</span> <span data-i18n="msg.8c6ce4c469"></span></button>
+          <button class="dropdown-item" id="btn-library-categories" type="button"><span><span class="ui-icon" data-icon="folders" aria-hidden="true"></span></span> <span data-i18n="msg.8c6ce4c469"></span></button>
           <button class="dropdown-item" id="btn-open-preferences" type="button">
-            <span>⚙️</span> <span data-i18n="msg.d5d19e9b70"></span>
+            <span><span class="ui-icon" data-icon="settings" aria-hidden="true"></span></span> <span data-i18n="msg.d5d19e9b70"></span>
           </button>
         </div>
       </div>
@@ -31,7 +31,7 @@
         <button class="menu-title" id="btn-menu-tools"><span data-i18n="msg.ab21560c63"></span></button>
         <div class="dropdown-menu" id="dropdown-tools-menu">
           <button class="dropdown-item" id="btn-scan-roms">
-            <span>📁</span> <span data-i18n="msg.4f57902244"></span>
+            <span><span class="ui-icon" data-icon="folder-open" aria-hidden="true"></span></span> <span data-i18n="msg.4f57902244"></span>
           </button>
         </div>
       </div>
@@ -107,14 +107,14 @@
       ></div>
       <aside class="details-sidebar" id="game-details-panel">
         <div class="details-placeholder" id="details-placeholder">
-          <div class="placeholder-icon">🎮</div>
+          <div class="placeholder-icon"><span class="ui-icon" data-icon="gamepad-2" aria-hidden="true"></span></div>
           <p><span data-i18n="msg.3126100b6c"></span></p>
         </div>
         <div class="details-content hidden" id="details-content">
           <div class="details-logo-container" id="details-logo-container">
-            <button class="logo-edit-button" id="btn-edit-game" type="button" aria-label="" data-i18n-aria-label="msg.ab5c261bc2" title="" data-i18n-title="msg.ab5c261bc2">✏️</button>
-            <button class="logo-edit-button logo-delete-button" id="btn-delete-game" type="button" aria-label="" data-i18n-aria-label="msg.88a7099673" title="" data-i18n-title="msg.88a7099673">🗑️</button>
-            <button class="logo-edit-button platform-only" id="btn-edit-platform-details" type="button" aria-label="" data-i18n-aria-label="msg.2d1d5f9ba1" title="" data-i18n-title="msg.e86e413389">✏️</button>
+            <button class="logo-edit-button" id="btn-edit-game" type="button" aria-label="" data-i18n-aria-label="msg.ab5c261bc2" title="" data-i18n-title="msg.ab5c261bc2"><span class="ui-icon" data-icon="pencil" aria-hidden="true"></span></button>
+            <button class="logo-edit-button logo-delete-button" id="btn-delete-game" type="button" aria-label="" data-i18n-aria-label="msg.88a7099673" title="" data-i18n-title="msg.88a7099673"><span class="ui-icon" data-icon="trash-2" aria-hidden="true"></span></button>
+            <button class="logo-edit-button platform-only" id="btn-edit-platform-details" type="button" aria-label="" data-i18n-aria-label="msg.2d1d5f9ba1" title="" data-i18n-title="msg.e86e413389"><span class="ui-icon" data-icon="pencil" aria-hidden="true"></span></button>
           </div>
           <h2 class="details-title" id="details-title"></h2>
           <span class="details-platform" id="details-platform"></span>
@@ -127,12 +127,12 @@
             <div class="game-box-panel" id="game-box-panel">
               <div class="game-box-stage" id="game-box-stage" tabindex="0" role="group" aria-roledescription="visor 3D"></div>
               <div class="game-box-controls" role="group" aria-label="" data-i18n-aria-label="msg.6f5d592e40">
-                <button class="secondary-btn" id="btn-box-reset" type="button" aria-label="" data-i18n-aria-label="msg.a1cf4ac3a3" title="" data-i18n-title="msg.ec98ce3343">↺</button>
+                <button class="secondary-btn" id="btn-box-reset" type="button" aria-label="" data-i18n-aria-label="msg.a1cf4ac3a3" title="" data-i18n-title="msg.ec98ce3343"><span class="ui-icon" data-icon="rotate-ccw" aria-hidden="true"></span></button>
                 <button class="secondary-btn hidden" id="btn-box-open" type="button" aria-pressed="false" aria-controls="game-box-stage" title="" data-i18n-title="msg.32e88846b5"><span data-i18n="msg.2d3b26a1ab"></span></button>
                 <button class="secondary-btn" id="btn-box-zoom-out" type="button" aria-label="" data-i18n-aria-label="msg.16f9366d68">−</button>
-                <button class="secondary-btn hidden" id="btn-box-read-manual" type="button" title="" data-i18n-title="msg.0980ab583c" aria-label="" data-i18n-aria-label="msg.297ba61d09">📖</button>
+                <button class="secondary-btn hidden" id="btn-box-read-manual" type="button" title="" data-i18n-title="msg.0980ab583c" aria-label="" data-i18n-aria-label="msg.297ba61d09"><span class="ui-icon" data-icon="book-open" aria-hidden="true"></span></button>
                 <button class="secondary-btn" id="btn-box-zoom-in" type="button" aria-label="" data-i18n-aria-label="msg.036559fc74">+</button>
-                <button class="secondary-btn" id="btn-box-fullscreen" type="button" aria-label="" data-i18n-aria-label="msg.8948026d35" title="" data-i18n-title="msg.c6ea3e3f37">⛶</button>
+                <button class="secondary-btn" id="btn-box-fullscreen" type="button" aria-label="" data-i18n-aria-label="msg.8948026d35" title="" data-i18n-title="msg.c6ea3e3f37"><span class="ui-icon" data-icon="maximize" aria-hidden="true"></span></button>
               </div>
               <div class="game-box-manual-controls hidden" id="game-box-manual-controls">
                 <label class="hidden" id="game-box-manual-label" for="game-box-manual-select"><span data-i18n="msg.50758e58e7"></span></label>
@@ -154,7 +154,7 @@
           </section>
 
           <button class="play-btn-large" id="btn-play-game">
-            <span class="play-icon-shape">▶</span> <span data-i18n="msg.bf4705377b"></span>
+            <span class="play-icon-shape"><span class="ui-icon" data-icon="play" aria-hidden="true"></span></span> <span data-i18n="msg.bf4705377b"></span>
           </button>
           <div class="platform-only platform-play-actions" aria-label="" data-i18n-aria-label="msg.9034522fa3">
             <button class="secondary-btn" id="btn-platform-last" type="button"><span data-i18n="msg.124ba96734"></span></button>
@@ -177,7 +177,7 @@
             </div>
             <div class="meta-item">
               <span class="meta-label"><span data-i18n="msg.a703c4c9fb"></span></span>
-              <div class="playtime-with-history"><span class="meta-value" id="details-play-time"><span data-i18n="msg.ed28aee471"></span></span><button id="btn-session-history" type="button" class="game-only session-history-button" data-i18n-title="sessions.open" data-i18n-aria-label="sessions.open">◷</button></div>
+              <div class="playtime-with-history"><span class="meta-value" id="details-play-time"><span data-i18n="msg.ed28aee471"></span></span><button id="btn-session-history" type="button" class="game-only session-history-button" data-i18n-title="sessions.open" data-i18n-aria-label="sessions.open"><span class="ui-icon" data-icon="history" aria-hidden="true"></span></button></div>
             </div>
           </div>
           <section class="details-info-box" id="game-information" aria-labelledby="details-info-title">
@@ -235,7 +235,7 @@
     <aside class="import-task hidden" id="import-task" aria-labelledby="import-task-title">
       <div class="import-task-header">
         <h3 id="import-task-title"><span data-i18n="msg.461a09faea"></span></h3>
-        <button class="task-restore-btn" id="btn-import-task-restore" type="button" aria-label="" data-i18n-aria-label="msg.6efdbfe2e1" title="" data-i18n-title="msg.6efdbfe2e1">↗</button>
+        <button class="task-restore-btn" id="btn-import-task-restore" type="button" aria-label="" data-i18n-aria-label="msg.6efdbfe2e1" title="" data-i18n-title="msg.6efdbfe2e1"><span class="ui-icon" data-icon="external-link" aria-hidden="true"></span></button>
         <button class="close-btn hidden" id="btn-import-task-dismiss" type="button" aria-label="" data-i18n-aria-label="msg.9a0b73067d">&times;</button>
       </div>
       <p id="import-task-label" role="status"></p>
@@ -251,7 +251,7 @@
     <aside class="import-task hidden" id="retroarch-task" aria-labelledby="retroarch-task-title">
       <div class="import-task-header">
         <h3 id="retroarch-task-title">RetroArch</h3>
-        <button class="task-restore-btn" id="btn-retroarch-task-restore" type="button" aria-label="" data-i18n-aria-label="msg.a83d7dad65" title="" data-i18n-title="msg.a83d7dad65">↗</button>
+        <button class="task-restore-btn" id="btn-retroarch-task-restore" type="button" aria-label="" data-i18n-aria-label="msg.a83d7dad65" title="" data-i18n-title="msg.a83d7dad65"><span class="ui-icon" data-icon="external-link" aria-hidden="true"></span></button>
         <button class="close-btn hidden" id="btn-retroarch-task-dismiss" type="button" aria-label="" data-i18n-aria-label="msg.f789aafa91">&times;</button>
       </div>
       <p class="task-label" id="retroarch-task-label" role="status"></p>
@@ -263,7 +263,7 @@
     <aside class="import-task hidden" id="bulk-images-task" aria-labelledby="bulk-images-task-title">
       <div class="import-task-header">
         <h3 id="bulk-images-task-title"><span data-i18n="msg.488a8c208f"></span></h3>
-        <button class="task-restore-btn" id="btn-bulk-images-task-restore" type="button" aria-label="" data-i18n-aria-label="msg.5d1b8f2811" title="" data-i18n-title="msg.5d1b8f2811">↗</button>
+        <button class="task-restore-btn" id="btn-bulk-images-task-restore" type="button" aria-label="" data-i18n-aria-label="msg.5d1b8f2811" title="" data-i18n-title="msg.5d1b8f2811"><span class="ui-icon" data-icon="external-link" aria-hidden="true"></span></button>
         <button class="close-btn hidden" id="btn-bulk-images-task-dismiss" type="button" aria-label="" data-i18n-aria-label="msg.c966a5a413">&times;</button>
       </div>
       <p class="task-label" id="bulk-images-task-label" role="status"></p>
@@ -350,7 +350,7 @@
     <dialog class="fullscreen-box" id="fullscreen-box" aria-labelledby="fullscreen-box-title">
       <header class="fullscreen-gallery-header">
         <h2 id="fullscreen-box-title"><span data-i18n="msg.72af42e083"></span></h2>
-        <button class="secondary-btn" id="fullscreen-box-close" type="button" aria-label="" data-i18n-aria-label="msg.eec8fafeab" title="" data-i18n-title="msg.efe7186a1d">✕</button>
+        <button class="secondary-btn" id="fullscreen-box-close" type="button" aria-label="" data-i18n-aria-label="msg.eec8fafeab" title="" data-i18n-title="msg.efe7186a1d"><span class="ui-icon" data-icon="x" aria-hidden="true"></span></button>
       </header>
       <div class="fullscreen-box-content" id="fullscreen-box-content"></div>
     </dialog>
@@ -358,7 +358,7 @@
     <dialog class="fullscreen-gallery" id="fullscreen-gallery" aria-labelledby="fullscreen-gallery-title">
       <header class="fullscreen-gallery-header">
         <h2 id="fullscreen-gallery-title"></h2>
-        <button class="secondary-btn" id="fullscreen-gallery-close" type="button" aria-label="" data-i18n-aria-label="msg.c14ac819cc" title="" data-i18n-title="msg.efe7186a1d">✕</button>
+        <button class="secondary-btn" id="fullscreen-gallery-close" type="button" aria-label="" data-i18n-aria-label="msg.c14ac819cc" title="" data-i18n-title="msg.efe7186a1d"><span class="ui-icon" data-icon="x" aria-hidden="true"></span></button>
       </header>
       <div class="fullscreen-gallery-stage">
         <button class="secondary-btn fullscreen-gallery-arrow" id="fullscreen-gallery-previous" type="button" aria-label="" data-i18n-aria-label="msg.928f791195" title="" data-i18n-title="msg.179cfc78c7">‹</button>
@@ -1087,7 +1087,7 @@
     <div class="game-context-menu hidden" id="game-context-menu" role="menu" aria-label="" data-i18n-aria-label="msg.ab4a89881d">
       <button class="dropdown-item" id="context-play-game" type="button" role="menuitem" tabindex="-1"><span data-i18n="msg.67fa9628c4"></span></button>
       <button class="dropdown-item" id="context-edit-game" type="button" role="menuitem" tabindex="-1"><span data-i18n="msg.02f344eb6e"></span></button>
-      <button class="dropdown-item" id="context-session-history" type="button" role="menuitem" tabindex="-1"><span aria-hidden="true">🕒</span> <span data-i18n="sessions.open"></span></button>
+      <button class="dropdown-item" id="context-session-history" type="button" role="menuitem" tabindex="-1"><span aria-hidden="true"><span class="ui-icon" data-icon="history" aria-hidden="true"></span></span> <span data-i18n="sessions.open"></span></button>
       <button class="dropdown-item" id="context-open-emulator" type="button" role="menuitem" tabindex="-1"><span data-i18n="msg.b3a8ed7ae3"></span></button>
       <button class="dropdown-item" id="context-open-game-files" type="button" role="menuitem" tabindex="-1"><span data-i18n="msg.339fbb2a97"></span></button>
       <button class="dropdown-item" id="context-open-images" type="button" role="menuitem" tabindex="-1"><span data-i18n="msg.4fe8c2a22f"></span></button>
@@ -1095,13 +1095,13 @@
       <button class="dropdown-item hidden" id="context-delete-games" type="button" role="menuitem" tabindex="-1"><span data-i18n="msg.79ee14b77a"></span></button>
       <button class="dropdown-item hidden" id="context-merge-discs" type="button" role="menuitem" tabindex="-1"><span data-i18n="msg.e4998f3861"></span></button>
       <button class="dropdown-item hidden" id="context-merge-regions" type="button" role="menuitem" tabindex="-1"><span data-i18n="msg.e7f0211399"></span></button>
-      <button class="dropdown-item hidden" id="context-merge-recomp" type="button" role="menuitem" tabindex="-1"><span aria-hidden="true">🔗</span> <span data-i18n="recomp.merge"></span></button>
+      <button class="dropdown-item hidden" id="context-merge-recomp" type="button" role="menuitem" tabindex="-1"><span aria-hidden="true"><span class="ui-icon" data-icon="link" aria-hidden="true"></span></span> <span data-i18n="recomp.merge"></span></button>
       <button class="dropdown-item hidden" id="context-download-images" type="button" role="menuitem" tabindex="-1"><span data-i18n="msg.6b39d242e1"></span></button>
     </div>
 
     <div class="game-context-menu hidden" id="platform-context-menu" role="menu" aria-label="" data-i18n-aria-label="msg.26f36f6d6e">
       <button class="dropdown-item" id="context-edit-platform" type="button" role="menuitem" tabindex="-1"><span data-i18n="msg.dcdcf57086"></span></button>
-      <button class="dropdown-item" id="context-find-new-games" type="button" role="menuitem" tabindex="-1"><span aria-hidden="true">🔎</span> <span data-i18n="library.findNew"></span></button>
+      <button class="dropdown-item" id="context-find-new-games" type="button" role="menuitem" tabindex="-1"><span aria-hidden="true"><span class="ui-icon" data-icon="search" aria-hidden="true"></span></span> <span data-i18n="library.findNew"></span></button>
     </div>
 
     <dialog id="bulk-images-dialog" class="confirmation-dialog bulk-images-dialog" aria-labelledby="bulk-images-title">
@@ -1415,6 +1415,7 @@
     <script src="backups.js"></script>
     <script src="app-updates.js"></script>
     <script src="locales/catalogs.js"></script>
+    <script src="ui-icons.js"></script>
     <script src="i18n.js"></script>
     <script src="themes.js"></script>
     <script src="image-fallbacks.js"></script>

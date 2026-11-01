@@ -1901,7 +1901,7 @@ function updatePlayStatus(game) {
   play.innerHTML = game.is_running
     ? globalThis.OpenCabinetI18n.t("msg.cd7fe1c80d")
     : unavailable ? globalThis.OpenCabinetI18n.t("availability.missing")
-    : launchingGames.has(game.id) ? '<span class="play-icon-shape">▶</span> INICIANDO...'
+    : launchingGames.has(game.id) ? '<span class="ui-icon" data-icon="play" aria-hidden="true"></span> INICIANDO...'
     : globalThis.OpenCabinetI18n.t("msg.aa6ae9fe63");
   play.title = unavailable ? globalThis.OpenCabinetI18n.t('library.replaceSource')+'\n'+(availability.missing_paths?.join("\n") || globalThis.OpenCabinetI18n.t("availability.missing")) : "";
   if (!play.disabled && !unavailable) {
@@ -2106,19 +2106,19 @@ function updatePlatformStatistics() {
     if (button.dataset.previewKey === key) return;
     button.dataset.previewKey = key;
     const photo = document.createElement("span"); photo.className = "platform-action-image";
-    photo.textContent = icon;
+    globalThis.OpenCabinetIcons.set(photo, icon);
     if (cover) {
-      const image = mediaImage(cover, game.title, "", () => { photo.textContent = icon; });
+      const image = mediaImage(cover, game.title, "", () => { globalThis.OpenCabinetIcons.set(photo, icon); });
       photo.replaceChildren(image);
     }
     const heading = document.createElement("span"); heading.textContent = label;
     const title = document.createElement("span"); title.className = "platform-action-title";
-    title.textContent = game?.title || (icon === "🎲" ? globalThis.OpenCabinetI18n.t("msg.ee97928539") : globalThis.OpenCabinetI18n.t("msg.66bb9c8fc1"));
+    title.textContent = game?.title || (icon === "dice-5" ? globalThis.OpenCabinetI18n.t("msg.ee97928539") : globalThis.OpenCabinetI18n.t("msg.66bb9c8fc1"));
     button.replaceChildren(photo, heading, title);
   }
   function play(buttonId, game) {
     const button = document.getElementById(buttonId);
-    card(button, buttonId === "btn-platform-last" ? globalThis.OpenCabinetI18n.t("msg.a5ffee78e2") : globalThis.OpenCabinetI18n.t("msg.a08ca15e2a"), game, "🎮");
+    card(button, buttonId === "btn-platform-last" ? globalThis.OpenCabinetI18n.t("msg.a5ffee78e2") : globalThis.OpenCabinetI18n.t("msg.a08ca15e2a"), game, "gamepad-2");
     button.disabled = !stats.emulator || !game || Boolean(game.is_running) || launchingGames.has(game.id);
     button.title = !stats.emulator ? globalThis.OpenCabinetI18n.t("msg.1e68f8e6a6") : game?.title || globalThis.OpenCabinetI18n.t("msg.1ce4a0897e");
     button.onclick = () => { if (game) return launchGame(game.id, game.title); };
@@ -2126,7 +2126,7 @@ function updatePlatformStatistics() {
   play("btn-platform-last", stats.last);
   play("btn-platform-most", stats.most);
   const random = document.getElementById("btn-platform-random");
-  card(random, globalThis.OpenCabinetI18n.t("msg.8138cb323b"), null, "🎲");
+  card(random, globalThis.OpenCabinetI18n.t("msg.8138cb323b"), null, "dice-5");
   const available = stats.games.filter((game) => !game.is_running && !launchingGames.has(game.id));
   random.disabled = !stats.emulator || available.length === 0;
   random.title = !stats.emulator ? globalThis.OpenCabinetI18n.t("msg.1e68f8e6a6") : globalThis.OpenCabinetI18n.t("msg.d3abd0dd48");
@@ -2263,7 +2263,7 @@ function createPlatformDetailsEditor() {
       select.value = image.kind;
       select.onchange = () => { images = assignImageType(images, image.path, select.value); render(); };
       fields.append(filename, select);
-      const remove = document.createElement("button"); remove.type = "button"; remove.className = "delete-btn"; remove.textContent = "🗑️";
+      const remove = document.createElement("button"); remove.type = "button"; remove.className = "delete-btn"; globalThis.OpenCabinetIcons.set(remove, "trash-2");
       remove.setAttribute("aria-label", `Quitar ${filename.textContent}`);
       remove.onclick = () => { images = images.filter((item) => item.path !== image.path); render(); };
       row.append(thumbnail, fields, remove); list.appendChild(row);
@@ -3133,7 +3133,7 @@ function setupGameEditor() {
       remove.type = "button";
       remove.disabled = networkBusy || saving || closing;
       remove.className = "delete-btn";
-      remove.textContent = "🗑️";
+      globalThis.OpenCabinetIcons.set(remove, "trash-2");
       remove.title = globalThis.OpenCabinetI18n.t("msg.d51882b2fa");
       remove.setAttribute("aria-label", `Quitar ${name.textContent}`);
       remove.addEventListener("click", () => {
@@ -3494,15 +3494,15 @@ async function launchGame(gameId, gameTitle) {
     }
     updatePlatformStatistics();
     if (selected && selectedGameId === gameId) updatePlayStatus(selected);
-    showToast(`🚀 Iniciando ${gameTitle}...`);
+    showToast(`Iniciando ${gameTitle}...`);
     const result = await invoke("launch_game", { gameId, ...(regionId !== null ? { regionId } : {}), ...(discId !== null ? { discId } : {}) });
     applyPlayStatistics({ ...result, id: gameId });
-    showToast(`🎮 ${result.message}`);
+    showToast(`${result.message}`);
     return result;
   } catch (error) {
     console.error("Error al lanzar juego:", error);
     getLibraryTools()?.diagnostic(String(error));
-    showToast(`❌ ${error}`, true);
+    showToast(`${error}`, true);
   } finally {
     launchingGames.delete(gameId);
     updatePlatformStatistics();
@@ -3593,7 +3593,7 @@ function startEditEmulator(emu) {
   if (titleEl) titleEl.textContent = globalThis.OpenCabinetI18n.t("msg.eaeed7a0ac", emu.name);
 
   const btnSave = document.getElementById("btn-save-emu");
-  if (btnSave) btnSave.innerHTML = globalThis.OpenCabinetI18n.t("msg.7a28a67ea0");
+  if (btnSave) globalThis.OpenCabinetIcons.label(btnSave, globalThis.OpenCabinetI18n.t("msg.7a28a67ea0"), "save");
 
   const btnCancel = document.getElementById("btn-cancel-edit-emu");
   if (btnCancel) btnCancel.classList.remove("hidden");
@@ -3620,7 +3620,7 @@ function resetEmulatorForm() {
   if (titleEl) titleEl.textContent = globalThis.OpenCabinetI18n.t("msg.87b0a93902");
 
   const btnSave = document.getElementById("btn-save-emu");
-  if (btnSave) btnSave.innerHTML = globalThis.OpenCabinetI18n.t("msg.856129e2b9");
+  if (btnSave) globalThis.OpenCabinetIcons.label(btnSave, globalThis.OpenCabinetI18n.t("msg.856129e2b9"), "plus");
 
   const btnCancel = document.getElementById("btn-cancel-edit-emu");
   if (btnCancel) btnCancel.classList.add("hidden");
@@ -3764,7 +3764,7 @@ function renderPlatformsTable() {
     const edit = document.createElement("button");
     edit.type = "button";
     edit.className = "edit-btn";
-    edit.textContent = "✏️";
+    globalThis.OpenCabinetIcons.set(edit, "pencil");
     edit.title = globalThis.OpenCabinetI18n.t("msg.fd33839788");
     edit.setAttribute("aria-label", globalThis.OpenCabinetI18n.t("msg.4b5017e503", platform.name));
     edit.addEventListener("click", () => {
@@ -3779,7 +3779,7 @@ function renderPlatformsTable() {
     const remove = document.createElement("button");
     remove.type = "button";
     remove.className = "delete-btn";
-    remove.textContent = "🗑️";
+    globalThis.OpenCabinetIcons.set(remove, "trash-2");
     remove.title = globalThis.OpenCabinetI18n.t("msg.679163a7ea");
     remove.setAttribute("aria-label", globalThis.OpenCabinetI18n.t("msg.7a35747e4e", platform.name));
     remove.addEventListener("click", async () => {
@@ -3797,7 +3797,7 @@ function renderPlatformsTable() {
       }
     });
     const details = document.createElement("button");
-    details.type = "button"; details.className = "edit-btn"; details.textContent = "🖼️";
+    details.type = "button"; details.className = "edit-btn"; globalThis.OpenCabinetIcons.set(details, "image");
     details.title = globalThis.OpenCabinetI18n.t("msg.2d1d5f9ba1");
     details.setAttribute("aria-label", globalThis.OpenCabinetI18n.t("msg.8b336eb6ff", platform.name));
     details.addEventListener("click", () => openPlatformDetailsEditor(platform));
@@ -4021,7 +4021,7 @@ function renderLibraryNavigation() {
       const toggle = document.createElement("button"); toggle.type = "button"; toggle.className = "library-tree-toggle";
       function sync() {
         const collapsed = collapsedLibraryGroups.has(node.id); children.classList.toggle("hidden", collapsed);
-        toggle.textContent = collapsed ? "▸" : "▾"; toggle.setAttribute("aria-expanded", String(!collapsed));
+        globalThis.OpenCabinetIcons.set(toggle, collapsed ? "chevron-right" : "chevron-down"); toggle.setAttribute("aria-expanded", String(!collapsed));
         toggle.setAttribute("aria-label", `${collapsed ? globalThis.OpenCabinetI18n.t("msg.e095e6d559") : globalThis.OpenCabinetI18n.t("msg.a4698e72ab")} ${node.label}`);
       }
       toggle.onclick = () => { if (collapsedLibraryGroups.has(node.id)) collapsedLibraryGroups.delete(node.id); else collapsedLibraryGroups.add(node.id); sync(); };
@@ -4312,7 +4312,7 @@ function setupScannerModal() {
     updateScannerEmulatorCheck();
   });
 
-  // Listener para cuando se selecciona "➕ Configurar nuevo emulador..." en plataformas con emuladores
+  // Listener para configurar un nuevo emulador en plataformas con emuladores.
   emuSelect?.addEventListener("change", () => {
     const targetPlatformSpan = document.getElementById(
       "inline-target-platform",
@@ -4536,7 +4536,7 @@ function reviewScannedGames(preview,operation=null) {
     const remove = document.createElement("button");
     remove.type = "button";
     remove.className = "secondary-btn scan-review-remove";
-    remove.textContent = "🗑️";
+    globalThis.OpenCabinetIcons.set(remove, "trash-2");
     remove.title = globalThis.OpenCabinetI18n.t("msg.1e821bbc3a");
     remove.setAttribute("aria-label", globalThis.OpenCabinetI18n.t("msg.53e7b659e2", game.title, filename.textContent));
     remove.onclick = () => {
@@ -5149,7 +5149,7 @@ function reviewMetadataImport(preview, platform, task, operation=null) {
         const card = document.createElement("li"); card.className = "metadata-match-card";
         const heading = document.createElement("h4"); heading.textContent = game.title;
         const remove = document.createElement("button"); remove.type = "button"; remove.className = "secondary-btn metadata-match-remove";
-        remove.textContent = "🗑️"; remove.title = globalThis.OpenCabinetI18n.t("msg.1e821bbc3a");
+        globalThis.OpenCabinetIcons.set(remove, "trash-2"); remove.title = globalThis.OpenCabinetI18n.t("msg.1e821bbc3a");
         remove.setAttribute("aria-label", globalThis.OpenCabinetI18n.t("msg.53e7b659e2", game.title, game.rom_path.split(/[\\/]/).pop()));
         remove.onclick = () => {
           if (!alive || busy || cancelling || report || pendingRows.has(row) || !rows.includes(row)) return;

@@ -17,7 +17,7 @@
   }
   function sourceLabel(game) {return globalThis.OpenCabinetI18n.t(game.launch_directly?'recomp.native':'recomp.emulated');}
   function element(tag, text, cls) { const el=document.createElement(tag); if(text)el.textContent=text;if(cls)el.className=cls;return el; }
-  function button(text, action) { const el=element("button",text,"secondary-btn");el.type="button";el.onclick=action;return el; }
+  function button(text, action) { const el=element("button",text.startsWith('@icon:')?null:text,"secondary-btn");if(text.startsWith('@icon:'))globalThis.OpenCabinetIcons.set(el,text.slice(6));el.type="button";el.onclick=action;return el; }
   function dialog(title) { const modal=element("dialog",null,"disc-dialog");modal.setAttribute("aria-label",title);modal.append(element("h2",title));document.body.append(modal);return modal; }
   async function chooseRegion(game, invoke, {repairDisc}={}) {
     const available = await Promise.all(members(game).map(async region => ({...region,discs:await invoke("get_game_discs",{id:region.game.id})})));
@@ -39,7 +39,7 @@
         if(missing.length&&repairDisc){
           const row=element('div',null,'region-choice-with-repair');row.append(item);
           for(const disc of missing){
-            const line=element('div',null,'disc-choice-row'),repair=button('📁',async()=>{
+            const line=element('div',null,'disc-choice-row'),repair=button('@icon:folder-open',async()=>{
               if(repairing)return;repairing=true;repair.disabled=true;error.textContent='';
               try{const updated=await repairDisc(region.game,disc,()=>!done&&modal.open);if(updated&&!done){region.discs=updated;render();}}
               catch(reason){if(!done)error.textContent=String(reason);}finally{repairing=false;repair.disabled=false;}

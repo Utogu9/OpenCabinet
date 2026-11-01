@@ -269,7 +269,7 @@ test('Last and most played cards use their own game covers, while the random car
   assert.equal(ui.get('btn-platform-last').children[0].children[0].src,'last-cover.png');
   assert.equal(ui.get('btn-platform-most').children[0].children[0].src,'most-cover.png');
   assert.equal(ui.get('btn-platform-last').children[2].textContent,'Last played');
-  assert.equal(ui.get('btn-platform-random').children[0].textContent,'🎲');
+  assert.match(ui.get('btn-platform-random').children[0].innerHTML,/data-icon="dice-5"/);
   assert.equal(ui.get('btn-platform-random').children[0].children.length,0);
   const preview=ui.get('btn-platform-last').children[0];ui.evaluate('updatePlatformStatistics()');
   assert.equal(ui.get('btn-platform-last').children[0],preview,'statistics updates reuse the loaded cover');

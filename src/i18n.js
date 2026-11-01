@@ -17,7 +17,12 @@
   }
   function translateDOM(root = globalThis.document) {
     if (!root?.querySelectorAll) return;
-    root.querySelectorAll('[data-i18n]').forEach(node => { node.textContent = t(node.getAttribute('data-i18n')); });
+    root.querySelectorAll('[data-i18n]').forEach(node => {
+      const key = node.getAttribute('data-i18n');
+      node.textContent = t(key);
+      // Decoration belongs to interface labels, never to translated/user text.
+      node.classList?.toggle('has-ui-icon', !!globalThis.OpenCabinetIcons?.forMessage(key) && !['OPTION', 'TITLE'].includes(node.tagName));
+    });
     for (const attr of ['title', 'aria-label', 'placeholder', 'alt']) {
       root.querySelectorAll(`[data-i18n-${attr}]`).forEach(node => node.setAttribute(attr, t(node.getAttribute(`data-i18n-${attr}`))));
     }

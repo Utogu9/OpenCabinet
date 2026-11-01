@@ -44,7 +44,14 @@ body {
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  -webkit-user-select: none;
   user-select: none;
+}
+
+/* WebKitGTK needs the prefix; editable fields still allow selecting/copying. */
+input, textarea, [contenteditable="true"], [contenteditable="plaintext-only"] {
+  -webkit-user-select: text;
+  user-select: text;
 }
 
 /* Custom Webkit Scrollbars con la paleta de OpenCabinet */
@@ -677,6 +684,7 @@ body.resizing-details * {
   perspective-origin: center;
   cursor: grab;
   touch-action: none;
+  -webkit-user-select: none;
   user-select: none;
 }
 
@@ -766,6 +774,11 @@ dialog.library-tool-dialog { padding:24px;max-width:760px;width:min(90vw,760px);
   overflow: hidden;
   pointer-events: none;
 }
+
+/* WebKitGTK otherwise repaints the compound CSS mesh while its parent rotates.
+   Retain each face's composited surface, with the same geometry and live light.
+   Three.js has its own single canvas and does not use these layers. */
+html[data-os="linux"] .game-box-model .game-box-face { will-change: transform; }
 
 /* Match the rounded plastic silhouette with trimmed walls and curved caps.
    Printed sleeves are inset separately and continue across the spine folds. */
@@ -1112,7 +1125,7 @@ dialog.library-tool-dialog { padding:24px;max-width:760px;width:min(90vw,760px);
 .manual-reader-header button { flex-shrink: 0; }
 .manual-reader-layout { display: flex; align-items: center; gap: 8px; flex-basis: 100%; color: var(--text-muted); font-size: .8rem; }
 .manual-reader-layout select { min-width: 0; max-width: 100%; padding: 5px 8px; color: var(--text-main); background: var(--card-bg); border: 1px solid var(--border-color); border-radius: 5px; }
-.manual-reader-viewport { overflow: auto; min-width: 0; min-height: 0; overscroll-behavior: contain; touch-action: none; user-select: none; }
+.manual-reader-viewport { overflow: auto; min-width: 0; min-height: 0; overscroll-behavior: contain; touch-action: none; -webkit-user-select: none; user-select: none; }
 .manual-reader-viewport[data-zoomed="true"] { cursor: grab; }
 .manual-reader-viewport[data-dragging="true"] { cursor: grabbing; }
 .manual-reader-center { display: grid; place-items: center; min-width: 100%; min-height: 100%; }
@@ -1708,7 +1721,7 @@ button:disabled {
   flex-direction: column;
   gap: 10px;
 }
-.import-task-header { display: flex; align-items: center; justify-content: space-between; gap: 8px; cursor: grab; user-select: none; touch-action: none; }
+.import-task-header { display: flex; align-items: center; justify-content: space-between; gap: 8px; cursor: grab; -webkit-user-select: none; user-select: none; touch-action: none; }
 .import-task.import-task-success { background: #122c21; border-color: #3d9966; }
 .update-task { border-color: var(--accent-color); }
 .update-task .import-task-header h3 { color: var(--accent-color); }
@@ -2863,3 +2876,84 @@ html[data-i18n-pending] body { visibility: hidden; }
 .linux-launch-options { margin-top: 18px; padding-top: 14px; border-top: 1px solid var(--border-color); }
 .linux-launch-options .form-group { margin-top: 12px; }
 .linux-launch-options input { min-width: 0; }
+
+/* Local Lucide SVG masks work without an emoji font on every platform. */
+.ui-icon, [data-i18n].has-ui-icon::before {
+  display: inline-block; width: 1.1em; height: 1.1em; flex: 0 0 1.1em;
+  vertical-align: -.16em; background-color: #fff; pointer-events: none;
+  -webkit-mask: var(--ui-icon) center / contain no-repeat; mask: var(--ui-icon) center / contain no-repeat;
+}
+[data-i18n].has-ui-icon::before { content: ''; margin-inline-end: .45em; }
+.ui-icon[data-icon="joystick"] { --ui-icon: url("assets/icons/joystick.svg"); }
+.ui-icon[data-icon="gamepad-2"] { --ui-icon: url("assets/icons/gamepad-2.svg"); }
+.ui-icon[data-icon="folders"] { --ui-icon: url("assets/icons/folders.svg"); }
+.ui-icon[data-icon="settings"] { --ui-icon: url("assets/icons/settings.svg"); }
+.ui-icon[data-icon="folder-open"] { --ui-icon: url("assets/icons/folder-open.svg"); }
+.ui-icon[data-icon="pencil"] { --ui-icon: url("assets/icons/pencil.svg"); }
+.ui-icon[data-icon="trash-2"] { --ui-icon: url("assets/icons/trash-2.svg"); }
+.ui-icon[data-icon="rotate-ccw"] { --ui-icon: url("assets/icons/rotate-ccw.svg"); }
+.ui-icon[data-icon="book-open"] { --ui-icon: url("assets/icons/book-open.svg"); }
+.ui-icon[data-icon="maximize"] { --ui-icon: url("assets/icons/maximize.svg"); }
+.ui-icon[data-icon="play"] { --ui-icon: url("assets/icons/play.svg"); }
+.ui-icon[data-icon="history"] { --ui-icon: url("assets/icons/history.svg"); }
+.ui-icon[data-icon="external-link"] { --ui-icon: url("assets/icons/external-link.svg"); }
+.ui-icon[data-icon="x"] { --ui-icon: url("assets/icons/x.svg"); }
+.ui-icon[data-icon="link"] { --ui-icon: url("assets/icons/link.svg"); }
+.ui-icon[data-icon="search"] { --ui-icon: url("assets/icons/search.svg"); }
+.ui-icon[data-icon="dice-5"] { --ui-icon: url("assets/icons/dice-5.svg"); }
+.ui-icon[data-icon="image"] { --ui-icon: url("assets/icons/image.svg"); }
+.ui-icon[data-icon="rocket"] { --ui-icon: url("assets/icons/rocket.svg"); }
+.ui-icon[data-icon="circle-x"] { --ui-icon: url("assets/icons/circle-x.svg"); }
+.ui-icon[data-icon="chevron-right"] { --ui-icon: url("assets/icons/chevron-right.svg"); }
+.ui-icon[data-icon="chevron-down"] { --ui-icon: url("assets/icons/chevron-down.svg"); }
+.ui-icon[data-icon="save"] { --ui-icon: url("assets/icons/save.svg"); }
+.ui-icon[data-icon="plus"] { --ui-icon: url("assets/icons/plus.svg"); }
+.ui-icon[data-icon="circle-check"] { --ui-icon: url("assets/icons/circle-check.svg"); }
+.ui-icon[data-icon="hourglass"] { --ui-icon: url("assets/icons/hourglass.svg"); }
+.ui-icon[data-icon="party-popper"] { --ui-icon: url("assets/icons/party-popper.svg"); }
+.ui-icon[data-icon="globe"] { --ui-icon: url("assets/icons/globe.svg"); }
+.ui-icon[data-icon="file-text"] { --ui-icon: url("assets/icons/file-text.svg"); }
+.ui-icon[data-icon="download"] { --ui-icon: url("assets/icons/download.svg"); }
+.ui-icon[data-icon="triangle-alert"] { --ui-icon: url("assets/icons/triangle-alert.svg"); }
+.ui-icon[data-icon="disc-3"] { --ui-icon: url("assets/icons/disc-3.svg"); }
+.ui-icon[data-icon="star"] { --ui-icon: url("assets/icons/star.svg"); }
+[data-i18n="msg.7a28a67ea0"] { --ui-icon: url("assets/icons/save.svg"); }
+[data-i18n="msg.856129e2b9"] { --ui-icon: url("assets/icons/plus.svg"); }
+[data-i18n="msg.cd70ffa805"] { --ui-icon: url("assets/icons/search.svg"); }
+[data-i18n="msg.a6ed6dbae7"] { --ui-icon: url("assets/icons/chevron-down.svg"); }
+[data-i18n="msg.ab21560c63"] { --ui-icon: url("assets/icons/chevron-down.svg"); }
+[data-i18n="msg.124ba96734"] { --ui-icon: url("assets/icons/play.svg"); }
+[data-i18n="msg.49c4bbcec2"] { --ui-icon: url("assets/icons/play.svg"); }
+[data-i18n="msg.3e86cbbd60"] { --ui-icon: url("assets/icons/dice-5.svg"); }
+[data-i18n="msg.01cd2f796a"] { --ui-icon: url("assets/icons/search.svg"); }
+[data-i18n="msg.2acc658bfe"] { --ui-icon: url("assets/icons/search.svg"); }
+[data-i18n="msg.671f63fed3"] { --ui-icon: url("assets/icons/search.svg"); }
+[data-i18n="msg.339fbb2a97"] { --ui-icon: url("assets/icons/folder-open.svg"); }
+[data-i18n="msg.ad0393fcf5"] { --ui-icon: url("assets/icons/folder-open.svg"); }
+[data-i18n="msg.5367e21bbc"] { --ui-icon: url("assets/icons/folder-open.svg"); }
+[data-i18n="msg.429da598be"] { --ui-icon: url("assets/icons/globe.svg"); }
+[data-i18n="msg.dd0eff6b0e"] { --ui-icon: url("assets/icons/file-text.svg"); }
+[data-i18n="msg.e123765ce5"] { --ui-icon: url("assets/icons/folder-open.svg"); }
+[data-i18n="msg.a212045475"] { --ui-icon: url("assets/icons/save.svg"); }
+[data-i18n="msg.e5a14dce48"] { --ui-icon: url("assets/icons/joystick.svg"); }
+[data-i18n="msg.3c798c6095"] { --ui-icon: url("assets/icons/folder-open.svg"); }
+[data-i18n="msg.1a479fdd86"] { --ui-icon: url("assets/icons/download.svg"); }
+[data-i18n="msg.5e4e6ccd15"] { --ui-icon: url("assets/icons/x.svg"); }
+[data-i18n="msg.7350eaa7ad"] { --ui-icon: url("assets/icons/folder-open.svg"); }
+[data-i18n="msg.b217e5f31b"] { --ui-icon: url("assets/icons/gamepad-2.svg"); }
+[data-i18n="msg.0c63ce9246"] { --ui-icon: url("assets/icons/folder-open.svg"); }
+[data-i18n="msg.d7d6656c6b"] { --ui-icon: url("assets/icons/gamepad-2.svg"); }
+[data-i18n="msg.19f160f0a5"] { --ui-icon: url("assets/icons/gamepad-2.svg"); }
+[data-i18n="msg.38d2c6f6ad"] { --ui-icon: url("assets/icons/save.svg"); }
+[data-i18n="msg.9ca8f9dee7"] { --ui-icon: url("assets/icons/folder-open.svg"); }
+[data-i18n="msg.79ee14b77a"] { --ui-icon: url("assets/icons/trash-2.svg"); }
+[data-i18n="msg.67fa9628c4"] { --ui-icon: url("assets/icons/play.svg"); }
+[data-i18n="msg.02f344eb6e"] { --ui-icon: url("assets/icons/pencil.svg"); }
+[data-i18n="msg.b3a8ed7ae3"] { --ui-icon: url("assets/icons/joystick.svg"); }
+[data-i18n="msg.4fe8c2a22f"] { --ui-icon: url("assets/icons/folder-open.svg"); }
+[data-i18n="msg.5bedcd421f"] { --ui-icon: url("assets/icons/folder-open.svg"); }
+[data-i18n="msg.e4998f3861"] { --ui-icon: url("assets/icons/disc-3.svg"); }
+[data-i18n="msg.e7f0211399"] { --ui-icon: url("assets/icons/globe.svg"); }
+[data-i18n="msg.6b39d242e1"] { --ui-icon: url("assets/icons/image.svg"); }
+[data-i18n="msg.dcdcf57086"] { --ui-icon: url("assets/icons/pencil.svg"); }
+[data-i18n="sofa.play"] { --ui-icon: url("assets/icons/play.svg"); }

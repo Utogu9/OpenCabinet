@@ -211,7 +211,7 @@
         scope.setAttribute("aria-label",globalThis.OpenCabinetI18n.t("msg.c41bd0fc2d"));operator.setAttribute("aria-label",globalThis.OpenCabinetI18n.t("msg.a1e414dfa1"));
         const sync = () => { condition.scope=scope.value;condition.name=input.value.trim().toLowerCase();condition.operator=operator.value;condition.value=value.value;value.disabled=["exists","not_exists"].includes(operator.value); };
         scope.onchange=operator.onchange=sync;input.oninput=value.oninput=sync;sync();
-        const remove=document.createElement("button");remove.type="button";remove.className="secondary-btn";remove.textContent="🗑️";remove.setAttribute("aria-label",globalThis.OpenCabinetI18n.t("msg.8c4a6cb711"));
+        const remove=document.createElement("button");remove.type="button";remove.className="secondary-btn";globalThis.OpenCabinetIcons.set(remove, "trash-2");remove.setAttribute("aria-label",globalThis.OpenCabinetI18n.t("msg.8c4a6cb711"));
         remove.onclick=()=>{category.conditions=category.conditions.filter(c=>c!==condition);renderConditions(category);};
         row.append(scope,input,operator,value,remove);conditionsList.appendChild(row);
       }

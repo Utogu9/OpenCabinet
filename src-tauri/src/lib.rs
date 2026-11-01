@@ -2588,6 +2588,16 @@ pub fn run() {
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_opener::init())
         .setup(|app| {
+            #[cfg(target_os = "linux")]
+            if let (Some(window), Ok(value)) = (app.get_webview_window("main"), std::env::var("OPENCABINET_UI_SCALE")) {
+                if let Some(scale) = platform_runtime::ui_scale(&value) {
+                    // Render the content at this zoom, instead of enlarging
+                    // WSLg's already-rasterized window surface.
+                    window.set_zoom(scale)?;
+                } else {
+                    eprintln!("Ignoring OPENCABINET_UI_SCALE: expected a factor between 0.5 and 3.0");
+                }
+            }
             #[cfg(windows)]
             if let Some(window) = app.get_webview_window("main") {
                 // setup runs on the window thread, as required by SetWindowSubclass.

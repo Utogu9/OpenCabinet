@@ -3,7 +3,7 @@
   const t=(key,...args)=>root.OpenCabinetI18n.t(key,...args);
   function create({document,invoke,onChanged,formatDate,formatDuration,confirm=async()=>false,formatSummary=stats=>t('time.sessions',formatDuration(stats.play_time_seconds),stats.session_count)}){
     const el=(tag,text,cls)=>{const node=document.createElement(tag);if(text)node.textContent=text;if(cls)node.className=cls;return node;};
-    const button=(text,action)=>{const node=el('button',text,'secondary-btn');node.type='button';node.onclick=action;return node;};
+    const button=(text,action)=>{const node=el('button',text.startsWith('@icon:')?null:text,'secondary-btn');if(text.startsWith('@icon:'))globalThis.OpenCabinetIcons.set(node,text.slice(6));node.type='button';node.onclick=action;return node;};
     function modal(title){
       const dialog=el('dialog',null,'confirmation-dialog library-tool-dialog'),heading=el('h2',title),header=el('div',null,'modal-header');
       const close=button('×',()=>dialog.close());close.setAttribute('aria-label',t('msg.bc74c76062'));header.append(heading,close);dialog.append(header);
@@ -64,7 +64,7 @@
           total.textContent=formatSummary(page);
           rows.forEach(session=>{
             const row=el('article',null,'session-history-row');
-            const remove=button('🗑',()=>mutate(session));remove.className='secondary-btn session-history-delete';
+            const remove=button('@icon:trash-2',()=>mutate(session));remove.className='secondary-btn session-history-delete';
             remove.setAttribute('aria-label',t('sessions.delete'));remove.title=t('sessions.delete');deletes.push(remove);
             row.append(el('strong',formatDate(session.started_at)),el('span',formatDuration(session.duration_seconds)),
               remove,el('span',session.title+' · '+String(session.rom_path).split(/[\\/]/).pop(),'help-text session-history-details'),el('span',t(`sessions.${session.state}`)+(session.ended_at?' · '+formatDate(session.ended_at):''),'help-text session-history-details'));

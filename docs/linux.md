@@ -30,6 +30,13 @@ Linux desktop is the reference for graphics and performance. WSL and virtual
 machines are useful for compilation and functional tests; their GPU behavior
 does not establish native desktop performance.
 
+For WSLg sessions that do not report the desired fractional display scale,
+`OPENCABINET_UI_SCALE=1.7 npm run dev` explicitly renders the interface at 170%.
+The optional Linux override accepts factors from 0.5 to 3.0 and is unset by
+default. Disable WSLg's fractional window scaling when using it, to avoid scaling
+the final window bitmap a second time. This changes webview content zoom, not
+native file chooser dialogs or the desktop's monitor configuration.
+
 ## User data
 
 - Bootstrap configuration: `$XDG_CONFIG_HOME/opencabinet/opencabinet.config.json`.

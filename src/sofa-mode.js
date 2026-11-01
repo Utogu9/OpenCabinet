@@ -175,6 +175,7 @@
       const missing = availability?.id === gameId && availability.available === false;
       play.disabled = !game || busy || running || missing;
       play.textContent = t(running ? 'sofa.running' : busy ? 'sofa.starting' : missing ? 'sofa.missing' : 'sofa.play');
+      if (game && !running && !busy && !missing) root.OpenCabinetIcons?.label(play, t('sofa.play'), 'play');
       play.classList.toggle('sofa-missing', !!missing);
       if (game && !running && !missing) {
         const label = options.variantLabel?.(game);

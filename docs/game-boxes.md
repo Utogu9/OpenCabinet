@@ -1,5 +1,11 @@
 # Cajas 3D
 
+En Linux, las caras del visor CSS conservan sus superficies de composición con
+`will-change: transform`. Esto reduce los repintados de WebKitGTK durante los
+giros sin cambiar el modelo ni detener su iluminación. El visor Three.js usa su
+propio lienzo y no recibe este ajuste. WSLg y una instalación Linux real pueden
+tener rendimientos diferentes según sus controladores y compositor.
+
 **Editar juego → Caja 3D** permite definir un ajuste exclusivo para una edición:
 tipo de caja, color, posición del lomo y dimensiones personalizadas. Inicialmente
 usa la configuración de la consola. Desmarcar **Usar la configuración de la consola**

@@ -51,6 +51,32 @@ async function main(){
     if(result.error)throw Error(result.error);const state=result.value;
     assert.equal(state.capabilities.os,'linux');assert.equal(state.os,'linux');assert.equal(state.count,0);assert.equal(state.epicHidden,true);assert.equal(state.css3d,true);assert.equal(state.title,'OpenCabinet');
     assert.ok(state.location.active_directory.startsWith(path.join(root,'data')));assert.ok(state.location.config_file.startsWith(path.join(root,'config')));
+    if(process.argv.includes('--ui-scale-only')){
+      const result=await script(`
+        await new Promise(resolve=>setTimeout(resolve,300));
+        const windowApi=window.__TAURI__.window.getCurrentWindow();
+        return {physicalWidth:(await windowApi.innerSize()).width,monitorScale:await windowApi.scaleFactor(),viewportWidth:innerWidth};
+      `);
+      if(result.error)throw Error(result.error);
+      const scale=result.value.physicalWidth/result.value.monitorScale/result.value.viewportWidth;
+      assert.ok(Math.abs(scale-Number(process.env.OPENCABINET_UI_SCALE||1))<.015,JSON.stringify(result.value));
+      console.log('WebKitGTK content zoom passed:',JSON.stringify({...result.value,contentScale:scale}));return;
+    }
+    const icons=await script(`
+      const nodes=[...document.querySelectorAll('.ui-icon,[data-i18n].has-ui-icon')];
+      const missing=[];const files=new Set();
+      for(const node of nodes){
+        const style=getComputedStyle(node,node.classList.contains('ui-icon')?null:'::before');
+        const mask=style.webkitMaskImage||style.maskImage;
+        if(!mask||mask==='none')missing.push(node.id||node.getAttribute('data-icon')||node.getAttribute('data-i18n'));
+        const path=mask?.match(/url\\(["']?([^"')]+)["']?\\)/)?.[1];if(path)files.add(path);
+      }
+      for(const path of files){const response=await fetch(path);if(!response.ok||!(await response.text()).includes('<svg'))missing.push(path);}
+      return {count:nodes.length,files:files.size,missing};
+    `);
+    if(icons.error)throw Error(icons.error);
+    assert.ok(icons.value.count>20);assert.ok(icons.value.files>10);assert.deepEqual(icons.value.missing,[]);
+    console.log('WebKitGTK local SVG icons passed:',JSON.stringify(icons.value));
     const covers=await script(`${fs.readFileSync('tests/helpers/cover-cache-browser.js','utf8')};return await checkCoverCachePixels();`);
     if(covers.error)throw Error(covers.error);
     for(const stage of ['cold','rebuilt','restored'])assert.deepEqual(covers.value[stage],[],`Incorrect cover pixels: ${stage}`);

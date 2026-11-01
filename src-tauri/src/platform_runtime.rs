@@ -2,6 +2,14 @@
 use serde::Serialize;
 use std::path::{Path, PathBuf};
 
+/// Optional webview content zoom for environments with inaccurate DPI reporting.
+/// Uses a factor (1.7 = 170%), leaving the default unchanged when not supplied.
+#[cfg(any(target_os = "linux", test))]
+pub fn ui_scale(value: &str) -> Option<f64> {
+    value.trim().parse::<f64>().ok()
+        .filter(|scale| scale.is_finite() && (0.5..=3.0).contains(scale))
+}
+
 pub fn path_key(path: &str) -> String {
     if cfg!(windows) {
         path.replace('\\', "/").to_lowercase()
@@ -261,6 +269,14 @@ pub async fn choose_runtime_path(directory: bool) -> Option<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn content_scale_accepts_fractional_factors_and_rejects_percentages_or_invalid_values() {
+        assert_eq!(ui_scale(" 1.7 "), Some(1.7));
+        assert_eq!(ui_scale("1"), Some(1.0));
+        for value in ["", "170", "170%", "NaN", "inf", "0", "-1", "0.49", "3.01"] {
+            assert_eq!(ui_scale(value), None, "{value}");
+        }
+    }
     #[test]
     fn path_identity_follows_host_semantics() {
         assert_eq!(path_key("Game.iso") == path_key("game.iso"), cfg!(windows));
