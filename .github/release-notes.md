@@ -1,18 +1,22 @@
-## What's new in v0.2.3
+## What's new in v0.3.0
 
-- Show 3D boxes throughout the couch-mode carousel, with an enlarged selection and neighboring boxes prepared ahead of navigation.
-- Reuse box geometry and keep artwork loading while a direction is held, including regional case variants.
-- Apply cached covers immediately and keep them visible until the original artwork is ready, with smoother image upgrades.
-- Normalize 3D case framing, remove extra carousel tilt and reset manual zoom when selecting another game.
-- Preserve cover proportions and full opacity, improve carousel spacing and replace the blue focus outline with a subtle glow.
+- Add cartridge label artwork and prioritize it over complete cartridge photos in supported 3D models.
+- Rotate the selected couch-mode box with the controller's right analog stick.
+- Drag the console carousel with the mouse without selecting text, and keep long game titles on one line.
+- Improve selection glows and allow zoomed 3D boxes to extend above the interface.
+- Keep the last nine cover previews and prepared 3D boxes per console in RAM for faster return navigation.
+- Prepare spine artwork independently and improve cached-to-original image transitions.
+- Preserve WebGL contexts within a shared budget and keep the last complete frame visible during restoration, avoiding white boxes when switching models.
 
-## Novedades de v0.2.3
+## Novedades de v0.3.0
 
-- Cajas 3D en todo el carrusel del modo sofá, con la selección ampliada y las cajas vecinas preparadas de antemano.
-- Reutilización de la geometría y carga de imágenes durante la navegación sostenida, incluidas las variantes regionales de las cajas.
-- Aplicación inmediata de portadas cacheadas, que permanecen visibles hasta que la imagen original está lista, con transiciones más suaves.
-- Encuadre uniforme de las cajas 3D, sin inclinación adicional del carrusel, y reinicio del zoom manual al cambiar de juego.
-- Portadas con sus proporciones y opacidad completas, mejor separación entre juegos y un brillo sutil en reemplazo del delineado azul de foco.
+- Nuevo tipo de imagen para las etiquetas de cartuchos, con prioridad sobre las fotos del cartucho completo en los modelos 3D compatibles.
+- Rotación de la caja seleccionada en modo sofá con el stick analógico derecho del joystick.
+- Desplazamiento del carrusel de consolas arrastrando con el mouse, sin seleccionar texto, y títulos largos en un único renglón.
+- Mejoras en el brillo de selección y cajas que pueden sobresalir sobre la interfaz al hacer zoom.
+- Conservación en RAM de las últimas nueve portadas y cajas 3D preparadas por consola para volver a ellas más rápido.
+- Preparación independiente de las imágenes del lomo y mejores transiciones entre imágenes cacheadas y originales.
+- Conservación de contextos WebGL dentro de un límite compartido y de la última imagen completa durante su restauración, evitando cajas blancas al cambiar de modelo.
 
 ## Downloads / Descargas
 
