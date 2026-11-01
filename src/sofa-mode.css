@@ -22,10 +22,13 @@ dialog.sofa-mode[open] { display: grid; grid-template-rows: auto minmax(170px, 1
 .sofa-cards { position: absolute; inset: 20px 0 12px; transform-style: preserve-3d; }
 .sofa-card { position: absolute; left: 50%; top: 50%; width: clamp(180px, 27vw, 410px); height: 94%; padding: 0; background: transparent; border: 0; transform: translateX(calc(-50% + var(--position) * clamp(190px, 24vw, 360px))) translateY(-50%) scale(var(--scale)); transition: transform .23s ease; }
 .sofa-card[hidden], .sofa-spare[hidden] { display: none; }
-.sofa-mode .sofa-card:focus-visible, .sofa-mode .sofa-preview:focus-visible { outline: none; }
-.sofa-card::before { content: ''; position: absolute; inset: -2% -18%; z-index: -1; pointer-events: none; opacity: 0; background: radial-gradient(ellipse, color-mix(in srgb, var(--accent-color) 16%, transparent), transparent 72%); transition: opacity .15s ease; }
+.sofa-mode .sofa-card:focus-visible, .sofa-mode .sofa-preview:focus-visible,
+.sofa-mode .sofa-platform:focus-visible { outline: none; }
+.sofa-card::before { content: ''; position: absolute; inset: 4% -5%; z-index: -1; pointer-events: none; opacity: 0; background: radial-gradient(ellipse, color-mix(in srgb, var(--accent-color) 60%, transparent), color-mix(in srgb, var(--accent-color) 38%, transparent) 43%, color-mix(in srgb, var(--accent-color) 14%, transparent) 62%, transparent 78%); transition: opacity .15s ease; }
 .sofa-card:focus-within::before { opacity: 1; }
 .sofa-mode[data-view="box"] .sofa-card { width: clamp(210px, 32vw, 490px); }
+.sofa-mode[data-view="box"] .sofa-card::before { inset: auto; left: 14%; bottom: 5%; width: 72%; height: 14%; border-radius: 50%; background: radial-gradient(ellipse closest-side, color-mix(in srgb, var(--accent-color) 90%, transparent), color-mix(in srgb, var(--accent-color) 55%, transparent) 35%, color-mix(in srgb, var(--accent-color) 18%, transparent) 68%, transparent 100%); }
+.sofa-mode[data-view="box"] .sofa-card:focus-within .sofa-preview::after { opacity: 0; }
 .sofa-mode[data-view="cover"] .sofa-deck { perspective: none; }
 .sofa-mode[data-view="cover"] .sofa-card { transform: translateX(calc(-50% + var(--position) * clamp(190px, 24vw, 360px))) translateY(-50%) scale(var(--scale)); }
 .sofa-mode[data-view="cover"] .sofa-card-art { perspective: 2200px; }
@@ -53,8 +56,9 @@ dialog.sofa-mode[open] { display: grid; grid-template-rows: auto minmax(170px, 1
 .sofa-empty[hidden], .sofa-arrow[hidden] { display: none; }
 .sofa-no-games .sofa-preview { display: none; }
 .sofa-details { display: flex; align-items: center; justify-content: space-between; gap: 30px; width: min(1120px, 87%); margin: 5px auto 16px; min-width: 0; }
-.sofa-caption { min-width: 0; }
-.sofa-caption h1 { font-size: clamp(22px, 3.1vw, 39px); line-height: 1.15; font-weight: 600; letter-spacing: -.8px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.sofa-caption { flex: 1; min-width: 0; }
+.sofa-caption h1 { font-size: clamp(22px, 3.1vw, 39px); line-height: 1.15; font-weight: 600; letter-spacing: -.8px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sofa-details .sofa-actions { flex-shrink: 0; }
 .sofa-subtitle { color: var(--text-muted); font-size: 15px; margin-top: 9px; }
 .sofa-position { display: inline-block; margin-top: 6px; color: var(--text-muted); opacity: .7; font-size: 12px; }
 .sofa-mode .sofa-play { min-width: 170px; max-width: 280px; padding: 15px 30px; border: 0; border-radius: 13px; background: var(--accent-color); color: var(--button-text); font-size: 20px; font-weight: 600; box-shadow: 0 8px 25px var(--accent-soft); }
@@ -71,6 +75,10 @@ dialog.sofa-mode[open] { display: grid; grid-template-rows: auto minmax(170px, 1
 .sofa-mode .sofa-platform { flex: 0 0 154px; min-width: 0; height: 108px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; position: relative; padding: 10px 12px; border: 1px solid transparent; border-radius: 14px; background: transparent; opacity: .5; transition: opacity .18s ease, background .18s ease, transform .18s ease; }
 .sofa-mode .sofa-platform:hover, .sofa-mode .sofa-platform[aria-pressed="true"] { opacity: 1; background: var(--accent-soft); }
 .sofa-mode .sofa-platform[aria-pressed="true"] { border-color: var(--accent-border); }
+.sofa-platform::before { content: ''; position: absolute; inset: 2px; border-radius: inherit; pointer-events: none; opacity: 0; background: radial-gradient(ellipse at 50% 42%, color-mix(in srgb, var(--accent-color) 48%, transparent), transparent 75%); transition: opacity .15s ease; }
+.sofa-mode .sofa-platform:focus-within { opacity: 1; background: color-mix(in srgb, var(--accent-color) 22%, var(--card-bg)); }
+.sofa-platform:focus-within::before { opacity: 1; }
+.sofa-platform > * { position: relative; }
 .sofa-platform-art { height: 48px; width: 122px; display: flex; align-items: center; justify-content: center; font-size: 35px; }
 .sofa-platform-art img { max-height: 100%; max-width: 100%; object-fit: contain; }
 .sofa-platform-name { max-width: 100%; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-size: 12px; }
