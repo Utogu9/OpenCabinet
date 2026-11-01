@@ -3,7 +3,7 @@ dialog.sofa-mode {
   inset: 0; width: 100vw; height: 100vh; height: 100dvh;
   max-width: none; max-height: none; margin: 0; padding: 0; border: 0;
   border-radius: 0; color: var(--text-main); background: var(--bg-color);
-  overflow: hidden; isolation: isolate;
+  overflow: hidden; overflow: clip; isolation: isolate;
 }
 dialog.sofa-mode[open] { display: grid; grid-template-rows: auto minmax(170px, 1fr) auto auto auto; }
 .sofa-mode::backdrop { background: #000; }
@@ -64,6 +64,10 @@ dialog.sofa-mode[open] { display: grid; grid-template-rows: auto minmax(170px, 1
 .sofa-mode .sofa-random { font-size: 24px; padding: 12px 16px; }
 .sofa-platform-section { min-width: 0; border-top: 1px solid var(--border-color); background: linear-gradient(0deg, var(--sidebar-bg), transparent); }
 .sofa-platforms { display: flex; align-items: stretch; gap: 12px; overflow-x: auto; overflow-y: hidden; padding: 13px max(32px, calc(50vw - 640px)) 10px; scroll-behavior: smooth; scrollbar-width: thin; }
+.sofa-platforms { touch-action: pan-x; }
+.sofa-platforms, .sofa-platforms * { -webkit-user-select: none; user-select: none; }
+.sofa-mode .sofa-platforms, .sofa-mode .sofa-platforms .sofa-platform { cursor: grab; }
+.sofa-mode .sofa-platforms.is-dragging, .sofa-mode .sofa-platforms.is-dragging .sofa-platform { cursor: grabbing; }
 .sofa-mode .sofa-platform { flex: 0 0 154px; min-width: 0; height: 108px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; position: relative; padding: 10px 12px; border: 1px solid transparent; border-radius: 14px; background: transparent; opacity: .5; transition: opacity .18s ease, background .18s ease, transform .18s ease; }
 .sofa-mode .sofa-platform:hover, .sofa-mode .sofa-platform[aria-pressed="true"] { opacity: 1; background: var(--accent-soft); }
 .sofa-mode .sofa-platform[aria-pressed="true"] { border-color: var(--accent-border); }

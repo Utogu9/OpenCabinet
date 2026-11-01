@@ -103,6 +103,7 @@
     let boxMode = true, frame = null, previewTimer = null, previewGeneration = 0, previewWork = null;
     let busy = false, availability = null, watchedGame = null, wasRunning = false, pendingFocus = false;
     let lastPad = false, selectedKey = null, backgroundAbort = null, lastBoxSelection = null;
+    let railDrag = null, railDragged = false;
     const remembered = new Map(), cardNodes = new Map(), platformNodes = new Map(), padInput = createPadInput();
     const spareCards = [];
     try { boxMode = window.localStorage.getItem('opencabinet.sofaView') !== 'cover'; } catch {}
@@ -117,7 +118,18 @@
       node?.focus({ preventScroll: true });
     }
     function showPosition(node) {
-      node?.scrollIntoView?.({ block: 'nearest', inline: 'center', behavior: window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ? 'instant' : 'smooth' });
+      if (!node || railDrag) return;
+      // scrollIntoView also scrolls the dialog: its blurred backdrop extends
+      // 50px beyond the viewport, allowing the whole screen to shift sideways.
+      const item = node.getBoundingClientRect(), bounds = rail.getBoundingClientRect();
+      rail.scrollTo({ left: rail.scrollLeft + item.left + item.width / 2 - bounds.left - rail.clientLeft - rail.clientWidth / 2,
+        behavior: window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ? 'instant' : 'smooth' });
+    }
+    function stopRailDrag(event) {
+      if (!railDrag || (event && event.pointerId !== railDrag.id)) return;
+      const { id, target } = railDrag; railDrag = null;
+      rail.classList.remove('is-dragging');
+      if (target.hasPointerCapture(id)) target.releasePointerCapture(id);
     }
     function updateBoxVisibility() {
       for (const node of cardNodes.values()) {
@@ -470,7 +482,7 @@
           if (platform.name !== null) Promise.resolve(options.platformDetails(platform)).then(data => {
             if (!active || !node.isConnected) return;
             const logo = data.images?.find(image => image.kind === 'logo'); if (!logo) return;
-            const image = element('img'); image.alt = ''; image.decoding = 'async';
+            const image = element('img'); image.alt = ''; image.decoding = 'async'; image.draggable = false;
             image.onload = () => { if (active && node.isConnected) art.replaceChildren(image); };
             image.src = options.imageSource(logo.path);
           }).catch(() => {});
@@ -550,6 +562,7 @@
     }
     function close() {
       if (!active) return;
+      stopRailDrag(); railDragged = false;
       active = false; ++generation; ++selectionVersion;
       backgroundAbort?.abort(); backgroundAbort = null;
       watchedGame = null; wasRunning = false; pendingFocus = false; selectedKey = null;
@@ -580,8 +593,35 @@
       if (event.target.closest('.sofa-platform')) zone = 'platforms';
       else if (event.target.closest('.sofa-card')) zone = 'games';
     });
+    rail.addEventListener('pointerdown', event => {
+      railDragged = false;
+      if (!active || event.button !== 0 || event.isPrimary === false || event.pointerType === 'touch'
+        || rail.scrollWidth <= rail.clientWidth) return;
+      const bounds = rail.getBoundingClientRect();
+      // Leave the native scrollbar usable; touch keeps the webview's own pan.
+      if (event.clientY >= bounds.top + rail.clientTop + rail.clientHeight) return;
+      event.preventDefault();
+      rail.scrollTo({ left: rail.scrollLeft, behavior: 'instant' });
+      const target = event.target.closest('.sofa-platform') || rail;
+      railDrag = { id: event.pointerId, target, x: event.clientX, left: rail.scrollLeft };
+      target.setPointerCapture(event.pointerId);
+    });
+    rail.addEventListener('pointermove', event => {
+      if (!railDrag || event.pointerId !== railDrag.id) return;
+      const distance = event.clientX - railDrag.x;
+      if (!railDragged && Math.abs(distance) < 6) return;
+      railDragged = true; rail.classList.add('is-dragging'); event.preventDefault();
+      rail.scrollTo({ left: railDrag.left - distance, behavior: 'instant' });
+    });
+    for (const name of ['pointerup', 'pointercancel', 'lostpointercapture']) rail.addEventListener(name, stopRailDrag);
+    rail.addEventListener('click', event => {
+      if (railDragged && event.detail !== 0) {
+        railDragged = false; event.preventDefault(); event.stopImmediatePropagation();
+      }
+    }, true);
+    rail.addEventListener('dragstart', event => event.preventDefault());
     search.addEventListener('input', () => { query = search.value.trim(); refresh(); });
-    window.addEventListener('blur', () => padInput.reset());
+    window.addEventListener('blur', () => { padInput.reset(); stopRailDrag(); });
     window.addEventListener('beforeunload', () => { close(); observer.disconnect(); }, { once: true });
     return { open, close, refresh, updateStatistics, get active() { return active; } };
   }

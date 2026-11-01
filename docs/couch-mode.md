@@ -8,6 +8,9 @@ The bottom carousel contains platforms with games and their downloaded logos.
 Platforms without a logo show their names. **All** combines the library. The game
 carousel respects alphabetical and custom series ordering, and remembers the
 selected game for each platform while switching between platforms.
+Drag the bottom platform rail with the mouse to scroll it, or swipe on a
+touchscreen. Dragging does not select text or activate a platform; a normal
+click still selects it.
 
 Switch between covers and 3D boxes with the on-screen button; the choice is
 remembered and applies to every visible game. Covers retain their full opacity
