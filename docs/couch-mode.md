@@ -9,10 +9,38 @@ Platforms without a logo show their names. **All** combines the library. The gam
 carousel respects alphabetical and custom series ordering, and remembers the
 selected game for each platform while switching between platforms.
 
-Only the central game has a live 3D preview. Neighboring games use covers, including
-available cached previews while the original artwork loads. Switch between covers
-and 3D boxes with the on-screen button; the choice is remembered. Drag a 3D box
-with the mouse to rotate it.
+Switch between covers and 3D boxes with the on-screen button; the choice is
+remembered and applies to every visible game. Covers retain their full opacity
+and brightness, including neighboring games. Available cached previews appear
+while artwork loads. In box mode, the selected box loads first, followed by its
+neighbors, including one extra box on either side to prepare for navigation (up
+to nine boxes). The selected box is enlarged. Neighboring covers are smaller
+and tilt around their own centers to preserve their proportions. Drag the
+selected box with the mouse to rotate it. A ring of up to nine viewers remains
+attached while navigating. Three.js keeps its model and renderer; legacy cases
+reuse their molded geometry when the case style matches, replacing the printed
+sheets rather than rebuilding all faces. Box mode never displays flat covers as
+a loading fallback: an unprinted 3D case remains visible while artwork loads.
+Cached artwork is applied first, followed by the original image, with at most
+two original downloads/decodes at a time. Canceled jobs do not start afterward.
+The decoded original fades over the cached image on covers and legacy cases;
+the preview stays underneath until the transition completes. Three.js uploads
+the replacement before switching maps and retires the old texture after drawing
+the replacement frame. Carousel focus uses a subtle background glow.
+Cases share a consistent visible height and receive no extra perspective tilt
+from the carousel; neighbors only become smaller with distance. Manual zoom and
+rotation reset when the selection changes. Model preparation keeps progressing
+while a direction is held, prioritizing the current selection and leaving a
+short gap between model updates. Every job checks the latest visible games;
+navigation does not reset a debounce timer or apply obsolete results. Existing
+compatible boxes apply RAM artwork immediately, using the same preview cache
+as cover mode. Plastic color changes reuse the molded geometry. A resident front
+cover can fill the case while its preferred full wrap is being prepared.
+Viewers are released when switching to covers, starting a game or closing couch
+mode. Cover sizing depends
+on aspect ratio and available space, so low-resolution images fill the same
+space as their larger equivalents. The nearest neighbors leave more room around
+the selected game; farther neighbors are grouped more tightly.
 
 ## Controls
 

@@ -27,6 +27,8 @@ function scene(options = {}) {
     getAttribute(name) { return this.attributes[name]; }
     get offsetWidth() { return 210; }
     get offsetHeight() { return 120; }
+    get clientWidth() { this.layoutReads = (this.layoutReads || 0) + 1; return this.layout?.width || this.rect?.width || 360; }
+    get clientHeight() { return this.layout?.height || this.rect?.height || 320; }
     contains(target) { return this === target || this.children.some(child => child.contains(target)); }
     getBoundingClientRect() { this.boundsReads = (this.boundsReads || 0) + 1; return this.rect || { left: 0, top: 0, width: 360, height: 320 }; }
     setPointerCapture(id) { this.captures.add(id); }
@@ -62,6 +64,16 @@ function scene(options = {}) {
 }
 const game = { id: 1, title: "A <literal> title", platform: "PS2" };
 const artwork = [{ kind: "cover", path: "front.png" }, { kind: "back_cover", path: "back.png" }, { kind: "spine", path: "spine.png" }];
+test('Carousel zoom and perspective never become part of the legacy model fit', () => {
+  const app=scene();
+  app.host.layout={width:490,height:450};app.host.rect={width:588,height:540};
+  app.viewer.update(game,artwork);app.flush();
+  const scale=app.model().style['--box-scale'];
+  app.host.rect={width:343,height:315};app.observer.callback();app.flush();
+  assert.equal(app.model().style['--box-scale'],scale,'Changing the ancestor transform preserves the unscaled geometry');
+  app.host.layout={width:600,height:600};app.observer.callback();app.flush();
+  assert.notEqual(app.model().style['--box-scale'],scale,'Resizing the actual host still reframes the model');
+});
 const discFace = app => app.elements().find(face => face.className === 'game-box-face game-box-dvd-disc');
 
 test('The viewer applies per-game box settings before textures load and switches back to platform settings',()=>{
@@ -1532,19 +1544,19 @@ test('Rotating an open PS2 booklet reuses its textures and geometry without per-
   assert.ok(faces.length < 950, `the detailed interior must stay within its compositing budget (${faces.length} faces)`);
   const front = faces.find(e => e.className.endsWith('manual-front'));
   const geometryWrites = () => faces.reduce((sum,e) => sum + e.styleWrites.filter(name => ['width','height','left','top','transform'].includes(name)).length,0);
-  const before = geometryWrites(), reads = app.host.boundsReads;
+  const before = geometryWrites(), reads = app.host.layoutReads;
   const originalTransform = app.model().style.transform;
   for (let i=0;i<60;i++) { app.host.trigger('keydown',{ key:'ArrowRight' }); app.flush(150+i*40); }
   app.flush(2600);
   // 60 x 15 degrees ends at the opposite side, with every face still reused.
   assert.notEqual(app.model().style.transform,originalTransform);
-  assert.equal(geometryWrites(),before); assert.equal(app.host.boundsReads,reads);
+  assert.equal(geometryWrites(),before); assert.equal(app.host.layoutReads,reads);
   assert.equal(front.children[0],data.front); assert.equal(data.front.width,1366); assert.equal(data.front.height,2048);
   assert.equal(front.style['--box-reflection-angle'],undefined);
   assert.equal(front.style['--box-reflection-x'],undefined);
   assert.equal(front.style['--box-gloss'],undefined, 'paper only updates the shading it actually uses');
   assert.equal(app.frames.size,0); assert.equal(data.disposed(),0);
   app.host.rect = { width:1600,height:1000 }; app.observer.callback(); app.flush(2700);
-  assert.equal(app.host.boundsReads,reads+1); assert.ok(geometryWrites()>before);
+  assert.equal(app.host.layoutReads,reads+1); assert.ok(geometryWrites()>before);
   assert.equal(front.children[0],data.front); app.viewer.dispose(); assert.equal(data.disposed(),1);
 });

@@ -5786,12 +5786,13 @@ function setupSofaMode() {
       return sofaImageDecoder(imageSource(entry.cached ? entry.path : path), requestSignal);
     });
   };
+  const getSofaPreview = path => catalogCoverCache?.get(`sofa:${path}`) || catalogCoverCache?.get(path);
   sofaMode = window.OpenCabinetSofa.create({
     document, window,
     games: () => allGames, platforms: () => allPlatforms,
     images: displayGameImages, sourceGame: game => ({ ...regionalGame(game), title: game.title }),
     imageSource, formatPlayTime, variantLabel: gameVariantLabel,
-    getCoverPreview: path => catalogCoverCache?.get(`sofa:${path}`) || catalogCoverCache?.get(path),
+    getCoverPreview: getSofaPreview,
     preferCachedArtwork: window.OpenCabinetRuntime?.linux === true,
     // Finish shared thumbnail jobs into the cache even if couch mode is closed.
     loadCoverPreview: loadSofaPreview,
@@ -5805,9 +5806,10 @@ function setupSofaMode() {
       return platform ? (await getPlatformDetails(platform)).box_3d || null : null;
     },
     createViewer: stage => window.OpenCabinet3D.createViewer(stage, {
+      carousel: true,
       imageSource,
-      getCoverPreview: path => catalogCoverCache?.get(path),
-      loadCoverPreview: (path, signal) => catalogCoverCache?.load(path, signal),
+      getCoverPreview: getSofaPreview,
+      loadCoverPreview: loadSofaPreview,
     }),
     availability: game => invoke('get_game_availability', { gameId: game.id }),
     launch: game => launchGame(game.id, game.title),

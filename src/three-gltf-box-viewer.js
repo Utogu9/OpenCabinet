@@ -133,6 +133,7 @@ export async function createModelViewer(host,options={},definition) {
   let frame=null,opened=0,openTarget=false,animation=null,zoom=1,side='front',rotationLock='free',drag=null,menu=null;
   let rotation=initialRotation(),width=0,height=0;
   const listeners=[],dynamicTextures=new Set(),pictures={};
+  const retiredTextures=[],blankTextures=new Map();
   let manual=null,manualController=null,manualExtracted=false,manualBackTask=null;
   const manualTextures=new Set(),raycaster=new THREE.Raycaster(),pointer=new THREE.Vector2();
   function clearManual() {
@@ -204,13 +205,15 @@ export async function createModelViewer(host,options={},definition) {
     // vertices are traversed while dragging, and the near lid stays on screen.
     for(const x of [bounds.min.x,bounds.max.x])for(const y of [bounds.min.y,bounds.max.y])for(const z of [bounds.min.z,bounds.max.z]) {
       const p=new THREE.Vector3(x,y,z).sub(center).multiply(root.scale).applyQuaternion(root.quaternion);
-      distance=Math.max(distance,Math.abs(p.y)/tangent+p.z,Math.abs(p.x)/(tangent*camera.aspect)+p.z);
+      const fill=options.carousel&&opened===0;
+      distance=Math.max(distance,Math.abs(p.y)/(tangent*(fill ? .78 : 1))+p.z,Math.abs(p.x)/(tangent*camera.aspect*(fill ? .9 : 1))+p.z);
     }
-    distance*=1.12;
+    if(!options.carousel||opened!==0)distance*=1.12;
     camera.position.set(0,0,distance/zoom);camera.lookAt(0,0,0);renderer.render(scene,camera);
+    retiredTextures.splice(0).forEach(texture=>texture.dispose());
     host.dataset.triangles=String(renderer.info.render.triangles);host.dataset.drawCalls=String(renderer.info.render.calls);
   }
-  function textureFrom(image) {
+  function textureSource(image) {
     const width=image.naturalWidth||image.width,height=image.naturalHeight||image.height;
     let source=image;
     if(Math.max(width,height)>2048) {
@@ -218,11 +221,27 @@ export async function createModelViewer(host,options={},definition) {
       source.width=Math.max(1,Math.round(width*scale));source.height=Math.max(1,Math.round(height*scale));
       source.getContext('2d').drawImage(image,0,0,source.width,source.height);
     }
-    const texture=new THREE.Texture(source);texture.flipY=false;texture.colorSpace=THREE.SRGBColorSpace;
+    return source;
+  }
+  function textureFrom(image) {
+    const texture=new THREE.Texture(textureSource(image));texture.flipY=false;texture.colorSpace=THREE.SRGBColorSpace;
     texture.anisotropy=Math.min(8,renderer.capabilities.getMaxAnisotropy());texture.needsUpdate=true;dynamicTextures.add(texture);return texture;
   }
   function assign(name,image) {
     const material=materials.get(name);if(!material)return;
+    if(options.carousel) {
+      const previous=material.map;let texture;
+      if(image)texture=textureFrom(image);
+      else {
+        if(!blankTextures.has(name)){const blank=textureFrom(globalThis.OpenCabinetCarouselBoxes.blankImage());dynamicTextures.delete(blank);blankTextures.set(name,blank);}
+        texture=blankTextures.get(name);
+      }
+      if(name==='Cover Inside'){texture.repeat.x=-1;texture.wrapS=THREE.RepeatWrapping;}
+      renderer.initTexture(texture);material.map=texture;material.color.set(image?0xffffff:0xe7e4db);
+      if(!previous)material.needsUpdate=true;
+      if(previous!==texture&&dynamicTextures.delete(previous))retiredTextures.push(previous);
+      schedule();return;
+    }
     const old=material.map;material.map=image?textureFrom(image):null;material.color.set(0xffffff);material.needsUpdate=true;
     if(name==='Cover Inside'&&material.map){material.map.repeat.x=-1;material.map.wrapS=THREE.RepeatWrapping;}
     if(dynamicTextures.delete(old))old.dispose();schedule();
@@ -237,7 +256,7 @@ export async function createModelViewer(host,options={},definition) {
   function compose() {
     if(pictures.full)assign('Cover Outside',pictures.full);
     else {
-      const atlas=document.createElement('canvas');atlas.width=2048;atlas.height=1580;
+      const atlas=document.createElement('canvas');atlas.width=options.carousel?1024:2048;atlas.height=options.carousel?790:1580;
       const ctx=atlas.getContext('2d'),spine=atlas.width*(manifest.spine_fraction||.046),face=(atlas.width-spine)/2;
       ctx.fillStyle='#f0efe9';ctx.fillRect(0,0,atlas.width,atlas.height);
       for(const [kind,x] of [['back_cover',0],['cover',face+spine]]) {
@@ -262,6 +281,7 @@ export async function createModelViewer(host,options={},definition) {
     }
   }
   function imageAt(path,signal,priority='low') {
+    if(options.carousel && globalThis.OpenCabinetCarouselBoxes)return globalThis.OpenCabinetCarouselBoxes.loadOriginal(path,signal,imageSource);
     return new Promise((resolve,reject)=>{
       const image=new Image();image.crossOrigin='anonymous';image.decoding='async';image.fetchPriority=priority;
       const abort=()=>{image.src='';reject(new DOMException('Aborted','AbortError'));};
@@ -276,14 +296,17 @@ export async function createModelViewer(host,options={},definition) {
     const signal=controller.signal,current=()=>!disposed&&revision===token&&!signal.aborted;
     const front=art.full?'full':'cover';
     let originalReady=false;
-    function preview(image){if(image&&current()&&!originalReady){
+    function preview(image,full=!!art.full){if(image&&current()&&!originalReady){
       const copy=document.createElement('canvas');copy.width=image.width;copy.height=image.height;copy.getContext('2d').drawImage(image,0,0);
-      pictures[front]=copy;compose();
+      pictures[full?'full':'cover']=copy;compose();
     }}
     if(paths.cover) {
       const cached=options.getCoverPreview?.(paths.cover);
       if(cached)preview(cached);
-      else if(options.loadCoverPreview)void Promise.resolve(options.loadCoverPreview(paths.cover,signal)).then(preview).catch(()=>{});
+      else {
+        if(options.carousel&&art.full){const individual=chooseArtwork(images.filter(image=>image.kind!=='box_full')).cover;const cached=individual&&options.getCoverPreview?.(individual);if(cached)preview(cached,false);}
+        if(options.loadCoverPreview)void Promise.resolve(options.loadCoverPreview(paths.cover,signal)).then(image=>preview(image)).catch(()=>{});
+      }
       try {
         const image=await imageAt(paths.cover,signal,'high');if(!current())return;originalReady=true;pictures[front]=image;compose();
       }catch{
@@ -292,6 +315,7 @@ export async function createModelViewer(host,options={},definition) {
       }
     }
     await Promise.all(Object.entries(paths).filter(([kind,path])=>path&&kind!=='cover'&&(!art.full||!['back_cover','spine'].includes(kind))).map(async([kind,path])=>{
+      if(options.carousel)try {const preview=await globalThis.OpenCabinetCarouselBoxes?.cachedImage(path,signal,options);if(preview&&current()){pictures[kind]=preview;compose();}}catch{}
       try{const image=await imageAt(path,signal);if(current()){pictures[kind]=image;compose();}}catch{/* Missing art does not block the model. */}
     }));
   }
@@ -354,6 +378,10 @@ export async function createModelViewer(host,options={},definition) {
   listen(canvas,'webglcontextlost',event=>event.preventDefault());listen(canvas,'webglcontextrestored',schedule);
   const resize=new ResizeObserver(()=>{closeMenu();schedule();});resize.observe(host);
   const api={
+    clearArtwork(){revision++;controller?.abort();key=null;clearManual();
+      if(!options.carousel){dynamicTextures.forEach(texture=>texture.dispose());dynamicTextures.clear();}for(const kind of Object.keys(pictures))delete pictures[kind];
+      for(const name of ['Cover Outside','Cover Inside','Cartridge Cover','UMD Label'])assign(name,null);
+      schedule();},
     update(next,images,settings=null) {
       const nextProfile=globalThis.OpenCabinet3D.profileFor(next.platform,null,next.rom_path,globalThis.OpenCabinet3D.resolveSettings(settings,next.box_3d));
       const nextKey=JSON.stringify([next.id,next.title,images,nextProfile]);if(disposed||key===nextKey)return;
@@ -367,7 +395,7 @@ export async function createModelViewer(host,options={},definition) {
         const material=materials.get(name);material.attenuationColor.set(style?.color||0xf1f5f7);material.attenuationDistance=style?.color?3:120;
       }
       controller=new AbortController();onProfile(profile);options.onManualState?.({status:'none'});void preloadManual();
-      if(!options.useModelArtwork)compose();void loadArtwork(images,revision);notify();schedule();
+      if(!options.useModelArtwork&&!options.carousel)compose();void loadArtwork(images,revision);notify();schedule();
     },
     get canOpen(){return !!game;},get isOpen(){return openTarget;},get rotationLock(){return rotationLock;},
     setRotationLock(mode){if(['free','x','y'].includes(mode)){stopDrag();rotationLock=mode;host.dataset.rotationLock=mode;}},
@@ -388,10 +416,12 @@ export async function createModelViewer(host,options={},definition) {
     refreshManual(){if(game)void preloadManual();},
     clear(){revision++;controller?.abort();controller=null;stopDrag();closeMenu();key=null;game=null;
       clearManual();
-      dynamicTextures.forEach(texture=>texture.dispose());dynamicTextures.clear();for(const kind of Object.keys(pictures))delete pictures[kind];
-      for(const name of ['Cover Outside','Cover Inside','Cartridge Cover','UMD Label']){const material=materials.get(name);if(material){material.map=options.useModelArtwork?[...originalMaterials].find(value=>value.name===name)?.map||null:null;material.needsUpdate=true;}}
+      if(!options.carousel){dynamicTextures.forEach(texture=>texture.dispose());dynamicTextures.clear();}for(const kind of Object.keys(pictures))delete pictures[kind];
+      for(const name of ['Cover Outside','Cover Inside','Cartridge Cover','UMD Label']){const material=materials.get(name);if(material){if(options.carousel)assign(name,null);else {material.map=options.useModelArtwork?[...originalMaterials].find(value=>value.name===name)?.map||null:null;material.needsUpdate=true;}}}
       if(frame!==null){cancelAnimationFrame(frame);frame=null;}renderer.clear();notify();},
     dispose(){if(disposed)return;api.clear();disposed=true;resize.disconnect();listeners.forEach(([target,name,callback,config])=>target.removeEventListener(name,callback,config));
+      dynamicTextures.forEach(texture=>texture.dispose());dynamicTextures.clear();
+      retiredTextures.splice(0).forEach(texture=>texture.dispose());blankTextures.forEach(texture=>texture.dispose());blankTextures.clear();
       mixer.stopAllAction();mixer.uncacheRoot(model);releaseModel(model);originalMaterials.forEach(value=>value.dispose());
       new Set([manualFront,manualBack,manualPages]).forEach(material=>material.dispose());
       const images=new Set();originalTextures.forEach(value=>{images.add(value.image);value.dispose();});images.forEach(value=>value?.close?.());

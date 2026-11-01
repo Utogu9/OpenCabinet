@@ -14,14 +14,23 @@
     const isThree=()=>backend?.startsWith('three:');
     function release() { generation++; viewer?.dispose(); viewer=null; backend=null; commands=[]; }
     function legacy() { backend='css';viewer=createLegacy(host,options);viewer.setRotationLock?.(lock);viewer.update(...pending); }
+    function backendFor(game,settings) {
+      const profile=profileFor(game.platform,null,game.rom_path,resolveSettings(settings,game.box_3d));
+      const model=globalThis.OpenCabinet3D.jewelFamily(game.platform) && ['jewel','jewelPal'].includes(profile.id) ? 'dreamcast'
+        : ['switch','psp'].includes(profile.id) && globalThis.OpenCabinetLocalModels?.[profile.id] ? profile.id : null;
+      return model ? `three:${model}` : 'css';
+    }
     const api = {
+      updateCachedArtwork(game,images,settings=null) {
+        if(disposed||!viewer||backend!==backendFor(game,settings))return false;
+        if(viewer.updateCachedArtwork)return viewer.updateCachedArtwork(game,images,settings);
+        if(!isThree())return false;
+        api.update(game,images,settings);return true;
+      },
       update(game,images,settings=null) {
         if(disposed)return;
         pending=[game,images,settings];
-        const profile=profileFor(game.platform,null,game.rom_path,resolveSettings(settings,game.box_3d));
-        const model=globalThis.OpenCabinet3D.jewelFamily(game.platform) && ['jewel','jewelPal'].includes(profile.id) ? 'dreamcast'
-          : ['switch','psp'].includes(profile.id) && globalThis.OpenCabinetLocalModels?.[profile.id] ? profile.id : null;
-        const desired=model ? `three:${model}` : 'css';
+        const desired=backendFor(game,settings),model=desired.slice(6);
         if(backend===desired) {viewer?.update(...pending);return;}
         release();open=false;
         if(desired==='css') {legacy();return;}
@@ -53,7 +62,7 @@
       clear() {release();pending=null;open=false;options.onOpenState?.({canOpen:false,open:false});},
       dispose() {api.clear();disposed=true;},
     };
-    for(const method of ['zoom','reset','toggleSide','showBack','refreshManual','returnManual']) api[method]=(...args)=>{
+    for(const method of ['zoom','reset','toggleSide','showBack','refreshManual','returnManual','clearArtwork']) api[method]=(...args)=>{
       if(viewer)return viewer[method]?.(...args);
       if(isThree())commands.push([method,args]);
     };

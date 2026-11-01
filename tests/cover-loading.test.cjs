@@ -228,6 +228,14 @@ test('Linux decodes receive independent RGBA pixels and persist WebP through the
   assert.deepEqual(encoded[0].pixels, [255, 0, 0, 255]);
   assert.equal(encoded[0].options.headers['x-thumbnail-width'], '1');
   assert.equal(red.previewBlob.type, 'image/webp'); assert.deepEqual(saved, [[82, 73, 70, 70]]);
+  assert.equal(blue.previewBlob,undefined,'RAM-only covers do not trigger an extra encoding');
+  const regular=decode('ordinary-cover',signal,bytes=>saved.push([...bytes]));
+  await worker.onmessage({data:{id:jobs[2].id,pixels:new Uint8ClampedArray([1,2,3,255]).buffer,width:1,height:1,
+    thumbnailBytes:new Uint8Array([82,73,70,70])}});
+  const ordinary=await regular;
+  assert.equal(ordinary.previewBlob.type,'image/webp','Ordinary disk thumbnails retain their existing bytes for immediate 3D use');
+  assert.deepEqual([...new Uint8Array(await ordinary.previewBlob.arrayBuffer())],[82,73,70,70]);
+  assert.equal(encoded.length,1,'Already-encoded thumbnails are not encoded again');
   red.close(); assert.equal(red.width, 0); assert.equal(blue.width, 1);
 });
 

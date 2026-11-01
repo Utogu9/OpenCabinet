@@ -18,20 +18,34 @@ dialog.sofa-mode[open] { display: grid; grid-template-rows: auto minmax(170px, 1
 .sofa-mode .sofa-tool { background: var(--card-bg); border: 1px solid var(--border-color); border-radius: 12px; padding: 11px 17px; font-size: 14px; white-space: nowrap; }
 .sofa-mode .sofa-tool:hover, .sofa-mode .sofa-tool:focus-visible { background: var(--card-hover-bg); }
 .sofa-search { width: clamp(160px, 19vw, 290px); background: var(--card-bg); color: var(--text-main); border: 1px solid var(--border-color); border-radius: 12px; padding: 11px 15px; font-size: 14px; }
-.sofa-deck { position: relative; min-height: 0; perspective: 1400px; overflow: hidden; }
+.sofa-deck { position: relative; min-height: 0; overflow: hidden; }
 .sofa-cards { position: absolute; inset: 20px 0 12px; transform-style: preserve-3d; }
-.sofa-card { position: absolute; left: 50%; top: 50%; width: clamp(180px, 27vw, 410px); height: 94%; padding: 0; background: transparent; border: 0; transform: translateX(calc(-50% + var(--offset) * clamp(170px, 21vw, 320px))) translateY(-50%) scale(var(--scale)) rotateY(var(--turn)); transition: transform .23s ease, opacity .23s ease, filter .23s ease; filter: brightness(.53); opacity: .7; }
-.sofa-card.is-selected { opacity: 1; filter: brightness(1); }
-.sofa-card:hover { filter: brightness(.88); }
-.sofa-card.is-selected:hover { filter: brightness(1.05); }
+.sofa-card { position: absolute; left: 50%; top: 50%; width: clamp(180px, 27vw, 410px); height: 94%; padding: 0; background: transparent; border: 0; transform: translateX(calc(-50% + var(--position) * clamp(190px, 24vw, 360px))) translateY(-50%) scale(var(--scale)); transition: transform .23s ease; }
+.sofa-card[hidden], .sofa-spare[hidden] { display: none; }
+.sofa-mode .sofa-card:focus-visible, .sofa-mode .sofa-preview:focus-visible { outline: none; }
+.sofa-card::before { content: ''; position: absolute; inset: -2% -18%; z-index: -1; pointer-events: none; opacity: 0; background: radial-gradient(ellipse, color-mix(in srgb, var(--accent-color) 16%, transparent), transparent 72%); transition: opacity .15s ease; }
+.sofa-card:focus-within::before { opacity: 1; }
+.sofa-mode[data-view="box"] .sofa-card { width: clamp(210px, 32vw, 490px); }
+.sofa-mode[data-view="cover"] .sofa-deck { perspective: none; }
+.sofa-mode[data-view="cover"] .sofa-card { transform: translateX(calc(-50% + var(--position) * clamp(190px, 24vw, 360px))) translateY(-50%) scale(var(--scale)); }
+.sofa-mode[data-view="cover"] .sofa-card-art { perspective: 2200px; }
+/* Turn each cover around its own center, compensating for horizontal
+   foreshortening instead of stretching distant covers across the whole deck. */
+.sofa-mode[data-view="cover"] .sofa-cover,
+.sofa-mode[data-view="cover"] .sofa-cover-fallback { transform: rotateY(var(--turn)) scaleX(var(--cover-width-scale)); transition: transform .23s ease; }
+.sofa-mode[data-view="cover"] .sofa-cover.sofa-cover-original { transition: transform .23s ease, opacity .18s ease; }
 .sofa-card-art { width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; position: relative; }
-.sofa-cover { position: absolute; max-width: 100%; max-height: 100%; width: auto; height: auto; object-fit: contain; border-radius: 4px; box-shadow: 0 20px 40px #0006; }
+.sofa-cover { position: absolute; max-width: 100%; max-height: 100%; width: 100%; height: 100%; object-fit: contain; border-radius: 4px; box-shadow: 0 20px 40px #0006; }
 .sofa-card.is-selected .sofa-cover { box-shadow: 0 22px 45px #0009, 0 0 28px var(--accent-soft); }
 .sofa-cover-fallback { display: flex; align-items: center; justify-content: center; width: 72%; height: 88%; padding: 28px; background: linear-gradient(150deg, var(--card-hover-bg), var(--card-bg)); border-radius: 7px; color: var(--text-main); font-size: clamp(19px, 2.2vw, 30px); text-align: center; box-shadow: 0 20px 35px #0006; }
 .sofa-cover-fallback[hidden] { display: none; }
-.sofa-preview.game-box-stage { position: absolute; top: 4%; left: 50%; transform: translateX(-50%); width: clamp(210px, 32vw, 490px); height: 92%; min-height: 0; z-index: 11; border: 0; border-radius: 0; background: transparent; box-shadow: none; }
-.sofa-mode[data-has-box="false"] .sofa-preview { visibility: hidden; pointer-events: none; }
-.sofa-mode[data-has-box="true"] .sofa-card.is-selected .sofa-card-art { visibility: hidden; }
+.sofa-preview.game-box-stage { position: absolute; inset: 0; width: 100%; height: 100%; min-height: 0; border: 0; border-radius: 0; background: transparent; box-shadow: none; }
+.sofa-card:not([data-has-box="true"]) .sofa-preview { visibility: hidden; pointer-events: none; }
+.sofa-mode[data-view="box"] .sofa-card-art { visibility: hidden; }
+.sofa-box-placeholder { display: none; }
+.sofa-mode[data-view="box"] .sofa-card:not([data-has-box="true"]) .sofa-box-placeholder { display: block; position: absolute; left: 50%; top: 50%; height: 78%; aspect-ratio: var(--box-aspect, .71); background: var(--box-color, #353b46); border: 1px solid #ffffff18; border-radius: 3px; transform: translate(-50%, -50%) rotateX(-9deg) rotateY(28deg); transform-style: preserve-3d; }
+.sofa-box-placeholder::before { content: ''; position: absolute; right: 100%; top: -1px; height: calc(100% + 2px); width: 14px; background: var(--box-color, #353b46); filter: brightness(.65); transform-origin: right; transform: rotateY(-90deg); }
+.sofa-card:not(.is-selected) .sofa-preview { pointer-events: none; }
 .sofa-mode .sofa-arrow { position: absolute; top: 50%; transform: translateY(-50%); z-index: 14; width: 46px; height: 70px; border-radius: 15px; border: 1px solid var(--border-color); background: #0005; font-size: 42px; opacity: .55; }
 .sofa-arrow:hover, .sofa-arrow:focus-visible { opacity: 1; }
 .sofa-arrow-previous { left: 24px; } .sofa-arrow-next { right: 24px; }
@@ -69,5 +83,7 @@ dialog.sofa-mode[open] { display: grid; grid-template-rows: auto minmax(170px, 1
   .sofa-mode .sofa-play { min-width: 135px; padding: 13px 20px; }.sofa-subtitle { font-size: 12px; }.sofa-footer { padding-left: 22px; padding-right: 22px; font-size: 10px; }
 }
 @media (prefers-reduced-motion: reduce) {
-  .sofa-card, .sofa-platform { transition: none; }.sofa-platforms { scroll-behavior: auto; }
+  .sofa-card, .sofa-card::before, .sofa-platform { transition: none; }.sofa-platforms { scroll-behavior: auto; }
+  .sofa-mode[data-view="cover"] .sofa-cover, .sofa-mode[data-view="cover"] .sofa-cover-fallback { transition: none; }
+  .sofa-mode[data-view="cover"] .sofa-cover.sofa-cover-original { transition: none; }
 }

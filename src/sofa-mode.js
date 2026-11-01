@@ -76,13 +76,11 @@
     const deck = element('section', 'sofa-deck'); deck.id = 'sofa-deck';
     deck.setAttribute('aria-label', t('sofa.games')); deck.setAttribute('aria-roledescription', t('sofa.carousel'));
     const cards = element('div', 'sofa-cards');
-    const preview = element('div', 'game-box-stage sofa-preview'); preview.tabIndex = -1;
-    preview.setAttribute('aria-label', t('sofa.box'));
     const previous = button('‹', () => moveGame(-1), 'sofa-arrow sofa-arrow-previous');
     previous.setAttribute('aria-label', t('sofa.previous'));
     const next = button('›', () => moveGame(1), 'sofa-arrow sofa-arrow-next');
     next.setAttribute('aria-label', t('sofa.next'));
-    const empty = element('p', 'sofa-empty'); deck.append(cards, preview, previous, next, empty);
+    const empty = element('p', 'sofa-empty'); deck.append(cards, previous, next, empty);
     const details = element('section', 'sofa-details');
     const caption = element('div', 'sofa-caption');
     const title = element('h1'); title.id = 'sofa-game-title';
@@ -102,10 +100,11 @@
 
     let active = false, lease = null, opener = null, generation = 0, selectionVersion = 0;
     let platforms = [], games = [], platformName = null, gameId = null, zone = 'games', query = '';
-    let boxMode = true, viewer = null, previewTimer = null, frame = null;
+    let boxMode = true, frame = null, previewTimer = null, previewGeneration = 0, previewWork = null;
     let busy = false, availability = null, watchedGame = null, wasRunning = false, pendingFocus = false;
-    let lastPad = false, selectedKey = null, backgroundAbort = null;
+    let lastPad = false, selectedKey = null, backgroundAbort = null, lastBoxSelection = null;
     const remembered = new Map(), cardNodes = new Map(), platformNodes = new Map(), padInput = createPadInput();
+    const spareCards = [];
     try { boxMode = window.localStorage.getItem('opencabinet.sofaView') !== 'cover'; } catch {}
     const selected = () => games.find(game => game.id === gameId) || null;
     const controller = options.fullscreen;
@@ -120,20 +119,87 @@
     function showPosition(node) {
       node?.scrollIntoView?.({ block: 'nearest', inline: 'center', behavior: window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ? 'instant' : 'smooth' });
     }
+    function updateBoxVisibility() {
+      for (const node of cardNodes.values()) {
+        node.dataset.hasBox = String(boxMode && node._preview.children.length > 0);
+        node.dataset.boxReady = String(node._boxKey === node._renderedBoxKey && !!node._viewer);
+      }
+      dialog.dataset.hasBox = String(boxMode && cardNodes.get(gameId)?.dataset.hasBox === 'true');
+    }
+    function clearCardPreview(node) {
+      node._boxKey = null; node._renderedBoxKey = null;
+      node._viewer?.dispose(); node._viewer = null;
+      node._preview.replaceChildren(); node.dataset.hasBox = 'false';
+    }
     function clearPreview() {
-      clearTimeout(previewTimer); previewTimer = null; viewer?.dispose(); viewer = null;
+      ++previewGeneration; clearTimeout(previewTimer); previewTimer = null;
+      previewWork = null;
+      for (const node of cardNodes.values()) clearCardPreview(node);
+      for (const node of spareCards) clearCardPreview(node);
+      lastBoxSelection = null;
       dialog.dataset.hasBox = 'false';
     }
-    const observer = new window.MutationObserver(() => {
-      dialog.dataset.hasBox = String(boxMode && preview.children.length > 0);
-    });
-    observer.observe(preview, { childList: true });
+    const observer = new window.MutationObserver(updateBoxVisibility);
+    function preparePreviews() {
+      if (!boxMode || watchedGame !== null) { clearPreview(); return; }
+      if (previewTimer !== null || previewWork !== null) return;
+      const token = previewGeneration;
+      const current = () => active && boxMode && watchedGame === null && previewGeneration === token;
+      async function next() {
+        previewTimer = null;
+        if (!current()) return;
+        // Read the current carousel, not a snapshot from an earlier key press.
+        // Throttle model work without postponing it until navigation stops.
+        const node = [...cardNodes.values()].filter(node => node._renderedBoxKey !== node._boxKey)
+          .sort((a, b) => Math.abs(Number(a.style.getPropertyValue('--offset'))) - Math.abs(Number(b.style.getPropertyValue('--offset'))))[0];
+        if (!node) return;
+        const id = Number(node.dataset.gameId), item = games.find(game => game.id === id), key = node._boxKey;
+        const work = previewWork = {};
+        try {
+          const settings = await options.boxSettings(item);
+          if (current() && cardNodes.get(id) === node && node._boxKey === key && node._renderedBoxKey !== key) {
+            // A recycled Three.js viewer keeps its renderer, geometry, lights
+            // and materials. update replaces the artwork for the incoming game.
+            node._viewer ||= options.createViewer(node._preview);
+            node._viewer.update(options.sourceGame(item), options.images(item), settings);
+            node._boxSettings = settings; node._settingsPlatform = item.platform;
+            node._renderedBoxKey = key;
+            updateBoxVisibility();
+          }
+        } catch (error) {
+          if (current() && cardNodes.get(id) === node && node._boxKey === key) {
+            console.warn('Sofa 3D preview', error); clearCardPreview(node); updateBoxVisibility();
+          }
+        } finally {
+          if (previewWork === work) {
+            previewWork = null;
+            // Keep making progress during held input; obsolete jobs never
+            // update recycled cards or stop the rest of the queue.
+            if (current()) previewTimer = setTimeout(next, 40);
+          }
+        }
+      }
+      previewTimer = setTimeout(next, 0);
+    }
     function drawCover(container, game, signal) {
       const path = options.images(game).find(image => image.kind === 'cover')?.path;
       const fallback = element('span', 'sofa-cover-fallback', game.title); container.append(fallback);
       if (!path) return;
-      let preview = null, previewWidth = 0, image = null, timer = null, selected = false;
-      const cached = options.preferCachedArtwork;
+      let preview = null, previewWidth = 0, image = null, timer = null, fadeTimer = null, selected = false;
+      // Reuse bounded thumbnails on both platforms. Box-mode navigation must
+      // not also decode an original 2D cover for every briefly visited game.
+      const cached = options.preferCachedArtwork || typeof options.loadCoverPreview === 'function';
+      function fitArtwork() {
+        const width = container.clientWidth, height = container.clientHeight;
+        if (!width || !height) return;
+        for (const node of [preview, image]) {
+          const sourceWidth = node?.naturalWidth || node?.width, sourceHeight = node?.naturalHeight || node?.height;
+          if (!sourceWidth || !sourceHeight) continue;
+          const scale = Math.min(width / sourceWidth, height / sourceHeight);
+          node.style.width = `${sourceWidth * scale}px`; node.style.height = `${sourceHeight * scale}px`;
+        }
+      }
+      const sizeObserver = new window.ResizeObserver(fitArtwork); sizeObserver.observe(container);
       function showPreview(bitmap) {
         if (signal.aborted || !bitmap?.width || !bitmap?.height || bitmap.width <= previewWidth) return;
         try {
@@ -142,62 +208,136 @@
           preview.className = 'sofa-cover';
           if (!bitmap.previewImage) { preview.width = bitmap.width; preview.height = bitmap.height; preview.getContext('2d').drawImage(bitmap, 0, 0); }
           container.append(preview); fallback.hidden = true;
+          fitArtwork();
           previous?.remove(); previewWidth = bitmap.width;
-          if (image?.isConnected) preview.hidden = true;
+          if (image?.dataset.ready === 'true') preview.hidden = true;
+          else if (image?.isConnected) container.insertBefore(preview, image);
         } catch { preview = null; }
       }
       function original() {
         if (signal.aborted || image || (cached && (!selected || boxMode))) return;
-        image = element('img', 'sofa-cover'); image.alt = ''; image.decoding = 'async'; image.fetchPriority = cached ? 'high' : 'auto';
-        image.onload = () => {
-          if (signal.aborted || (cached && (!selected || boxMode))) return;
-          container.append(image); if (preview) { if (cached) preview.hidden = true; else preview.remove(); } fallback.hidden = true;
+        const originalImage = image = element('img', 'sofa-cover sofa-cover-original');
+        originalImage.alt = ''; originalImage.decoding = 'async'; originalImage.fetchPriority = cached ? 'high' : 'auto';
+        originalImage.style.opacity = '0';
+        const current = () => !signal.aborted && image === originalImage && (!cached || (selected && !boxMode));
+        originalImage.onload = async () => {
+          try { await originalImage.decode?.(); } catch { return; }
+          if (!current()) return;
+          container.append(originalImage); fallback.hidden = true;
+          fitArtwork();
+          if (!preview) { originalImage.style.opacity = '1'; originalImage.dataset.ready = 'true'; return; }
+          // Paint the decoded original above the preview before retiring it.
+          window.requestAnimationFrame(() => window.requestAnimationFrame(() => {
+            if (!current()) return;
+            originalImage.style.opacity = '1';
+            const reduced = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+            fadeTimer = setTimeout(() => {
+              if (!current()) return;
+              originalImage.dataset.ready = 'true';
+              if (preview) { if (cached) preview.hidden = true; else { preview.remove(); preview = null; } }
+            }, reduced ? 0 : 180);
+          }));
         };
-        image.src = options.imageSource(path);
+        originalImage.src = options.imageSource(path);
       }
       const bitmap = options.getCoverPreview?.(path);
       showPreview(bitmap);
       if (cached) {
         // The existing thumbnail paints immediately; upgrade only to a bounded
-        // couch-size preview, never to seven full-resolution originals.
+        // couch-size preview, never to full-resolution originals for every card.
         Promise.resolve(options.loadCoverPreview?.(path, signal)).then(showPreview).catch(() => {});
       } else original();
       const select = value => {
         selected = value; if (!cached) return;
-        clearTimeout(timer);
+        clearTimeout(timer); if (!value || boxMode) clearTimeout(fadeTimer);
         if (value && !boxMode) timer = setTimeout(original, 250);
         else if (image) { image.onload = null; image.removeAttribute('src'); image.remove(); image = null; if (preview) preview.hidden = false; }
       };
       signal.addEventListener('abort', () => {
-        clearTimeout(timer); if (image) { image.onload = null; image.removeAttribute('src'); }
+        sizeObserver.disconnect();
+        clearTimeout(timer); clearTimeout(fadeTimer); if (image) { image.onload = null; image.removeAttribute('src'); }
         if (preview?.tagName === 'CANVAS') preview.width = preview.height = 0;
       }, { once: true });
       return select;
     }
     function renderCards() {
-      const index = games.findIndex(game => game.id === gameId), visible = carousel(games, Math.max(0, index));
+      dialog.dataset.view = boxMode ? 'box' : 'cover';
+      const index = games.findIndex(game => game.id === gameId);
+      const visible = carousel(games, Math.max(0, index), boxMode ? 4 : 3);
+      if (lastBoxSelection !== gameId) {
+        for (const id of [lastBoxSelection, gameId]) {
+          const node = cardNodes.get(id);
+          if (node?._interacted) { node._viewer?.reset(); node._interacted = false; }
+        }
+        lastBoxSelection = gameId;
+      }
       const keep = new Set(visible.map(({ item }) => item.id));
-      for (const [id, node] of cardNodes) if (!keep.has(id)) { node._abort.abort(); node.remove(); cardNodes.delete(id); }
+      for (const [id, node] of cardNodes) if (!keep.has(id)) {
+        node._abort.abort(); node.classList.remove('sofa-card'); node.classList.add('sofa-spare'); cardNodes.delete(id); spareCards.push(node);
+      }
       for (const { item, offset } of visible) {
         let node = cardNodes.get(item.id);
         const artKey = JSON.stringify([item.title, options.images(item).find(image => image.kind === 'cover')?.path]);
         if (!node) {
-          node = button('', () => { if (gameId === item.id) void launch(); else chooseGame(item.id, true); }, 'sofa-card');
+          node = spareCards.pop();
+          if (node) {
+            node.classList.remove('sofa-spare'); node.classList.add('sofa-card');
+            node._viewer?.clearArtwork?.(); node._renderedBoxKey = null;
+            node.style.transition = 'none';
+            const recycled = node;
+            window.requestAnimationFrame(() => window.requestAnimationFrame(() => {
+              if (recycled.isConnected) recycled.style.transition = '';
+            }));
+          }
+          if (!node) {
+            node = button('', () => { const id = Number(node.dataset.gameId); if (gameId === id) void launch(); else chooseGame(id, true); }, 'sofa-card');
+            node.append(element('div', 'sofa-card-art'));
+            node.append(element('div', 'sofa-box-placeholder'));
+            node._preview = element('div', 'game-box-stage sofa-preview'); node._preview.tabIndex = -1;
+            node._preview.setAttribute('aria-label', t('sofa.box'));
+            node._preview.addEventListener('click', event => {
+              if (gameId === Number(node.dataset.gameId)) event.stopPropagation();
+            });
+            for (const event of ['wheel','pointerdown']) node._preview.addEventListener(event, () => { node._interacted = true; }, { passive: true });
+            observer.observe(node._preview, { childList: true });
+            node.append(node._preview);
+          }
           node.dataset.gameId = item.id; node._abort = new AbortController();
-          const art = element('div', 'sofa-card-art'); node._selectArtwork = drawCover(art, item, node._abort.signal); node.append(art);
-          node.setAttribute('aria-label', item.title); cards.append(node); cardNodes.set(item.id, node);
+          const art = node.querySelector('.sofa-card-art'); art.replaceChildren();
+          node._selectArtwork = drawCover(art, item, node._abort.signal);
+          node.setAttribute('aria-label', item.title); if (!node.isConnected) cards.append(node); cardNodes.set(item.id, node);
           node._artKey = artKey;
         } else if (node._artKey !== artKey) {
           node._abort.abort(); node._abort = new AbortController();
           const art = node.querySelector('.sofa-card-art'); art.replaceChildren();
           node._selectArtwork = drawCover(art, item, node._abort.signal); node._artKey = artKey; node.setAttribute('aria-label', item.title);
         }
-        node.style.setProperty('--offset', offset); node.style.setProperty('--scale', 1 - Math.min(3, Math.abs(offset)) * 0.15);
-        node.style.setProperty('--turn', `${offset === 0 ? 0 : offset > 0 ? -24 : 24}deg`);
+        const distance = Math.abs(offset);
+        node.hidden = false;
+        const shape = root.OpenCabinet3D?.profileFor(item.platform, null, item.rom_path);
+        if (shape) { node.style.setProperty('--box-aspect', shape.width / shape.height); node.style.setProperty('--box-color', shape.color); }
+        const scale = boxMode ? (distance === 0 ? 1.2 : 1 - Math.min(3, distance) * 0.15)
+          : distance === 0 ? 1 : Math.max(.44, .86 - distance * .12);
+        // The first neighbors leave space for the enlarged center; subsequent
+        // neighbors sit closer together, especially as they become smaller.
+        const position = offset === 0 ? 0 : Math.sign(offset) * (1.2 + (distance - 1) * .76);
+        node.style.setProperty('--offset', offset); node.style.setProperty('--position', position); node.style.setProperty('--scale', scale);
+        node.style.setProperty('--turn', `${boxMode || offset === 0 ? 0 : offset > 0 ? -24 : 24}deg`);
+        node.style.setProperty('--cover-width-scale', offset === 0 ? 1 : 1 / Math.cos(24 * Math.PI / 180));
         node.style.zIndex = String(10 - Math.abs(offset)); node.classList.toggle('is-selected', offset === 0);
         node.tabIndex = offset === 0 ? 0 : -1; node.setAttribute('aria-current', String(offset === 0));
         node._selectArtwork?.(offset === 0);
+        node._boxKey = JSON.stringify([options.sourceGame(item), options.images(item)]);
+        // A warm shell can paint RAM artwork now. Only model construction or
+        // a style/backend change belongs in the deferred preparation queue.
+        if (boxMode && watchedGame === null && node._renderedBoxKey !== node._boxKey && node._settingsPlatform === item.platform
+          && node._viewer?.updateCachedArtwork?.(options.sourceGame(item), options.images(item), node._boxSettings)) {
+          node._renderedBoxKey = node._boxKey;
+        }
       }
+      for (const node of spareCards) node.hidden = true;
+      preparePreviews();
+      updateBoxVisibility();
       empty.hidden = games.length > 0; empty.textContent = t(query ? 'sofa.noResults' : 'sofa.empty');
       previous.hidden = next.hidden = games.length < 2;
       deck.classList.toggle('sofa-no-games', !games.length);
@@ -224,7 +364,7 @@
       const key = game ? JSON.stringify([game.id, game.title, game.rom_path, game.default_region_id, options.images(game), game.box_3d, boxMode]) : null;
       if (key === selectedKey) return;
       const token = ++selectionVersion;
-      selectedKey = key; clearPreview(); availability = null; status();
+      selectedKey = key; availability = null; status();
       const images = game ? options.images(game) : [];
       const path = (images.find(image => image.kind === 'fanart_background') || images.find(image => image.kind === 'screenshot'))?.path;
       backgroundAbort?.abort(); backgroundAbort = new AbortController();
@@ -244,16 +384,6 @@
         if (!active || token !== selectionVersion || gameId !== game.id) return;
         availability = { id: game.id, ...result }; status();
       }).catch(() => {});
-      if (!boxMode || watchedGame !== null) return;
-      previewTimer = setTimeout(async () => {
-        try {
-          const settings = await options.boxSettings(game);
-          if (!active || token !== selectionVersion || !boxMode || gameId !== game.id) return;
-          viewer = options.createViewer(preview);
-          viewer.update(options.sourceGame(game), options.images(game), settings);
-          dialog.dataset.hasBox = String(preview.children.length > 0);
-        } catch (error) { console.warn('Sofa 3D preview', error); clearPreview(); }
-      }, 130);
     }
     function chooseGame(id, focus = false) {
       if (!games.some(game => game.id === id)) return;
@@ -281,12 +411,12 @@
       boxMode = !boxMode; view.textContent = t(boxMode ? 'sofa.coverView' : 'sofa.boxView');
       view.setAttribute('aria-pressed', String(boxMode));
       try { window.localStorage.setItem('opencabinet.sofaView', boxMode ? 'box' : 'cover'); } catch {}
-      if (options.preferCachedArtwork) renderCards();
+      renderCards();
       refreshSelected();
     }
     async function restoreFocus() {
       try { await options.restoreFocus?.(); } catch (error) { options.onError(error); }
-      if (active) { selectedKey = null; refreshSelected(); zone = 'games'; focusCurrent(); padInput.reset(); }
+      if (active) { selectedKey = null; renderCards(); refreshSelected(); zone = 'games'; focusCurrent(); padInput.reset(); }
     }
     async function launch() {
       const game = selected(); if (!active || !game || busy || game.is_running || play.disabled) return;
@@ -304,7 +434,7 @@
         if (active) {
           status();
           if (pendingFocus) { pendingFocus = false; await restoreFocus(); }
-          else if (watchedGame === null) { selectedKey = null; refreshSelected(); focusCurrent(); }
+          else if (watchedGame === null) { selectedKey = null; renderCards(); refreshSelected(); focusCurrent(); }
         }
       }
     }
@@ -376,7 +506,7 @@
       if (name === 'back') { if (zone === 'games') { zone = 'platforms'; focusCurrent(); } else close(); return; }
       if (name === 'previousPlatform' || name === 'nextPlatform') { movePlatform(name === 'previousPlatform' ? -1 : 1); return; }
       if (name === 'view') { changeView(); return; }
-      if (name === 'turn') { viewer?.toggleSide(); return; }
+      if (name === 'turn') { const node = cardNodes.get(gameId); if (node) { node._interacted = true; node._viewer?.toggleSide(); } return; }
       if (name === 'up' || name === 'down') { zone = name === 'up' ? 'games' : 'platforms'; focusCurrent(); return; }
       if (name === 'left' || name === 'right') { (zone === 'platforms' ? movePlatform : moveGame)(name === 'left' ? -1 : 1); return; }
       if (name === 'accept') {
@@ -425,6 +555,8 @@
       watchedGame = null; wasRunning = false; pendingFocus = false; selectedKey = null;
       window.clearTimeout(frame); padInput.reset(); clearPreview();
       for (const node of cardNodes.values()) node._abort.abort();
+      spareCards.length = 0;
+      observer.disconnect();
       cardNodes.clear(); cards.replaceChildren(); platformNodes.clear(); rail.replaceChildren();
       dialog.close(); const old = lease; lease = null; void old?.release();
       opener?.focus?.({ preventScroll: true });
@@ -442,7 +574,7 @@
       }
     }, true);
     dialog.addEventListener('cancel', event => { event.preventDefault(); close(); });
-    dialog.addEventListener('close', () => { if (active) close(); });
+    dialog.addEventListener('close', () => { if (active && !dialog.open) close(); });
     dialog.addEventListener('contextmenu', event => { event.preventDefault(); event.stopPropagation(); }, true);
     dialog.addEventListener('focusin', event => {
       if (event.target.closest('.sofa-platform')) zone = 'platforms';

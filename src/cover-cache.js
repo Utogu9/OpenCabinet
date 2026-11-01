@@ -36,10 +36,10 @@
         finally { if (temporary) canvas.width = canvas.height = 0; }
       }
       if (!bytes) return;
-      if (fullCover) {
-        bitmap.previewBlob = new Blob([bytes], { type: 'image/webp' });
-        bitmap.previewSize = { width: bitmap.width, height: bitmap.height };
-      }
+      // Keep already-encoded bytes for 3D/CSS consumers too. Reusing this blob
+      // avoids encoding the decoded RAM thumbnail again on the UI thread.
+      bitmap.previewBlob = new Blob([bytes], { type: 'image/webp' });
+      bitmap.previewSize = { width: bitmap.width, height: bitmap.height };
       try { if (persist) await persist(bytes); }
       catch { /* A cache write must never prevent displaying the cover. */ }
     }

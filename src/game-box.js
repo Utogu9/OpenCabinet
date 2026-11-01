@@ -153,7 +153,7 @@
   }
   const initialRotation = () => multiply(axisAngle([1,0,0], -9), axisAngle([0,1,0], 28));
 
-  function createViewer(host, { imageSource = (path) => path, getCoverPreview = () => null, loadCoverPreview = null, onProfile = () => {}, onOpenState = () => {}, loadManual = null, onManualState = () => {}, onManualCoverChange = () => {}, onManualActivate = () => false, onManualDeactivate = () => {} } = {}) {
+  function createViewer(host, { imageSource = (path) => path, getCoverPreview = () => null, loadCoverPreview = null, onProfile = () => {}, onOpenState = () => {}, loadManual = null, onManualState = () => {}, onManualCoverChange = () => {}, onManualActivate = () => false, onManualDeactivate = () => {}, carousel = false, deferArtwork = false } = {}) {
     const dvd = globalThis.OpenCabinetDVD;
     const model = document.createElement("div"); model.className = "game-box-model";
     model.setAttribute("aria-hidden", "true"); host.replaceChildren(model);
@@ -287,7 +287,9 @@
       // Rotation doesn't change the viewport. Measure only after a resize,
       // before any DOM writes, rather than synchronously reading layout per frame.
       if (!viewport) {
-        viewport = host.getBoundingClientRect();
+        // Fit in layout pixels. Ancestor carousel transforms change the screen
+        // rectangle without resizing this host and must not alter the model fit.
+        viewport = { width: host.clientWidth, height: host.clientHeight };
         // The compact sidebar needs less framing; fullscreen and previews keep
         // their original framing. Cache this together with the viewport bounds.
         viewportFill = host.closest?.("#game-box-slot") ? .98 : .86;
@@ -298,7 +300,9 @@
       if (model.dataset.open !== openValue) model.dataset.open = openValue;
       if (model.dataset.manualInteractive !== manualValue) model.dataset.manualInteractive = manualValue;
       const diameter = movement?.diameter || Math.hypot(profile.width, profile.height, profile.depth);
-      const scale = Math.max(0.01, Math.min(rect.width, rect.height) * viewportFill / diameter) * zoom;
+      const fit = carousel && opened === 0 ? Math.min(rect.height * .78 / profile.height, rect.width * .9 / profile.width)
+        : Math.max(0.01, Math.min(rect.width, rect.height) * viewportFill / diameter);
+      const scale = fit * zoom;
       // Lay out at the largest displayed size; opening only scales DOWN and
       // moves three rigid assemblies. Zoom/fullscreen still refresh resolution.
       const geometryScale = Math.max(scale, Math.max(.01, Math.min(rect.width, rect.height) * viewportFill / referenceDiameter) * zoom);
@@ -650,7 +654,7 @@
             preview.remove(); preview.width = preview.height = 0;
             previews = previews.filter(canvas => canvas !== preview); preview = null;
           };
-          if (kind === "cover") {
+          if (kind === "cover" && !deferArtwork) {
             try {
               const bitmap = getCoverPreview(wrapped ? individual?.path : artwork.path);
               if (bitmap?.width && bitmap.height) {
@@ -731,7 +735,7 @@
           textures.push(image); face.appendChild(image);
           if (wrapLayer) face.appendChild(wrapLayer);
           if (preview) face.appendChild(preview);
-          const start = () => { if (!disposed && token === revision) image.src = imageSource(artwork.path); };
+          const start = () => { if (!deferArtwork && !disposed && token === revision) image.src = imageSource(artwork.path); };
           if (kind === "cover" || coverFinished) start(); else secondaryTextures.push(start);
         }
         const spineFace = profile.spineFace === "top" ? "top" : "left";
@@ -1110,10 +1114,12 @@
     };
     return api;
   }
+  const legacyViewer = (host, options) => options.carousel && globalThis.OpenCabinetCarouselBoxes
+    ? globalThis.OpenCabinetCarouselBoxes.createLegacy(host, options, createViewer) : createViewer(host, options);
   globalThis.OpenCabinet3D = { resolveSettings,
     createViewer: (host, options = {}) => globalThis.OpenCabinetThreeBoxes
-      ? globalThis.OpenCabinetThreeBoxes.createRouter(host, options, createViewer, profileFor, resolveSettings)
-      : createViewer(host, options), profileFor, regionFor, jewelFamily,
+      ? globalThis.OpenCabinetThreeBoxes.createRouter(host, options, legacyViewer, profileFor, resolveSettings)
+      : legacyViewer(host, options), profileFor, regionFor, jewelFamily,
     formats: Object.entries(formats).map(([id, [width, height, depth, label]]) => ({ id, width, height, depth, label })),
     math: { multiply, axisAngle, between, matrix, rotate } };
 })();

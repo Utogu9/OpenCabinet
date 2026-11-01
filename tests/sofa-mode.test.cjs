@@ -1,12 +1,12 @@
 const {test}=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('node:vm');
 const {carousel,platformsFor,createPadInput,wrap}=vm.runInThisContext('(function(module){'+fs.readFileSync('src/sofa-mode.js','utf8')+';return module.exports;})({exports:{}})');
 
-test('The carousel keeps one selected game and at most seven unique items, wrapping around either end',()=>{
+test('The carousel keeps unique covers or nine preloaded boxes, wrapping around either end',()=>{
   for(const count of [0,1,2,3,6,7,8,400,2000]){
     const games=Array.from({length:count},(_,id)=>({id}));
-    for(const selected of [0,Math.max(0,count-1)]){
-      const window=carousel(games,selected);
-      assert.equal(window.length,Math.min(7,count));
+    for(const selected of [0,Math.max(0,count-1)])for(const radius of [3,4]){
+      const window=carousel(games,selected,radius);
+      assert.equal(window.length,Math.min(radius*2+1,count));
       assert.equal(new Set(window.map(entry=>entry.item.id)).size,window.length);
       if(count)assert.equal(window.find(entry=>entry.offset===0).item.id,selected);
     }

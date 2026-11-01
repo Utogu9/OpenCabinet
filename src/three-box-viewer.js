@@ -94,8 +94,9 @@ export async function createViewer(host, options={}) {
   });relief.reset();
   let disposed=false,game=null,profile=null,key=null,revision=0,artController=null,manualController=null,manual=null,manualExtracted=false,manualBackTask=null,manualPreviewReady=false;
   let frame=null,opened=0,openTarget=false,animation=null,zoom=1,side='front',rotationLock='free',rotation=initialRotation(),drag=null;
-  let distance=400,viewportWidth=0,viewportHeight=0,layoutDirty=true,menu=null;
+  let distance=400,viewportWidth=0,viewportHeight=0,layoutDirty=true,menu=null,framingBounds=null;
   const textures=new Set(),manualTextures=new Set(),listeners=[];
+  const retiredTextures=[],blankTextures=new Map();
   let insertTheme='black';
   const insertTextures={};
   for(const [theme,file] of [['black','insert.webp'],['white','insert2.webp'],['ps1','ps1-insert.webp']]) {
@@ -136,15 +137,26 @@ export async function createViewer(host, options={}) {
     if(layoutDirty) {
       contents.position.set(0,0,0);root.quaternion.identity();root.scale.set(1,1,1);root.updateMatrixWorld(true);
       const box=new THREE.Box3().setFromObject(contents),size=box.getSize(new THREE.Vector3());
+      framingBounds=box;
       contents.position.copy(box.getCenter(new THREE.Vector3()).negate());
       root.scale.set(profile.width/142,profile.height/125,profile.depth/10);
       const tangent=Math.tan(THREE.MathUtils.degToRad(camera.fov/2));
       distance=Math.max(size.y*root.scale.y,size.x*root.scale.x/camera.aspect)/(2*tangent)*1.12+size.z*root.scale.z/2;
       layoutDirty=false;
     }
-    root.quaternion.fromArray(rotation);camera.position.set(0,0,distance/zoom);camera.lookAt(0,0,0);
+    root.quaternion.fromArray(rotation);
+    if(options.carousel && opened===0 && framingBounds) {
+      const center=framingBounds.getCenter(new THREE.Vector3()),tangent=Math.tan(THREE.MathUtils.degToRad(camera.fov/2));
+      distance=0;
+      for(const x of [framingBounds.min.x,framingBounds.max.x])for(const y of [framingBounds.min.y,framingBounds.max.y])for(const z of [framingBounds.min.z,framingBounds.max.z]) {
+        const p=new THREE.Vector3(x,y,z).sub(center).multiply(root.scale).applyQuaternion(root.quaternion);
+        distance=Math.max(distance,Math.abs(p.y)/(tangent*.78)+p.z,Math.abs(p.x)/(tangent*camera.aspect*.9)+p.z);
+      }
+    }
+    camera.position.set(0,0,distance/zoom);camera.lookAt(0,0,0);
     relief.update(opened,`${rotation.join(',')};${opened};${root.scale.toArray().join(',')}`,manualExtracted);
     renderer.render(scene,camera);
+    retiredTextures.splice(0).forEach(texture=>texture.dispose());
     host.dataset.triangles=String(renderer.info.render.triangles);host.dataset.drawCalls=String(renderer.info.render.calls);
   }
   function textureFor(image,kind,full=false,region=null) {
@@ -167,6 +179,19 @@ export async function createViewer(host, options={}) {
   }
   function assign(kind,texture) {
     const material=materials[kind],previous=material.map;
+    if(options.carousel && kind!=='insert') {
+      let next=texture;
+      if(!next) {
+        if(!blankTextures.has(kind)){const blank=new THREE.Texture(globalThis.OpenCabinetCarouselBoxes.blankImage());blank.colorSpace=THREE.SRGBColorSpace;blank.needsUpdate=true;blankTextures.set(kind,blank);}
+        next=blankTextures.get(kind);
+      }
+      // Upload first, switch maps second, retire the cached texture only after
+      // a frame using its replacement. The material always keeps a map.
+      renderer.initTexture(next);material.map=next;material.color.set(texture?0xffffff:0xe7e4db);
+      if(!previous)material.needsUpdate=true;
+      if(previous!==next&&textures.delete(previous))retiredTextures.push(previous);
+      schedule();return;
+    }
     if(previous!==texture && textures.delete(previous))previous.dispose();
     material.map=texture;material.color.set(texture?0xffffff:0xe7e4db);
     if(kind==='insert')fitInsert(texture);
@@ -218,6 +243,7 @@ export async function createViewer(host, options={}) {
     const texture=textureFor(canvas,'cover');textures.add(texture);assign('cover',texture);
   }
   function imageAt(path,signal,priority='auto') {
+    if(options.carousel && globalThis.OpenCabinetCarouselBoxes)return globalThis.OpenCabinetCarouselBoxes.loadOriginal(path,signal,imageSource);
     return new Promise((resolve,reject)=>{
       const image=new Image();image.crossOrigin='anonymous';image.decoding='async';image.fetchPriority=priority;
       const abort=()=>{image.src='';reject(new DOMException('Aborted','AbortError'));};
@@ -232,10 +258,10 @@ export async function createViewer(host, options={}) {
     let originalCoverReady=false;
     function source(path){if(!imageTasks.has(path))imageTasks.set(path,imageAt(path,signal,path===art.cover?'high':'low'));return imageTasks.get(path);}
     const current=()=>!disposed&&token===revision&&!signal.aborted;
-    function showPreview(preview) {
+    function showPreview(preview,full=!!art.full) {
       if(!preview||!current()||originalCoverReady||manual||manualPreviewReady)return;
-      selectInsertForCover(preview,!!art.full);
-      const texture=textureFor(preview,'cover',!!art.full);textures.add(texture);assign('cover',texture);
+      selectInsertForCover(preview,full);
+      const texture=textureFor(preview,'cover',full);textures.add(texture);assign('cover',texture);
     }
     // The booklet is the front artwork when a manual exists. Do not briefly
     // paint the game's cached/original cover while discovering or preparing it.
@@ -244,7 +270,10 @@ export async function createViewer(host, options={}) {
       if(!art.cover){titleInsert();return;}
       const preview=options.getCoverPreview?.(art.cover);
       if(preview)showPreview(preview);
-      else if(options.loadCoverPreview)Promise.resolve(options.loadCoverPreview(art.cover,signal)).then(showPreview).catch(()=>{});
+      else {
+        if(options.carousel&&art.full){const individual=chooseArtwork(images.filter(image=>image.kind!=='box_full')).cover;const cached=individual&&options.getCoverPreview?.(individual);if(cached)showPreview(cached,false);}
+        if(options.loadCoverPreview)Promise.resolve(options.loadCoverPreview(art.cover,signal)).then(preview=>showPreview(preview)).catch(()=>{});
+      }
     }).catch(()=>{});
     function put(material,image,kind,full=false,region=null) {
       const texture=textureFor(image,kind,full,region);textures.add(texture);assign(material,texture);
@@ -266,18 +295,21 @@ export async function createViewer(host, options={}) {
     }
     async function applySpines(path,full=false) {
       if(!path)return;
+      if(options.carousel)try {const preview=await globalThis.OpenCabinetCarouselBoxes?.cachedImage(path,signal,options);if(preview&&current()){put('spine_left',preview,'spine',full);put('spine_right',preview,'spine',full);}}catch{}
       try{const image=await source(path);if(!current())return;
         put('spine_left',image,'spine',full);put('spine_right',image,'spine',full);
       }catch{/* Keep the plain side inserts. */}
     }
     async function applyRear() {
       if(art.full) {
+        if(options.carousel)try {const preview=await globalThis.OpenCabinetCarouselBoxes?.cachedImage(art.full,signal,options);if(preview&&current()){put('back_cover',preview,'back_cover',true);put('spine_left',preview,'spine',true);put('spine_right',preview,'spine',true);}}catch{}
         try {const image=await source(art.full);if(!current())return;
           put('back_cover',image,'back_cover',true);put('spine_left',image,'spine',true);put('spine_right',image,'spine',true);return;
         }catch{if(!current())return;}
       }
       const individual=chooseArtwork(images.filter(image=>image.kind!=='box_full'));
       if(individual.back_cover) {
+        if(options.carousel)try {const preview=await globalThis.OpenCabinetCarouselBoxes?.cachedImage(individual.back_cover,signal,options);if(preview&&current()){const windows=dreamcastInsertWindows(preview.width,preview.height);put('back_cover',preview,'back_cover',false,windows.center);if(windows.folded){put('spine_left',preview,'spine',false,windows.left);put('spine_right',preview,'spine',false,windows.right);}}}catch{}
         try {
           const image=await source(individual.back_cover);if(!current())return;
           const windows=dreamcastInsertWindows(image.naturalWidth||image.width,image.naturalHeight||image.height);
@@ -322,7 +354,7 @@ export async function createViewer(host, options={}) {
     // Prioritize the full front, while the cached inlay can already fill the tray.
     const coverTask=applyCover(),inlayTask=applyInlay();
     // The other faces wait for the front download, never for PDF rendering.
-    const otherTask=(art.cover?source(art.cover).catch(()=>{}):Promise.resolve()).then(()=>{
+    const otherTask=(art.cover&&!options.carousel?source(art.cover).catch(()=>{}):Promise.resolve()).then(()=>{
       if(current())return Promise.all([applyRear(),applyDisc()]);
     });
     await Promise.all([coverTask,inlayTask,otherTask]);
@@ -451,6 +483,12 @@ export async function createViewer(host, options={}) {
   listen(canvas,'webglcontextrestored',()=>{relief.reset();schedule();});
   const resize=new ResizeObserver(()=>{layoutDirty=true;closeMenu();schedule();});resize.observe(host);
   const api={
+    clearArtwork() {
+      revision++;artController?.abort();clearManual();key=null;
+      insertMesh.visible=true;
+      for(const kind of ['cover','back_cover','spine_left','spine_right','disc','paper','paper_spine_left','paper_spine_right'])assign(kind,null);
+      if(!options.carousel){textures.forEach(texture=>texture.dispose());textures.clear();}selectInsert();schedule();
+    },
     update(nextGame,images,settings=null) {
       const nextProfile=globalThis.OpenCabinet3D.profileFor(nextGame.platform,null,nextGame.rom_path,globalThis.OpenCabinet3D.resolveSettings(settings,nextGame.box_3d));
       const nextKey=JSON.stringify([nextGame.id,nextGame.title,images,nextProfile]);if(disposed||nextKey===key)return;
@@ -490,9 +528,11 @@ export async function createViewer(host, options={}) {
     clear(){revision++;stopDrag();closeMenu();artController?.abort();artController=null;clearManual();
       for(const kind of ['cover','back_cover','spine_left','spine_right','disc','paper','paper_spine_left','paper_spine_right'])assign(kind,null);
       meshes.find(mesh=>mesh.name==='dreamcast-insert').visible=true;selectInsert();
-      textures.forEach(texture=>texture.dispose());textures.clear();game=null;key=null;
+      if(!options.carousel){textures.forEach(texture=>texture.dispose());textures.clear();}game=null;key=null;
       if(frame!==null){cancelAnimationFrame(frame);frame=null;}relief.reset();renderer.clear();notify();},
     dispose(){api.clear();disposed=true;resize.disconnect();listeners.forEach(([target,name,callback,config])=>target.removeEventListener(name,callback,config));
+      textures.forEach(texture=>texture.dispose());textures.clear();
+      retiredTextures.splice(0).forEach(texture=>texture.dispose());blankTextures.forEach(texture=>texture.dispose());blankTextures.clear();
       relief.dispose();meshes.forEach(mesh=>mesh.geometry.dispose());new Set(Object.values(materials)).forEach(material=>material.dispose());
       Object.values(insertTextures).forEach(texture=>texture.dispose());ribsTexture.dispose();environmentTarget.dispose();renderer.dispose();renderer.forceContextLoss();canvas.remove();host.classList.remove('game-box-webgl');
       delete host.dataset.renderer;delete host.dataset.triangles;delete host.dataset.drawCalls;},

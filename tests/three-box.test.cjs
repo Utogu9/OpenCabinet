@@ -76,6 +76,21 @@ test('Late module responses cannot replace a newly selected platform',async()=>{
   app.api.update({id:1,platform:'Dreamcast'},[]);app.api.update({id:2,platform:'PS2'},[]);
   resolve();await tick();assert.equal(app.viewers.length,1);assert.equal(app.viewers[0].type,'css');assert.equal(app.viewers[0].disposed,false);
 });
+
+test('Warm artwork updates reuse a ready backend and reject geometry/backend changes',async()=>{
+  const app=router(async make=>({createViewer:()=>make('three')}));
+  app.api.update({id:1,platform:'PS2'},[]);
+  app.viewers[0].updateCachedArtwork=(game,images)=>{app.viewers[0].calls.push(['cached',game,images]);return true;};
+  assert.equal(app.api.updateCachedArtwork({id:2,platform:'PS2'},[{kind:'cover',path:'ram'}]),true);
+  assert.equal(app.viewers[0].calls.at(-1)[0],'cached');
+  assert.equal(app.api.updateCachedArtwork({id:3,platform:'Dreamcast'},[]),false);
+  assert.equal(app.viewers[0].disposed,false);
+  app.api.update({id:3,platform:'Dreamcast'},[]);await tick();
+  assert.equal(app.api.updateCachedArtwork({id:4,platform:'Dreamcast'},[{kind:'cover',path:'ram'}]),true);
+  assert.equal(app.viewers.at(-1).calls.at(-1)[1].id,4);
+  assert.equal(app.api.updateCachedArtwork({id:5,platform:'PS2'},[]),false);
+  app.api.dispose();
+});
 test('Updates and controls during loading apply to the most recently selected game',async()=>{
   let resolve;const app=router(make=>new Promise(done=>{resolve=()=>done({createViewer:()=>make('three')});}));
   app.api.update({id:1,platform:'Dreamcast'},[]);app.api.update({id:2,platform:'Dreamcast'},[{kind:'cover',path:'latest'}]);

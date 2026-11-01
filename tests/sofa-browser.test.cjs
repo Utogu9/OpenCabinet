@@ -12,18 +12,18 @@ test('Couch mode carousels, controller selectors, launch return and cleanup work
     const file=path.resolve(root,'.'+pathname);
     if(!file.startsWith(root+path.sep)){res.writeHead(403).end();return;}
     fs.readFile(file,(error,bytes)=>{if(error){res.writeHead(404).end();return;}
-      res.setHeader('Content-Type',({'.js':'text/javascript','.css':'text/css'})[path.extname(file)]||'application/octet-stream');res.end(bytes);});
+      res.setHeader('Content-Type',({'.js':'text/javascript','.css':'text/css','.svg':'image/svg+xml','.webp':'image/webp'})[path.extname(file)]||'application/octet-stream');res.end(bytes);});
   });
   await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));t.after(()=>new Promise(resolve=>{server.closeAllConnections();server.close(resolve);}));
-  const browser=await chromium.launch({executablePath:executable,headless:true});t.after(()=>browser.close());
-  const page=await browser.newPage({viewport:{width:1440,height:900}}),errors=[];
+  const browser=await chromium.launch({executablePath:executable,headless:true,args:['--enable-unsafe-swiftshader']});t.after(()=>browser.close());
+  const page=await browser.newPage({viewport:{width:1440,height:900}}),errors=[],graphicsErrors=[];
   page.setDefaultTimeout(10000);
   page.on('pageerror',error=>errors.push(error.message));
-  page.on('console',message=>{if(message.type()==='warning'||message.type()==='error')console.log(message.text());});
+  page.on('console',message=>{if(/GL_INVALID_(?:VALUE|OPERATION)|WebGL:.*INVALID_/.test(message.text()))graphicsErrors.push(message.text());if(message.type()==='warning'||message.type()==='error')console.log(message.text());});
   await page.goto(`http://127.0.0.1:${server.address().port}/`);
   const messages=JSON.parse(fs.readFileSync('src/locales/en-US.json','utf8')).messages;
   await page.evaluate(messages=>{window.OpenCabinetI18n={t:(key,...values)=>(messages[key]||key).replace(/\{(\d+)\}/g,(token,index)=>values[index]??token)};},messages);
-  for(const name of ['dvd-case.js','game-box.js','game-discs.js','game-regions.js','sofa-mode.js'])await page.addScriptTag({url:`/src/${name}`});
+  for(const name of ['dvd-case.js','image-fallbacks.js','game-box.js','carousel-boxes.js','three-box-router.js','game-discs.js','game-regions.js','sofa-mode.js'])await page.addScriptTag({url:`/src/${name}`});
   await page.evaluate(messages=>{
     window.OpenCabinetI18n={t:(key,...values)=>(messages[key]||key).replace(/\{(\d+)\}/g,(token,index)=>values[index]??token)};
     const image=(text,color)=>'data:image/svg+xml,'+encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="480" height="680"><rect width="480" height="680" fill="${color}"/><path d="M0 140 480 430V680H0Z" fill="#0003"/><text x="35" y="75" font-family="sans-serif" font-size="22" fill="white">OpenCabinet</text><text x="35" y="320" font-family="sans-serif" font-size="34" fill="white">${text}</text></svg>`);
@@ -38,7 +38,7 @@ test('Couch mode carousels, controller selectors, launch return and cleanup work
       ]}
     ].map((game,index)=>({...game,session_count:0,play_time_seconds:0,is_running:false,images:[{kind:'cover',path:image(game.title,['#235bb8','#b74620','#53883e','#7150a8'][index])}]}));
     const platforms=[{id:1,name:'Sony PlayStation 2'},{id:2,name:'Nintendo Wii'},{id:3,name:'Empty console'}];
-    window.fixture={launches:[],minimized:false,restores:0,releases:0,reads:0,missing:false};
+    window.fixture={launches:[],minimized:false,restores:0,releases:0,reads:0,missing:false,liveViewers:0,createdViewers:0};
     window.fixturePad={id:'Fixture standard controller',index:0,connected:true,mapping:'standard',axes:[0,0],buttons:Array.from({length:17},()=>({pressed:false,value:0}))};
     Object.defineProperty(navigator,'getGamepads',{configurable:true,value:()=>{window.fixture.reads++;return [window.fixturePad];}});
     window.fixtureOptions={document,window,games:()=>fixtureGames,platforms:()=>platforms,
@@ -46,7 +46,12 @@ test('Couch mode carousels, controller selectors, launch return and cleanup work
       formatPlayTime:game=>`${game.session_count} sessions`,variantLabel:game=>game.regions?'2 regions':game.discs?.length>1?'2 discs':'',
       sortGames:games=>[...games].sort((a,b)=>a.title.localeCompare(b.title)),
       platformDetails:async platform=>({images:[{kind:'logo',path:image(platform.name.includes('Sony')?'PS2':'Wii','#252c3c')}]}),
-      boxSettings:async()=>null,createViewer:host=>window.OpenCabinet3D.createViewer(host,{imageSource:path=>path}),
+      boxSettings:async()=>null,createViewer:host=>{
+        const viewer=window.OpenCabinet3D.createViewer(host,{carousel:true,imageSource:path=>path,
+          getCoverPreview:path=>fixtureOptions.getCoverPreview?.(path),loadCoverPreview:(path,signal)=>fixtureOptions.loadCoverPreview?.(path,signal)}),dispose=viewer.dispose;
+        fixture.liveViewers++;fixture.createdViewers++;
+        viewer.dispose=()=>{fixture.liveViewers--;dispose();};return viewer;
+      },
       availability:async()=>({available:!fixture.missing}),
       focus:()=>document.getElementById('sofa-mode').focus(),
       minimize:async()=>{fixture.minimized=true;},restoreFocus:async()=>{fixture.minimized=false;fixture.restores++;},
@@ -72,11 +77,37 @@ test('Couch mode carousels, controller selectors, launch return and cleanup work
   await page.keyboard.press('ArrowRight');assert.equal(await page.locator('#sofa-game-title').textContent(),'Gran Turismo 4');
   await press(15);assert.equal(await page.locator('#sofa-game-title').textContent(),'Regional fixture');
   await page.waitForFunction(()=>document.getElementById('sofa-mode').dataset.hasBox==='true');
+  await page.waitForFunction(()=>document.querySelectorAll('.sofa-card[data-has-box="true"]').length===4);
+  assert.equal(await page.locator('.sofa-card.is-selected').evaluate(node=>Number(node.style.getPropertyValue('--scale'))),1.2);
+  assert.equal(await page.evaluate(()=>fixture.liveViewers),4,'Every visible game has its own 3D viewer');
+  const created=await page.evaluate(()=>fixture.createdViewers);
+  await page.keyboard.press('ArrowRight');await page.waitForTimeout(350);
+  assert.equal(await page.evaluate(()=>fixture.createdViewers),created,'Moving selection reuses neighboring viewers');
+  await page.keyboard.press('ArrowLeft');
   await page.waitForFunction(()=>document.querySelectorAll('.sofa-platform-art img').length===2);
+  await page.waitForTimeout(300);
   fs.mkdirSync('target',{recursive:true});await page.screenshot({path:'target/sofa-boxes.png'});
   await page.click('#sofa-view');assert.equal(await page.locator('#sofa-view').getAttribute('aria-pressed'),'false');
-  assert.equal(await page.locator('.sofa-preview').isVisible(),false);
+  assert.equal(await page.locator('.sofa-preview:visible').count(),0);
+  assert.equal(await page.evaluate(()=>fixture.liveViewers),0,'Switching to covers releases every 3D viewer');
+  const appearance=await page.locator('.sofa-card').evaluateAll(nodes=>nodes.map(node=>({opacity:getComputedStyle(node).opacity,filter:getComputedStyle(node).filter})));
+  assert.ok(appearance.every(card=>card.opacity==='1'&&card.filter==='none'),'All covers keep full opacity and brightness');
+  await page.waitForTimeout(300);
+  const proportions=await page.locator('.sofa-card:not(.is-selected) .sofa-cover').evaluateAll(images=>images.filter(image=>!image.hidden).map(image=>{
+    const rect=image.getBoundingClientRect(),card=image.closest('.sofa-card');
+    return {ratio:rect.width/rect.height,original:(image.naturalWidth||image.width)/(image.naturalHeight||image.height),scale:Number(card.style.getPropertyValue('--scale'))};
+  }));
+  assert.ok(proportions.length>0&&proportions.every(image=>Math.abs(image.ratio/image.original-1)<.05&&image.scale<=.74),
+    'Smaller neighboring covers retain their aspect ratio while turning toward the selected game: '+JSON.stringify(proportions));
+  const positions=await page.locator('.sofa-card').evaluateAll(nodes=>nodes.map(node=>{
+    const rect=node.getBoundingClientRect();return {offset:Number(node.style.getPropertyValue('--offset')),center:rect.x+rect.width/2};
+  }));
+  const centerAt=offset=>positions.find(card=>card.offset===offset).center;
+  assert.ok(centerAt(1)-centerAt(0)>(centerAt(2)-centerAt(1))*1.4,'Nearest neighbors leave more space around the selection than farther neighbors');
   await page.screenshot({path:'target/sofa-covers.png'});
+  await page.click('#sofa-view');
+  await page.waitForFunction(()=>fixture.liveViewers===4);
+  await page.click('#sofa-view');
   await page.locator('.sofa-card.is-selected').focus();
   await press(0);await page.waitForSelector('.disc-dialog[open]');
   await press(1);await page.waitForFunction(()=>!document.querySelector('.disc-dialog[open]'));
@@ -108,9 +139,143 @@ test('Couch mode carousels, controller selectors, launch return and cleanup work
     fixtureOptions.preferCachedArtwork=true;fixtureOptions.getCoverPreview=()=>preview;fixtureOptions.loadCoverPreview=async()=>preview;
     fixtureSofa.open();
   });
-  await page.locator('.sofa-platform[data-platform=""]').click();await page.waitForTimeout(400);
+  await page.locator('.sofa-platform[data-platform=""]').click();
+  await page.waitForFunction(()=>{
+    const art=document.querySelector('.sofa-card.is-selected .sofa-card-art'),original=art.querySelector('.sofa-cover-original'),preview=art.querySelector('canvas');
+    return original?.isConnected&&preview&&!preview.hidden&&Number(getComputedStyle(original).opacity)<1;
+  });
+  assert.equal(await page.locator('.sofa-card.is-selected canvas.sofa-cover').isVisible(),true,'The cached cover stays under the decoded original during the fade');
+  await page.waitForFunction(()=>document.querySelector('.sofa-card.is-selected .sofa-cover-original')?.dataset.ready==='true');
   assert.equal(await page.locator('.sofa-card').count(),4);
   assert.equal(await page.evaluate(()=>fixture.cachedOriginals.length),1,'Only the selected 2D cover loads its original; neighboring cards reuse cached previews');
+  const smallPreviews=await page.locator('.sofa-card:not(.is-selected) canvas.sofa-cover').evaluateAll(nodes=>nodes.map(node=>({source:node.height,displayed:node.getBoundingClientRect().height})));
+  assert.ok(smallPreviews.length>0&&smallPreviews.every(image=>image.displayed>image.source),'Low-resolution cached covers fill the carousel instead of keeping their native pixel size');
   await page.keyboard.press('Escape');
+  assert.equal(await page.evaluate(()=>fixture.liveViewers),0);
+  await page.evaluate(()=>{
+    const game=fixtureGames[0];
+    window.fixtureGames=Array.from({length:12},(_,i)=>({...game,id:100+i,title:`Game ${String(i).padStart(2,'0')}`,regions:null,is_running:false}));
+    fixture.pendingSettings=[];fixtureOptions.boxSettings=()=>new Promise(resolve=>fixture.pendingSettings.push(resolve));
+    fixtureSofa.open({platform:null});
+  });
+  await page.click('#sofa-view');
+  await page.waitForFunction(()=>fixture.pendingSettings.length===1);
+  await page.click('#sofa-view');
+  await page.click('#sofa-view');
+  await page.waitForFunction(()=>fixture.pendingSettings.length===2);
+  await page.evaluate(()=>fixture.pendingSettings[0](null));
+  await page.waitForTimeout(100);
+  assert.equal(await page.evaluate(()=>fixture.liveViewers),0,'An earlier box-mode request cannot replace a newer request for the same game');
+  await page.click('#sofa-view');
+  await page.evaluate(()=>{fixture.pendingSettings.forEach(resolve=>resolve(null));fixtureOptions.boxSettings=async()=>null;});
+  await page.waitForTimeout(100);
+  assert.equal(await page.evaluate(()=>fixture.liveViewers),0,'Late settings responses cannot recreate boxes after switching to covers');
+  await page.click('#sofa-view');
+  await page.waitForFunction(()=>fixture.liveViewers===9);
+  assert.deepEqual(await page.locator('.sofa-card').evaluateAll(nodes=>nodes.map(node=>Number(node.style.getPropertyValue('--offset'))).sort((a,b)=>a-b)),[-4,-3,-2,-1,0,1,2,3,4]);
+  await page.keyboard.press('ArrowRight');await page.waitForTimeout(400);
+  assert.equal(await page.evaluate(()=>fixture.liveViewers),9,'Incoming games reuse the fixed viewer pool');
+  const poolSize=await page.evaluate(()=>fixture.createdViewers);
+  await page.evaluate(()=>{
+    fixture.savedSettings=fixtureOptions.boxSettings;fixture.extraSettingsReads=0;
+    fixtureOptions.boxSettings=()=>{fixture.extraSettingsReads++;return new Promise(()=>{});};
+  });
+  await page.keyboard.press('ArrowRight');
+  assert.equal(await page.evaluate(()=>[...document.querySelectorAll('.sofa-card')].every(node=>node.dataset.boxReady==='true')),true,
+    'Warm boxes apply their new artwork during navigation instead of waiting for the model queue');
+  assert.equal(await page.evaluate(()=>fixture.extraSettingsReads),0,'A ready case does not wait for another platform-settings request');
+  await page.evaluate(()=>{fixtureOptions.boxSettings=fixture.savedSettings;});
+  await page.evaluate(()=>{fixture.moldedFaces=[...document.querySelectorAll('.sofa-card .game-box-front')];});
+  await page.evaluate(()=>{
+    for(let i=0;i<40;i++)document.querySelector('.sofa-card.is-selected').dispatchEvent(new KeyboardEvent('keydown',{key:'ArrowRight',bubbles:true}));
+  });
+  await page.waitForFunction(()=>document.querySelectorAll('.sofa-card[data-box-ready="true"]').length===9);
+  assert.equal(await page.evaluate(()=>fixture.createdViewers),poolSize,'Rapid navigation recycles viewers instead of constructing new models');
+  assert.equal(await page.evaluate(()=>[...document.querySelectorAll('.sofa-card .game-box-front')].every(face=>fixture.moldedFaces.includes(face))),true,
+    'Rapid navigation retains the molded geometry, not just the viewer wrapper');
+  assert.equal(await page.locator('.sofa-card-art:visible').count(),0,'3D mode never falls back to flat covers');
+  await page.evaluate(()=>{
+    const node=document.querySelector('.sofa-card.is-selected');fixture.zoomedNode=node;fixture.initialScale=node.querySelector('.game-box-model').style.getPropertyValue('--box-scale');
+    node._preview.dispatchEvent(new WheelEvent('wheel',{deltaY:-100,bubbles:true,cancelable:true}));
+  });
+  await page.waitForFunction(()=>fixture.zoomedNode.querySelector('.game-box-model').style.getPropertyValue('--box-scale')!==fixture.initialScale);
+  await page.keyboard.press('ArrowRight');
+  await page.waitForFunction(()=>fixture.zoomedNode.querySelector('.game-box-model').style.getPropertyValue('--box-scale')===fixture.initialScale);
+  await page.evaluate(()=>{
+    const base=fixtureGames[0];
+    window.fixtureGames=Array.from({length:18},(_,i)=>({...base,id:100+i,title:`Game ${String(i).padStart(2,'0')}`,
+      platform:'Nintendo DS',rom_path:`/fixture/Game ${i} (${i%2?'Europe':'USA'}).nds`}));
+    fixtureSofa.refresh();
+  });
+  await page.waitForFunction(()=>document.querySelectorAll('.sofa-card[data-box-ready="true"]').length===9);
+  const heldSamples=await page.evaluate(async()=>{
+    const samples=[];
+    for(let i=0;i<20;i++){
+      document.querySelector('.sofa-card.is-selected').dispatchEvent(new KeyboardEvent('keydown',{key:'ArrowRight',repeat:true,bubbles:true}));
+      await new Promise(resolve=>setTimeout(resolve,80));
+      samples.push({selected:document.querySelector('.sofa-card.is-selected').dataset.boxReady==='true',
+        ready:document.querySelectorAll('.sofa-card[data-box-ready="true"]').length});
+    }
+    return samples;
+  });
+  assert.ok(heldSamples.every(sample=>sample.selected&&sample.ready>=8),
+    'Alternating physical regional cases keep loading while direction is held, without waiting for release: '+JSON.stringify(heldSamples));
+  await page.keyboard.press('Escape');
+  assert.equal(await page.evaluate(()=>fixture.liveViewers),0,'Closing box mode releases all visible viewers');
+  await page.evaluate(()=>{
+    window.fixtureGames=fixtureGames.slice(0,2).map(game=>({...game,platform:'Sega Dreamcast'}));
+    fixtureSofa.open();
+  });
+  try { await page.waitForFunction(()=>document.querySelectorAll('.sofa-preview[data-renderer="three"] canvas').length===2); }
+  catch(error) { console.log('Couch model state',await page.evaluate(()=>({active:fixtureSofa.active,view:document.getElementById('sofa-mode').dataset.view,live:fixture.liveViewers,
+    cards:[...document.querySelectorAll('.sofa-card')].map(node=>({id:node.dataset.gameId,ready:node.dataset.boxReady,children:node._preview.childElementCount,renderer:node._preview.dataset.renderer})),errors:[]})));throw error; }
+  assert.equal(await page.evaluate(()=>fixture.liveViewers),2,'Both the selected and neighboring Dreamcast boxes use Three.js');
+  await page.fill('.sofa-search','Game 00');
+  await page.waitForFunction(()=>document.querySelectorAll('.sofa-card').length===1&&document.querySelector('.sofa-card').dataset.hasBox==='true');
+  await page.evaluate(()=>{fixture.previousCanvas=document.querySelector('.sofa-preview canvas');fixture.previousViewers=fixture.createdViewers;});
+  await page.fill('.sofa-search','Game 01');
+  await page.waitForFunction(()=>document.querySelector('.sofa-card[data-game-id="101"]')?.dataset.hasBox==='true');
+  assert.equal(await page.evaluate(()=>document.querySelector('.sofa-preview canvas')===fixture.previousCanvas&&fixture.createdViewers===fixture.previousViewers),true,
+    'Changing the game reuses the same Three.js canvas and model');
+  await page.keyboard.press('Escape');
+  assert.equal(await page.evaluate(()=>fixture.liveViewers),0);
+  await page.evaluate(()=>{
+    const stage=document.createElement('div');stage.className='game-box-stage';Object.assign(stage.style,{width:'490px',height:'480px'});document.body.append(stage);
+    const bitmap=document.createElement('canvas');bitmap.width=96;bitmap.height=136;bitmap.getContext('2d').fillRect(0,0,96,136);
+    fixture.cacheLoads=0;fixture.cacheStage=stage;
+    fixture.cacheViewer=OpenCabinet3D.createViewer(stage,{carousel:true,getCoverPreview:()=>bitmap,imageSource:path=>{fixture.cacheLoads++;return path;}});
+    fixture.cacheViewer.update({...fixtureGames[0],platform:'Nintendo GameCube'},fixtureGames[0].images);
+  });
+  await page.waitForFunction(()=>fixture.cacheStage.dataset.artworkReady==='true');
+  assert.equal(await page.evaluate(()=>fixture.cacheLoads),0,'The cached cover is applied to the 3D case before requesting the original');
+  await page.evaluate(()=>{fixture.originalFace=fixture.cacheStage.querySelector('.game-box-front');fixture.cubeHeight=fixture.originalFace.getBoundingClientRect().height;});
+  await page.waitForFunction(()=>fixture.cacheStage.querySelectorAll('.game-box-front .game-box-wrap-texture.loaded').length===2);
+  assert.equal(await page.evaluate(()=>{
+    const layers=[...fixture.cacheStage.querySelectorAll('.game-box-front .game-box-wrap-texture.loaded')];
+    return layers[0].style.backgroundImage.includes('image/webp')&&layers[1].style.backgroundImage.includes('image/svg');
+  }),true,'Cached and original prints overlap on the same case face before retiring the cache');
+  await page.waitForFunction(()=>fixture.cacheLoads>0&&fixture.cacheStage.querySelector('.game-box-front .game-box-wrap-texture').style.backgroundImage.includes('image/svg'));
+  assert.equal(await page.evaluate(()=>fixture.cacheStage.querySelector('.game-box-front')===fixture.originalFace),true,'The original replaces only the print, preserving the molded geometry');
+  assert.equal(await page.evaluate(()=>fixture.cacheViewer.updateCachedArtwork({...fixtureGames[0],platform:'Nintendo GameCube',box_3d:{base:{color:'#143fff'}}},fixtureGames[0].images)),true,
+    'A plastic color change uses the immediate artwork path');
+  assert.equal(await page.evaluate(()=>fixture.cacheStage.querySelector('.game-box-front')===fixture.originalFace),true,'Changing plastic color retains the molded faces');
+  assert.equal(await page.evaluate(()=>fixture.cacheStage.querySelector('.game-box-model').style.getPropertyValue('--box-material')),'#143fff');
+  await page.evaluate(()=>fixture.cacheViewer.update({...fixtureGames[0],id:999,platform:'Nintendo Switch'},fixtureGames[0].images));
+  await page.waitForTimeout(100);
+  const heightRatio=await page.evaluate(()=>fixture.cacheStage.querySelector('.game-box-front').getBoundingClientRect().height/fixture.cubeHeight);
+  assert.ok(Math.abs(heightRatio-1)<.1,'Switch and GameCube share a consistent visible height: '+heightRatio);
+  await page.evaluate(()=>{fixture.cacheViewer.dispose();fixture.cacheStage.remove();});
+  await page.evaluate(()=>{
+    const stage=document.createElement('div');stage.className='game-box-stage';Object.assign(stage.style,{width:'490px',height:'480px'});document.body.append(stage);
+    const path=fixtureGames[0].images[0].path,bitmap=document.createElement('canvas');bitmap.width=96;bitmap.height=136;
+    bitmap.getContext('2d').fillRect(0,0,96,136);fixture.cacheStage=stage;
+    fixture.cacheViewer=OpenCabinet3D.createViewer(stage,{carousel:true,imageSource:value=>value,
+      getCoverPreview:value=>value===path?bitmap:null,loadCoverPreview:()=>new Promise(resolve=>{fixture.finishWrap=resolve;})});
+    fixture.cacheViewer.update({...fixtureGames[0],platform:'Nintendo GameCube'},[{kind:'box_full',path:'held-full-wrap'},{kind:'cover',path}]);
+  });
+  assert.equal(await page.evaluate(()=>fixture.cacheStage.dataset.artworkReady), 'true',
+    'A resident front cover paints immediately even while the preferred full wrap is still loading');
+  await page.evaluate(()=>{fixture.cacheViewer.dispose();fixture.cacheStage.remove();fixture.finishWrap(null);});
   assert.deepEqual(errors,[]);
+  assert.deepEqual(graphicsErrors,[],'Texture upgrades and recycled models do not produce WebGL errors');
 });
