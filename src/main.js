@@ -700,6 +700,12 @@ function mediaImage(path, alt, className = "", onError = null) {
   return image;
 }
 
+function invalidateCatalogArtwork(path) {
+  if (!path) return;
+  catalogCoverCache?.invalidate(path);
+  catalogCoverCache?.invalidate(`sofa:${path}`);
+}
+
 function createCatalogCoverLoader(root) {
   if (!root || !window.IntersectionObserver || !window.OpenCabinetCovers) return null;
   catalogFullCoverPaths = new Set(allGames.flatMap(game => [game, ...(game.regions || []).map(region => region.game)]).flatMap(game => gameImages(game).filter(image => image.kind === "box_full").map(image => image.path)));
@@ -711,8 +717,9 @@ function createCatalogCoverLoader(root) {
     let warned = false;
     const decodePath = preferences.cacheMode === "disk" ? window.OpenCabinetCovers.createPersistentDecoder({
       decode, toUrl: imageSource,
+      decodeCached: window.OpenCabinetRuntime?.linux ? window.OpenCabinetCovers.createImageDecoder() : decode,
       optionsFor: source => ({ fullCover: catalogFullCoverPaths.has(source)||catalogInlayPaths.has(source) }),
-      lookup: source => invoke("cover_cache_entry", { source, cacheDirectory, fullCover: catalogFullCoverPaths.has(source), ...(catalogInlayPaths.has(source)?{previewKind:'inlay'}:{}) }),
+      lookup: source => invoke("cover_cache_entry", { source, cacheDirectory, fullCover: catalogFullCoverPaths.has(source), ...(catalogInlayPaths.has(source)?{previewKind:'inlay'}:{}), ...(window.OpenCabinetRuntime?.linux?{prepareNative:true}:{}) }),
       store: (source, key, thumbnailBytes) => invoke("store_cover_thumbnail", { source, key, cacheDirectory, fullCover: catalogFullCoverPaths.has(source), ...(catalogInlayPaths.has(source)?{previewKind:'inlay'}:{}), thumbnailBytes: Array.from(thumbnailBytes) }),
       onError: error => {
         if (!warned) { warned = true; console.warn("Caché de portadas:", error); showToast(globalThis.OpenCabinetI18n.t("msg.44b28132ce"), true); }
@@ -3439,9 +3446,9 @@ function setupGameEditor() {
       allGames = allGames.map((game) => game.id === updated.id ? updated : game);
       // An image can be replaced in place. Recheck its disk signature after editing.
       const editedCover = displayGameImages(updated).find(image => image.kind === "cover")?.path;
-      if (editedCover) catalogCoverCache?.invalidate(editedCover);
-      gameImages(updated).filter(image => ['box_full','inlay'].includes(image.kind)).forEach(image => catalogCoverCache?.invalidate(image.path));
-      updated.regions?.forEach(region => gameImages(region.game).forEach(image => catalogCoverCache?.invalidate(image.path)));
+      invalidateCatalogArtwork(editedCover);
+      gameImages(updated).forEach(image => invalidateCatalogArtwork(image.path));
+      updated.regions?.forEach(region => gameImages(region.game).forEach(image => invalidateCatalogArtwork(image.path)));
       if (variables !== null) libraryGameVariables[details.id] = variables;
       allGames.sort((a, b) => a.title.localeCompare(b.title, globalThis.OpenCabinetI18n.locale));
       // Mantiene visible el juego editado si cambió de consola o de título.
@@ -5766,12 +5773,28 @@ async function setupTitlebar() {
 function setupSofaMode() {
   if (!window.OpenCabinetSofa) return;
   const appWindow = window.__TAURI__?.window?.getCurrentWindow?.();
+  let sofaImageDecoder = null;
+  const loadSofaPreview = path => {
+    const signal = new AbortController().signal;
+    if (!catalogCoverCache) return Promise.resolve(null);
+    if (!window.OpenCabinetRuntime?.linux || preferences.cacheMode !== 'disk') return catalogCoverCache.load(path, signal);
+    sofaImageDecoder ||= window.OpenCabinetCovers.createImageDecoder();
+    return catalogCoverCache.load(`sofa:${path}`, signal, async (_, requestSignal) => {
+      // Larger cached artwork stays sharp in the couch carousel, without
+      // decoding every neighboring game's original inside WebKitGTK.
+      const entry = await invoke('cover_cache_entry', { source: path, cacheDirectory: preferences.cacheDirectory || null, fullCover: true, prepareNative: true });
+      return sofaImageDecoder(imageSource(entry.cached ? entry.path : path), requestSignal);
+    });
+  };
   sofaMode = window.OpenCabinetSofa.create({
     document, window,
     games: () => allGames, platforms: () => allPlatforms,
     images: displayGameImages, sourceGame: game => ({ ...regionalGame(game), title: game.title }),
     imageSource, formatPlayTime, variantLabel: gameVariantLabel,
-    getCoverPreview: path => catalogCoverCache?.get(path),
+    getCoverPreview: path => catalogCoverCache?.get(`sofa:${path}`) || catalogCoverCache?.get(path),
+    preferCachedArtwork: window.OpenCabinetRuntime?.linux === true,
+    // Finish shared thumbnail jobs into the cache even if couch mode is closed.
+    loadCoverPreview: loadSofaPreview,
     sortGames: games => {
       const sorted = [...games].sort((a, b) => a.title.localeCompare(b.title));
       return window.OpenCabinetOrder?.apply(sorted, allGames) || sorted;

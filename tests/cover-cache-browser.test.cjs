@@ -23,7 +23,7 @@ test('Workers keep each cover attached to the correct game through batch loads a
   await page.addScriptTag({ url: '/cover-cache.js' });
   await page.addScriptTag({ content: fs.readFileSync(path.join(__dirname, 'helpers/cover-cache-browser.js'), 'utf8') });
   for (const transferPixels of [false, true]) {
-    const result = await page.evaluate(transferPixels => checkCoverCachePixels({ transferPixels }), transferPixels);
+    const result = await page.evaluate(transferPixels => checkCoverCachePixels({ transferPixels, imageCache: transferPixels }), transferPixels);
     assert.deepEqual(result.cold, [], 'Newly generated covers retain their pixels');
     assert.deepEqual(result.rebuilt, [], 'Reordering the grid must not swap or blank covers');
     assert.deepEqual(result.restored, [], 'Persisted thumbnails retain their pixels');

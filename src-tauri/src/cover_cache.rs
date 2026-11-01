@@ -6,8 +6,8 @@ use std::{
     io::Write,
     path::{Path, PathBuf},
     sync::{
-        Mutex,
         atomic::{AtomicU64, Ordering},
+        Mutex,
     },
     time::UNIX_EPOCH,
 };
@@ -15,6 +15,8 @@ use tauri::Manager;
 
 static WRITER: Mutex<()> = Mutex::new(());
 static SEQUENCE: AtomicU64 = AtomicU64::new(0);
+#[cfg(target_os = "linux")]
+static PREPARERS: tokio::sync::Semaphore = tokio::sync::Semaphore::const_new(2);
 
 fn error(e: impl std::fmt::Display) -> String {
     e.to_string()
@@ -30,7 +32,11 @@ fn directory(custom: Option<&str>) -> Result<PathBuf, String> {
     }
     // Linux thumbnails now use independent CPU pixel buffers. Rebuild previews
     // produced by the previous WebKitGTK graphics-surface transfer path.
-    Ok(root.join(if cfg!(target_os = "linux") { "covers-v3" } else { "covers-v2" }))
+    Ok(root.join(if cfg!(target_os = "linux") {
+        "covers-v3"
+    } else {
+        "covers-v2"
+    }))
 }
 
 fn hash(value: impl Hash) -> String {
@@ -151,12 +157,18 @@ fn validate_thumbnail(bytes: &[u8]) -> Result<(), String> {
 }
 
 fn encode_rgba(pixels: &[u8], width: u32, height: u32) -> Result<Vec<u8>, String> {
-    if width == 0 || height == 0 || width > 1280 || height > 800
-        || pixels.len() != width as usize * height as usize * 4 {
+    if width == 0
+        || height == 0
+        || width > 1280
+        || height > 800
+        || pixels.len() != width as usize * height as usize * 4
+    {
         return Err(crate::i18n::text("msg.e8627b5d9f").into());
     }
     let bytes = webp::Encoder::from_rgba(pixels, width, height)
-        .encode_simple(false, 90.0).map_err(|e| format!("{e:?}"))?.to_vec();
+        .encode_simple(false, 90.0)
+        .map_err(|e| format!("{e:?}"))?
+        .to_vec();
     validate_thumbnail(&bytes)?;
     Ok(bytes)
 }
@@ -164,22 +176,35 @@ fn encode_rgba(pixels: &[u8], width: u32, height: u32) -> Result<Vec<u8>, String
 // WebKitGTK can decode WebP but may encode PNG when asked for WebP. Accept
 // bounded RGBA bytes through binary IPC and encode away from the UI thread.
 #[tauri::command]
-pub async fn encode_cover_thumbnail(request: tauri::ipc::Request<'_>) -> Result<tauri::ipc::Response, String> {
-    let dimension = |name: &str| request.headers().get(name).and_then(|v| v.to_str().ok())
-        .and_then(|v| v.parse::<u32>().ok()).ok_or_else(|| crate::i18n::text("msg.e8627b5d9f").to_string());
+pub async fn encode_cover_thumbnail(
+    request: tauri::ipc::Request<'_>,
+) -> Result<tauri::ipc::Response, String> {
+    let dimension = |name: &str| {
+        request
+            .headers()
+            .get(name)
+            .and_then(|v| v.to_str().ok())
+            .and_then(|v| v.parse::<u32>().ok())
+            .ok_or_else(|| crate::i18n::text("msg.e8627b5d9f").to_string())
+    };
     let width = dimension("x-thumbnail-width")?;
     let height = dimension("x-thumbnail-height")?;
     let tauri::ipc::InvokeBody::Raw(pixels) = request.body() else {
         return Err(crate::i18n::text("msg.b6879469aa").into());
     };
     // Check the payload before cloning or spawning any work.
-    if width == 0 || height == 0 || width > 1280 || height > 800
-        || pixels.len() != width as usize * height as usize * 4 {
+    if width == 0
+        || height == 0
+        || width > 1280
+        || height > 800
+        || pixels.len() != width as usize * height as usize * 4
+    {
         return Err(crate::i18n::text("msg.e8627b5d9f").into());
     }
     let pixels = pixels.clone();
     let bytes = tauri::async_runtime::spawn_blocking(move || encode_rgba(&pixels, width, height))
-        .await.map_err(error)??;
+        .await
+        .map_err(error)??;
     Ok(tauri::ipc::Response::new(bytes))
 }
 
@@ -231,6 +256,41 @@ fn store(source: &Path, root: &Path, expected: &str, thumbnail_bytes: &[u8]) -> 
     result
 }
 
+// Large originals must never enter WebKit merely to prepare a small grid cover.
+// Decode, resize and encode on a bounded native worker pool instead.
+#[cfg(target_os = "linux")]
+fn prepare_native(source: &Path, root: &Path, full_cover: bool) -> Result<Entry, String> {
+    use image::ImageDecoder;
+    let mut result = entry(source, root)?;
+    if result.cached {
+        return Ok(result);
+    }
+    let mut reader = image::ImageReader::open(source)
+        .map_err(error)?
+        .with_guessed_format()
+        .map_err(error)?;
+    let mut limits = image::Limits::default();
+    limits.max_image_width = Some(32768);
+    limits.max_image_height = Some(32768);
+    limits.max_alloc = Some(512 * 1024 * 1024);
+    reader.limits(limits);
+    let mut decoder = reader.into_decoder().map_err(error)?;
+    let orientation = decoder.orientation().map_err(error)?;
+    let mut original = image::DynamicImage::from_decoder(decoder).map_err(error)?;
+    original.apply_orientation(orientation);
+    let (width, height) = if full_cover { (1280, 800) } else { (320, 400) };
+    let small = if original.width() <= width && original.height() <= height {
+        original
+    } else {
+        original.thumbnail(width, height)
+    }
+    .to_rgba8();
+    let bytes = encode_rgba(small.as_raw(), small.width(), small.height())?;
+    store(source, root, &result.key, &bytes)?;
+    result.cached = true;
+    Ok(result)
+}
+
 #[tauri::command]
 pub async fn cover_cache_entry(
     app: tauri::AppHandle,
@@ -238,13 +298,31 @@ pub async fn cover_cache_entry(
     cache_directory: Option<String>,
     full_cover: Option<bool>,
     preview_kind: Option<PreviewKind>,
+    prepare_native: Option<bool>,
 ) -> Result<Entry, String> {
+    #[cfg(target_os = "linux")]
+    let _permit = if prepare_native.unwrap_or(false) {
+        Some(PREPARERS.acquire().await.map_err(error)?)
+    } else {
+        None
+    };
+    #[cfg(not(target_os = "linux"))]
+    let _ = prepare_native;
     let result = tauri::async_runtime::spawn_blocking(move || {
         let root = directory(cache_directory.as_deref())?;
-        entry(
-            Path::new(&source),
-            &preview_directory(root, full_cover.unwrap_or(false), preview_kind),
-        )
+        let root = preview_directory(root, full_cover.unwrap_or(false), preview_kind);
+        #[cfg(target_os = "linux")]
+        if prepare_native.unwrap_or(false) {
+            // SVG and unusual image formats keep the browser fallback.
+            if let Ok(result) = self::prepare_native(
+                Path::new(&source),
+                &root,
+                full_cover.unwrap_or(false) || matches!(preview_kind, Some(PreviewKind::Inlay)),
+            ) {
+                return Ok(result);
+            }
+        }
+        entry(Path::new(&source), &root)
     })
     .await
     .map_err(error)??;
@@ -340,6 +418,54 @@ mod tests {
     const PNG: &[u8] = include_bytes!("../icons/32x32.png");
     const WEBP: &[u8] = include_bytes!("../tests/fixtures/cover-thumbnail.webp");
 
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn native_preparation_resizes_preserves_alpha_reuses_and_invalidates_cached_files() {
+        let files = Files::new();
+        let source = files.0.join("large.png");
+        image::RgbaImage::from_pixel(640, 960, image::Rgba([180, 60, 30, 128]))
+            .save(&source)
+            .unwrap();
+        let root = files.0.join("cache");
+        let first = prepare_native(&source, &root, false).unwrap();
+        assert!(first.cached);
+        let bytes = fs::read(&first.path).unwrap();
+        let decoded = webp::Decoder::new(&bytes).decode().unwrap();
+        assert_eq!((decoded.width(), decoded.height()), (267, 400));
+        assert!(decoded.is_alpha());
+        assert!(decoded.chunks_exact(4).all(|pixel| pixel[3] == 128));
+        let modified = fs::metadata(&first.path).unwrap().modified().unwrap();
+        assert_eq!(
+            prepare_native(&source, &root, false).unwrap().path,
+            first.path
+        );
+        assert_eq!(
+            fs::metadata(&first.path).unwrap().modified().unwrap(),
+            modified
+        );
+        image::RgbaImage::from_pixel(640, 960, image::Rgba([10, 120, 240, 255]))
+            .save(&source)
+            .unwrap();
+        let second = prepare_native(&source, &root, false).unwrap();
+        assert_ne!(first.path, second.path);
+        assert!(!Path::new(&first.path).exists());
+        let full = prepare_native(&source, &files.0.join("full"), true).unwrap();
+        let bytes = fs::read(full.path).unwrap();
+        let decoded = webp::Decoder::new(&bytes).decode().unwrap();
+        assert_eq!((decoded.width(), decoded.height()), (533, 800));
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn native_preparation_rejects_unsupported_sources_without_creating_partial_cache_files() {
+        let files = Files::new();
+        let root = files.0.join("cache");
+        let source = files.0.join("broken.png");
+        fs::write(&source, b"not an image").unwrap();
+        assert!(prepare_native(&source, &root, false).is_err());
+        assert!(!root.exists());
+    }
+
     #[test]
     fn native_encoder_produces_valid_webp_from_bounded_rgba_pixels() {
         let pixels = [180, 60, 30, 128].repeat(40 * 56);
@@ -348,9 +474,12 @@ mod tests {
         let decoded = webp::Decoder::new(&bytes).decode().unwrap();
         assert_eq!((decoded.width(), decoded.height()), (40, 56));
         assert!(decoded.is_alpha());
-        assert!(decoded.chunks_exact(4).all(|pixel|
-            (pixel[0] as i16 - 180).abs() <= 5 && (pixel[1] as i16 - 60).abs() <= 5
-            && (pixel[2] as i16 - 30).abs() <= 5 && pixel[3] == 128));
+        assert!(decoded
+            .chunks_exact(4)
+            .all(|pixel| (pixel[0] as i16 - 180).abs() <= 5
+                && (pixel[1] as i16 - 60).abs() <= 5
+                && (pixel[2] as i16 - 30).abs() <= 5
+                && pixel[3] == 128));
         for (width, height) in [(0, 1), (1, 0), (1281, 1), (1, 801), (u32::MAX, u32::MAX)] {
             assert!(encode_rgba(&[], width, height).is_err());
         }

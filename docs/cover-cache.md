@@ -6,6 +6,15 @@ RGBA independientes en lugar de superficies gráficas transferidas. Esto evita
 compartir esas superficies entre miniaturas en WebKitGTK. Si el navegador no puede
 codificar WebP, Rust realiza la codificación al 90 % fuera del hilo de interfaz,
 mediante IPC binario. Se mantienen los límites de RAM y la caché persistente.
+En modo disco, Linux prepara los formatos raster habituales directamente en Rust,
+con dos trabajos simultáneos: lectura, reducción y WebP se hacen fuera de WebKit.
+La interfaz conserva imágenes decodificadas y muestra copias de los elementos
+`img` del archivo pequeño, sin transferir ni volver a pintar buffers de píxeles
+por cada portada. SVG y otros casos no soportados conservan la alternativa del
+worker. El modo sofá muestra primero estas miniaturas y prepara vistas de hasta
+1280 × 800 para los laterales y su fondo dentro de la misma caché limitada;
+solo la portada seleccionada en vista 2D solicita la original después de una
+breve pausa. Windows mantiene su recorrido actual.
 Las rutas `covers-v2` indicadas a continuación corresponden a Windows.
 
 En **Opciones → Preferencias → Datos de usuario** se puede elegir entre:
@@ -19,7 +28,7 @@ La carpeta de caché puede elegirse mediante **Examinar**. La ruta personalizada
 
 Cada nombre de miniatura incluye una clave de la ruta original y una versión calculada a partir de su tamaño y fecha de modificación con precisión de nanosegundos. En cada lectura desde disco se verifica la versión; si cambió, se genera una miniatura nueva y se retira la versión anterior de esa misma portada. Después de editar un juego también se invalida su miniatura en RAM. Las imágenes originales no se sobrescriben.
 
-La decodificación, reducción y codificación WebP con calidad del 90 % se realizan en `cover-worker.js`. Los comandos Rust de `cover_cache.rs` ejecutan las consultas de archivos y escrituras fuera del hilo de interfaz. La miniatura se escribe primero en un temporal y se publica cuando está completa. Una escritura tardía se rechaza si cambió el original. Un archivo de caché dañado se regenera; un error de acceso permite seguir mostrando las portadas mediante RAM, con un aviso.
+La decodificación, reducción y codificación WebP con calidad del 90 % se realizan en `cover-worker.js`, o directamente en Rust para los formatos raster de la caché de disco en Linux. Los comandos Rust de `cover_cache.rs` ejecutan las consultas de archivos y escrituras fuera del hilo de interfaz. La miniatura se escribe primero en un temporal y se publica cuando está completa. Una escritura tardía se rechaza si cambió el original. Un archivo de caché dañado se regenera; un error de acceso permite seguir mostrando las portadas mediante RAM, con un aviso.
 
 La caché es descartable: se puede borrar con OpenCabinet cerrado y se reconstruye sin descargar nuevamente las imágenes. No contiene datos de los juegos ni sustituye las colecciones de imágenes y sus manifiestos. Los cambios externos a una imagen ya retenida en RAM se reconocerán cuando vuelva a consultarse su caché en disco, por ejemplo al reiniciar la aplicación.
 

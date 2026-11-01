@@ -41,7 +41,7 @@ test('Couch mode carousels, controller selectors, launch return and cleanup work
     window.fixture={launches:[],minimized:false,restores:0,releases:0,reads:0,missing:false};
     window.fixturePad={id:'Fixture standard controller',index:0,connected:true,mapping:'standard',axes:[0,0],buttons:Array.from({length:17},()=>({pressed:false,value:0}))};
     Object.defineProperty(navigator,'getGamepads',{configurable:true,value:()=>{window.fixture.reads++;return [window.fixturePad];}});
-    window.fixtureSofa=window.OpenCabinetSofa.create({document,window,games:()=>fixtureGames,platforms:()=>platforms,
+    window.fixtureOptions={document,window,games:()=>fixtureGames,platforms:()=>platforms,
       images:game=>game.images||[],sourceGame:game=>game.regions?.[0].game||game,imageSource:path=>path,
       formatPlayTime:game=>`${game.session_count} sessions`,variantLabel:game=>game.regions?'2 regions':game.discs?.length>1?'2 discs':'',
       sortGames:games=>[...games].sort((a,b)=>a.title.localeCompare(b.title)),
@@ -61,7 +61,8 @@ test('Couch mode carousels, controller selectors, launch return and cleanup work
         setTimeout(()=>{game.is_running=false;fixtureSofa.updateStatistics(game);},1200);
         return {is_running:true};
       }
-    });
+    };
+    window.fixtureSofa=window.OpenCabinetSofa.create(window.fixtureOptions);
     document.getElementById('open').onclick=()=>fixtureSofa.open();
   },messages);
   async function press(index){await page.evaluate(index=>{fixturePad.buttons[index]={pressed:true,value:1};},index);await page.waitForTimeout(85);await page.evaluate(index=>{fixturePad.buttons[index]={pressed:false,value:0};},index);await page.waitForTimeout(65);}
@@ -99,5 +100,17 @@ test('Couch mode carousels, controller selectors, launch return and cleanup work
   const reads=await page.evaluate(()=>fixture.reads);await page.waitForTimeout(150);
   assert.equal(await page.evaluate(()=>fixture.reads),reads);
   assert.equal(await page.locator('#sofa-mode').count(),1);
+  await page.evaluate(()=>{
+    fixture.missing=false;fixture.cachedOriginals=[];
+    const paths=new Set(fixtureGames.flatMap(game=>game.images.map(image=>image.path)));
+    fixtureOptions.imageSource=path=>{if(paths.has(path))fixture.cachedOriginals.push(path);return path;};
+    const preview=document.createElement('canvas');preview.width=96;preview.height=136;preview.getContext('2d').fillRect(0,0,96,136);
+    fixtureOptions.preferCachedArtwork=true;fixtureOptions.getCoverPreview=()=>preview;fixtureOptions.loadCoverPreview=async()=>preview;
+    fixtureSofa.open();
+  });
+  await page.locator('.sofa-platform[data-platform=""]').click();await page.waitForTimeout(400);
+  assert.equal(await page.locator('.sofa-card').count(),4);
+  assert.equal(await page.evaluate(()=>fixture.cachedOriginals.length),1,'Only the selected 2D cover loads its original; neighboring cards reuse cached previews');
+  await page.keyboard.press('Escape');
   assert.deepEqual(errors,[]);
 });

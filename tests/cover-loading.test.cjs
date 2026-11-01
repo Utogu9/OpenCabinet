@@ -58,6 +58,24 @@ function library(limit = 400, options = {}) {
   };
 }
 
+test('Native cached image elements display without canvas readback and survive RAM eviction independently', () => {
+  const app = library(), cover = app.cover('cached.webp');
+  const bitmap = { previewImage: true, width: 267, height: 400, closed: false,
+    close() { this.closed = true; }, cloneNode() { return { tag:'img', src:'cached.webp', setAttribute(){} }; } };
+  app.cache.put('cached.webp', bitmap); app.visibility([cover, true]);
+  assert.equal(cover.children[0].tag, 'img');assert.equal(cover.children[0].src, 'cached.webp');
+  app.cache.invalidate('cached.webp');assert.equal(bitmap.closed, true);
+  assert.equal(cover.children[0].src, 'cached.webp');
+});
+
+test('Cached previews use the image decoder, while unsupported native preparation retains the original fallback', async () => {
+  const {api}=library(),calls=[];
+  const decoder=api.createPersistentDecoder({lookup:async path=>({cached:path==='cached',path:'thumb.webp',key:'key'}),store:async()=>{},toUrl:path=>path,
+    decode:async path=>{calls.push('worker:'+path);return {};},decodeCached:async path=>{calls.push('image:'+path);return {};}});
+  await decoder('cached',new AbortController().signal);await decoder('svg.svg',new AbortController().signal);
+  assert.deepEqual(calls,['image:thumb.webp','worker:svg.svg']);
+});
+
 test("Alphabetical prefetch prepares offscreen covers, two at a time, up to the configured limit", async () => {
   const app = library(3);
   ["A", "B", "C", "D", "E"].forEach((file) => app.cover(file));
@@ -286,6 +304,14 @@ test("The library prewarms full covers and routes their disk lookups and decoder
   await vm.runInContext('catalogCoverCache.load("full.jpg",new AbortController().signal)',context);
   assert.equal(calls[0].source,'full.jpg');assert.equal(calls[0].fullCover,true);
   assert.equal(decodes[0].fullCover,true);
+});
+
+test('Editing artwork invalidates both library and couch previews of the same file',()=>{
+  const invalidated=[],context=vm.createContext({window:{addEventListener(){},__TAURI__:{core:{invoke(){}}}}});
+  vm.runInContext(fs.readFileSync(path.join(__dirname,'../src/main.js'),'utf8'),context);
+  context.invalidated=invalidated;
+  vm.runInContext(`catalogCoverCache={invalidate:path=>invalidated.push(path)};invalidateCatalogArtwork('cover.jpg');invalidateCatalogArtwork(null);`,context);
+  assert.deepEqual(invalidated,['cover.jpg','sofa:cover.jpg']);
 });
 
 test('Dreamcast and PS1 inlays and manuals prewarm across regions while sharing the configured RAM cache',async()=>{

@@ -158,14 +158,37 @@
 
   // Disk stores compressed thumbnails; a bounded RAM layer still keeps the
   // visible/recent decoded bitmaps. Disk capacity never limits prefetching.
-  function createPersistentDecoder({ decode, lookup, store, toUrl, optionsFor = () => ({}), onError = () => {} }) {
+  function createImageDecoder() {
+    return async (url, signal, unused = null, { fullCover = false } = {}) => {
+      if (signal.aborted) throw abortError();
+      const image = document.createElement('img');
+      image.decoding = 'async'; image.loading = 'eager'; image.crossOrigin = 'anonymous'; image.previewImage = true;
+      let rejectLoad;
+      const cancel = () => { image.removeAttribute('src'); rejectLoad?.(abortError()); };
+      signal.addEventListener('abort', cancel, { once: true });
+      try {
+        await new Promise((resolve, reject) => { rejectLoad = reject; image.onload = resolve; image.onerror = reject; image.src = url; });
+        if (image.decode) await image.decode();
+        if (signal.aborted) throw abortError();
+        if (fullCover) {
+          const response = await fetch(url, { signal });
+          if (response.ok) { image.previewBlob = await response.blob(); image.previewSize = { width: image.naturalWidth, height: image.naturalHeight }; }
+        }
+        image.close = () => image.removeAttribute('src');
+        return image;
+      } catch (error) { image.removeAttribute('src'); throw error; }
+      finally { image.onload = image.onerror = null; signal.removeEventListener('abort', cancel); }
+    };
+  }
+
+  function createPersistentDecoder({ decode, decodeCached = decode, lookup, store, toUrl, optionsFor = () => ({}), onError = () => {} }) {
     const persistent = async (path, signal) => {
       let entry;
       try { entry = await lookup(path); }
       catch (error) { onError(error); }
       if (signal.aborted) throw abortError();
       if (entry?.cached) {
-        try { return await decode(toUrl(entry.path), signal, null, optionsFor(path)); }
+        try { return await decodeCached(toUrl(entry.path), signal, null, optionsFor(path)); }
         catch (error) { if (signal.aborted) throw abortError(); }
       }
       const persist = entry ? async thumbnailBytes => {
@@ -263,13 +286,13 @@
 
     function show(record, bitmap) {
       if (!record.visible || !record.container.isConnected || record.canvas) return;
-      const canvas = document.createElement("canvas");
-      canvas.width = bitmap.width;
-      canvas.height = bitmap.height;
+      const canvas = bitmap.previewImage ? bitmap.cloneNode(false) : document.createElement("canvas");
+      if (!bitmap.previewImage) { canvas.width = bitmap.width; canvas.height = bitmap.height; }
       canvas.className = record.className;
       canvas.setAttribute("role", "img");
       canvas.setAttribute("aria-label", record.title);
-      canvas.getContext("2d", { willReadFrequently: window.OpenCabinetRuntime?.linux === true }).drawImage(bitmap, 0, 0);
+      if (bitmap.previewImage) canvas.alt = record.title;
+      else canvas.getContext("2d", { willReadFrequently: window.OpenCabinetRuntime?.linux === true }).drawImage(bitmap, 0, 0);
       record.container.style.setProperty("--cover-ratio", String(bitmap.width / bitmap.height));
       record.container.classList.add("has-cover");
       record.canvas = canvas;
@@ -389,5 +412,5 @@
     };
   }
 
-  window.OpenCabinetCovers = { createCache, createDecoder, createPersistentDecoder, createLoader };
+  window.OpenCabinetCovers = { createCache, createDecoder, createImageDecoder, createPersistentDecoder, createLoader };
 })();

@@ -77,11 +77,24 @@ async function main(){
     if(icons.error)throw Error(icons.error);
     assert.ok(icons.value.count>20);assert.ok(icons.value.files>10);assert.deepEqual(icons.value.missing,[]);
     console.log('WebKitGTK local SVG icons passed:',JSON.stringify(icons.value));
-    const covers=await script(`${fs.readFileSync('tests/helpers/cover-cache-browser.js','utf8')};return await checkCoverCachePixels();`);
+    const covers=await script(`${fs.readFileSync('tests/helpers/cover-cache-browser.js','utf8')};return await checkCoverCachePixels({imageCache:true});`);
     if(covers.error)throw Error(covers.error);
     for(const stage of ['cold','rebuilt','restored'])assert.deepEqual(covers.value[stage],[],`Incorrect cover pixels: ${stage}`);
     assert.equal(covers.value.writes,covers.value.count);assert.ok(covers.value.reads>0);
     console.log('WebKitGTK thumbnail pixels passed:',JSON.stringify({count:covers.value.count,reads:covers.value.reads,writes:covers.value.writes}));
+    const nativeThumbnail=await script(`
+      const entry=await window.__TAURI__.core.invoke('cover_cache_entry',{source:${JSON.stringify(path.resolve('src-tauri/icons/128x128.png'))},prepareNative:true});
+      if(!entry.cached)throw Error('Native thumbnail was not prepared');
+      const image=await window.OpenCabinetCovers.createImageDecoder()(window.__TAURI__.core.convertFileSrc(entry.path),new AbortController().signal);
+      const canvas=document.createElement('canvas');canvas.width=image.width;canvas.height=image.height;
+      canvas.getContext('2d').drawImage(image,0,0);
+      const pixels=canvas.getContext('2d').getImageData(0,0,canvas.width,canvas.height).data;
+      const visible=pixels.some((value,index)=>index%4===3&&value>0);image.close();
+      return {width:canvas.width,height:canvas.height,visible};
+    `);
+    if(nativeThumbnail.error)throw Error(nativeThumbnail.error);
+    assert.equal(nativeThumbnail.value.visible,true);assert.equal(nativeThumbnail.value.width,128);
+    console.log('WebKitGTK native file thumbnails and canvas access passed:',JSON.stringify(nativeThumbnail.value));
     if(process.argv.includes('--covers-only'))return;
     if(process.argv[2].endsWith('.AppImage')){
       const entry=fs.readFileSync(path.join(root,'data/applications/opencabinet.desktop'),'utf8');

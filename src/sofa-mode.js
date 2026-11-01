@@ -104,7 +104,7 @@
     let platforms = [], games = [], platformName = null, gameId = null, zone = 'games', query = '';
     let boxMode = true, viewer = null, previewTimer = null, frame = null;
     let busy = false, availability = null, watchedGame = null, wasRunning = false, pendingFocus = false;
-    let lastPad = false, selectedKey = null;
+    let lastPad = false, selectedKey = null, backgroundAbort = null;
     const remembered = new Map(), cardNodes = new Map(), platformNodes = new Map(), padInput = createPadInput();
     try { boxMode = window.localStorage.getItem('opencabinet.sofaView') !== 'cover'; } catch {}
     const selected = () => games.find(game => game.id === gameId) || null;
@@ -132,16 +132,47 @@
       const path = options.images(game).find(image => image.kind === 'cover')?.path;
       const fallback = element('span', 'sofa-cover-fallback', game.title); container.append(fallback);
       if (!path) return;
-      let canvas = null;
-      const bitmap = options.getCoverPreview?.(path);
-      if (bitmap?.width && bitmap?.height) {
-        canvas = element('canvas', 'sofa-cover'); canvas.width = bitmap.width; canvas.height = bitmap.height;
-        try { canvas.getContext('2d').drawImage(bitmap, 0, 0); container.append(canvas); fallback.hidden = true; } catch { canvas = null; }
+      let preview = null, previewWidth = 0, image = null, timer = null, selected = false;
+      const cached = options.preferCachedArtwork;
+      function showPreview(bitmap) {
+        if (signal.aborted || !bitmap?.width || !bitmap?.height || bitmap.width <= previewWidth) return;
+        try {
+          const previous = preview;
+          preview = bitmap.previewImage ? bitmap.cloneNode(false) : element('canvas');
+          preview.className = 'sofa-cover';
+          if (!bitmap.previewImage) { preview.width = bitmap.width; preview.height = bitmap.height; preview.getContext('2d').drawImage(bitmap, 0, 0); }
+          container.append(preview); fallback.hidden = true;
+          previous?.remove(); previewWidth = bitmap.width;
+          if (image?.isConnected) preview.hidden = true;
+        } catch { preview = null; }
       }
-      const image = element('img', 'sofa-cover'); image.alt = ''; image.decoding = 'async';
-      image.onload = () => { if (!signal.aborted) { container.append(image); canvas?.remove(); fallback.hidden = true; } };
-      image.src = options.imageSource(path);
-      signal.addEventListener('abort', () => { image.onload = null; image.src = ''; if (canvas) canvas.width = canvas.height = 0; }, { once: true });
+      function original() {
+        if (signal.aborted || image || (cached && (!selected || boxMode))) return;
+        image = element('img', 'sofa-cover'); image.alt = ''; image.decoding = 'async'; image.fetchPriority = cached ? 'high' : 'auto';
+        image.onload = () => {
+          if (signal.aborted || (cached && (!selected || boxMode))) return;
+          container.append(image); if (preview) { if (cached) preview.hidden = true; else preview.remove(); } fallback.hidden = true;
+        };
+        image.src = options.imageSource(path);
+      }
+      const bitmap = options.getCoverPreview?.(path);
+      showPreview(bitmap);
+      if (cached) {
+        // The existing thumbnail paints immediately; upgrade only to a bounded
+        // couch-size preview, never to seven full-resolution originals.
+        Promise.resolve(options.loadCoverPreview?.(path, signal)).then(showPreview).catch(() => {});
+      } else original();
+      const select = value => {
+        selected = value; if (!cached) return;
+        clearTimeout(timer);
+        if (value && !boxMode) timer = setTimeout(original, 250);
+        else if (image) { image.onload = null; image.removeAttribute('src'); image.remove(); image = null; if (preview) preview.hidden = false; }
+      };
+      signal.addEventListener('abort', () => {
+        clearTimeout(timer); if (image) { image.onload = null; image.removeAttribute('src'); }
+        if (preview?.tagName === 'CANVAS') preview.width = preview.height = 0;
+      }, { once: true });
+      return select;
     }
     function renderCards() {
       const index = games.findIndex(game => game.id === gameId), visible = carousel(games, Math.max(0, index));
@@ -153,18 +184,19 @@
         if (!node) {
           node = button('', () => { if (gameId === item.id) void launch(); else chooseGame(item.id, true); }, 'sofa-card');
           node.dataset.gameId = item.id; node._abort = new AbortController();
-          const art = element('div', 'sofa-card-art'); drawCover(art, item, node._abort.signal); node.append(art);
+          const art = element('div', 'sofa-card-art'); node._selectArtwork = drawCover(art, item, node._abort.signal); node.append(art);
           node.setAttribute('aria-label', item.title); cards.append(node); cardNodes.set(item.id, node);
           node._artKey = artKey;
         } else if (node._artKey !== artKey) {
           node._abort.abort(); node._abort = new AbortController();
           const art = node.querySelector('.sofa-card-art'); art.replaceChildren();
-          drawCover(art, item, node._abort.signal); node._artKey = artKey; node.setAttribute('aria-label', item.title);
+          node._selectArtwork = drawCover(art, item, node._abort.signal); node._artKey = artKey; node.setAttribute('aria-label', item.title);
         }
         node.style.setProperty('--offset', offset); node.style.setProperty('--scale', 1 - Math.min(3, Math.abs(offset)) * 0.15);
         node.style.setProperty('--turn', `${offset === 0 ? 0 : offset > 0 ? -24 : 24}deg`);
         node.style.zIndex = String(10 - Math.abs(offset)); node.classList.toggle('is-selected', offset === 0);
         node.tabIndex = offset === 0 ? 0 : -1; node.setAttribute('aria-current', String(offset === 0));
+        node._selectArtwork?.(offset === 0);
       }
       empty.hidden = games.length > 0; empty.textContent = t(query ? 'sofa.noResults' : 'sofa.empty');
       previous.hidden = next.hidden = games.length < 2;
@@ -195,7 +227,18 @@
       selectedKey = key; clearPreview(); availability = null; status();
       const images = game ? options.images(game) : [];
       const path = (images.find(image => image.kind === 'fanart_background') || images.find(image => image.kind === 'screenshot'))?.path;
-      backdrop.style.backgroundImage = path ? `url(${JSON.stringify(options.imageSource(path))})` : '';
+      backgroundAbort?.abort(); backgroundAbort = new AbortController();
+      if (path && options.preferCachedArtwork) {
+        backdrop.style.backgroundImage = '';
+        const show = bitmap => {
+          if (!active || token !== selectionVersion || !bitmap) return;
+          const url = bitmap.previewImage ? bitmap.src : bitmap.toDataURL?.('image/png');
+          if (url) backdrop.style.backgroundImage = `url(${JSON.stringify(url)})`;
+        };
+        const bitmap = options.getCoverPreview?.(path);
+        if (bitmap) show(bitmap);
+        else Promise.resolve(options.loadCoverPreview?.(path, backgroundAbort.signal)).then(show).catch(() => {});
+      } else backdrop.style.backgroundImage = path ? `url(${JSON.stringify(options.imageSource(path))})` : '';
       if (!game) return;
       Promise.resolve(options.availability?.(game)).then(result => {
         if (!active || token !== selectionVersion || gameId !== game.id) return;
@@ -238,6 +281,7 @@
       boxMode = !boxMode; view.textContent = t(boxMode ? 'sofa.coverView' : 'sofa.boxView');
       view.setAttribute('aria-pressed', String(boxMode));
       try { window.localStorage.setItem('opencabinet.sofaView', boxMode ? 'box' : 'cover'); } catch {}
+      if (options.preferCachedArtwork) renderCards();
       refreshSelected();
     }
     async function restoreFocus() {
@@ -377,6 +421,7 @@
     function close() {
       if (!active) return;
       active = false; ++generation; ++selectionVersion;
+      backgroundAbort?.abort(); backgroundAbort = null;
       watchedGame = null; wasRunning = false; pendingFocus = false; selectedKey = null;
       window.clearTimeout(frame); padInput.reset(); clearPreview();
       for (const node of cardNodes.values()) node._abort.abort();

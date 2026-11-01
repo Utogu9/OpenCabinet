@@ -1,5 +1,5 @@
 // Executed inside Chromium or the real Tauri/WebKitGTK webview.
-globalThis.checkCoverCachePixels = async function ({ transferPixels = window.OpenCabinetRuntime?.linux === true } = {}) {
+globalThis.checkCoverCachePixels = async function ({ transferPixels = window.OpenCabinetRuntime?.linux === true, imageCache = false } = {}) {
   const api = window.OpenCabinetCovers, stored = new Map(), urls = [], originals = [];
   const root = document.createElement('div');
   root.style.cssText = 'position:fixed;inset:0;overflow:auto;z-index:999999;background:#111;display:grid;grid-template-columns:repeat(8,70px);grid-auto-rows:90px;align-content:start';
@@ -23,6 +23,7 @@ globalThis.checkCoverCachePixels = async function ({ transferPixels = window.Ope
     function start() {
       decoder = api.createDecoder({ transferPixels });
       const persistent = api.createPersistentDecoder({ decode: decoder, toUrl: path => path,
+        decodeCached: imageCache ? api.createImageDecoder() : decoder,
         lookup: async source => { const item = stored.get(source); if (item) reads++; return { cached: !!item, key: source, path: item || source }; },
         onError: error => errors.push(String(error)),
         store: async (source, key, bytes) => {
@@ -46,8 +47,11 @@ globalThis.checkCoverCachePixels = async function ({ transferPixels = window.Ope
       const failures = [];
       for (const card of root.children) {
         card.scrollIntoView({ block: 'nearest' });
-        await until(() => !!card.querySelector('canvas'));
-        const canvas = card.querySelector('canvas'), context = canvas.getContext('2d');
+        await until(() => { const node=card.querySelector('canvas,img');return node && (node.tagName!=='IMG'||node.complete&&node.naturalWidth>0); });
+        const node = card.querySelector('canvas,img');
+        const canvas = node.tagName === 'CANVAS' ? node : document.createElement('canvas');
+        if (node.tagName === 'IMG') { canvas.width=node.naturalWidth;canvas.height=node.naturalHeight;canvas.getContext('2d').drawImage(node,0,0); }
+        const context = canvas.getContext('2d');
         const index = Number(card.dataset.coverIndex);
         for (const [y, expected] of [[5, color(index)], [Math.floor(canvas.height * .75), color(index + 51)]]) {
           const pixel = [...context.getImageData(5, y, 1, 1).data];
