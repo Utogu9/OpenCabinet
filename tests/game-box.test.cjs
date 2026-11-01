@@ -326,6 +326,22 @@ test('DS and 3DS build cartridge interiors lazily, retain security catches and r
   }
 });
 
+test('All legacy cartridge models prefer labels and retain regular or fanart photos as fallbacks',()=>{
+  for(const [platform,medium] of [['Nintendo DS','ds-card'],['Nintendo 3DS','3ds-card'],['Nintendo Switch','switch-card'],['Sega Genesis','genesis-cartridge']]) {
+    for(const [extra,expected] of [
+      [[{kind:'cart_front',path:'photo.webp'},{kind:'cart_label',path:'label.webp'}],'label.webp'],
+      [[{kind:'cart_front',path:'photo.webp'}],'photo.webp'],
+      [[{kind:'fanart_cart_front',path:'fanart.webp'},{kind:'cart_label',path:'label.webp'}],'label.webp'],
+      [[{kind:'fanart_cart_front',path:'fanart.webp'}],'fanart.webp'],
+    ]) {
+      const app=scene();app.viewer.update({...game,platform},[...artwork,...extra]);app.viewer.setOpen(true,false);app.flush();
+      const card=app.elements().find(element=>element.dataset.medium===medium);
+      assert.equal(card?.children.find(element=>element.tag==='img')?.src,`asset:${expected}`,platform);
+      app.viewer.dispose();
+    }
+  }
+});
+
 test('GameCube uses the complete brand, labelled memory holder and security catches without a hinge ridge or PUSH text',()=>{
   const app=scene();app.viewer.update({...game,platform:'Nintendo GameCube'},artwork);app.viewer.setOpen(true,false);app.flush();
   const elements=app.elements();assert.ok(elements.some(e=>e.className==='game-box-gamecube-logo'));

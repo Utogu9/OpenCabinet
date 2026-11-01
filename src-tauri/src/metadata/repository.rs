@@ -6,6 +6,8 @@ const ROOT_URL: &str = "https://api.github.com/repos/Utogu9/OpenCabinet-BDD/cont
 const RAW_URL: &str = "https://raw.githubusercontent.com/Utogu9/OpenCabinet-BDD/main/";
 const CONFIG: &str = "metadata/source.json";
 const MIN_REPOSITORY_ID: i64 = 1_000_000_000_000;
+// Reindex once to include labels ignored by earlier repository readers.
+const REPOSITORY_GAME_VERSION: i64 = 2;
 
 #[derive(Default, Serialize, Deserialize)]
 struct Settings {
@@ -410,7 +412,7 @@ fn kind(value: &str) -> Option<String> {
         "cover_front" => "cover",
         "cover_back" => "back_cover",
         "cover_full" => "box_full",
-        "cart_label" => "cart_label",
+        "label" | "cart_label" => "cart_label",
         other => other,
     };
     valid_image_kind(mapped).then(|| mapped.into())
@@ -635,7 +637,7 @@ fn insert_platform(
         [source],
     )
     .map_err(err)?;
-    tx.execute("INSERT OR REPLACE INTO repository_versions VALUES(?1,1)",[source]).map_err(err)?;
+    tx.execute("INSERT OR REPLACE INTO repository_versions VALUES(?1,?2)",params![source, REPOSITORY_GAME_VERSION]).map_err(err)?;
     tx.execute("INSERT INTO names_fts(names_fts) VALUES('rebuild')", [])
         .map_err(err)?;
     tx.commit().map_err(err)
@@ -658,7 +660,7 @@ pub(super) fn ensure_platform(
             |r| r.get(0),
         )
         .map_err(err)?;
-    let current = conn.query_row("SELECT version FROM repository_versions WHERE name=?1",[source],|r|r.get::<_,i64>(0)).ok()==Some(1);
+    let current = conn.query_row("SELECT version FROM repository_versions WHERE name=?1",[source],|r|r.get::<_,i64>(0)).ok()==Some(REPOSITORY_GAME_VERSION);
     if exists && current {
         return Ok(());
     }
@@ -1097,6 +1099,45 @@ mod tests {
         }
         let temporary:i64=conn.query_row("SELECT count(*) FROM sqlite_temp_master",[],|r|r.get(0)).unwrap();
         assert_eq!(temporary,0,"filename fallbacks must use exact indexed lookups before preparing fuzzy search");
+    }
+
+    #[test]
+    fn repository_labels_are_available_for_download_without_replacing_cartridge_photos() {
+        let files = Sandbox::new();
+        let mut conn = files.catalog();
+        let source = "Sony - PlayStation 2";
+        let fixture = files.job.directory.join("labels.json");
+        fs::write(&fixture, serde_json::json!({
+            "schema_version": 2, "system": source, "games": {
+                "TEST": {"entries": [{"name": "Example Game"}], "images": {
+                    "label": {"path": "TEST/label.webp", "kind": "label"},
+                    "label2": {"path": "TEST/label2.webp"},
+                    "cart_label3": {"path": "TEST/old-label.webp", "kind": "cart_label"},
+                    "cart_front": {"path": "TEST/cart_front.webp", "kind": "cart_front"},
+                    "invalid": {"path": "../label.webp", "kind": "label"}
+                }}
+            }
+        }).to_string()).unwrap();
+        insert_platform(&mut conn, &files.job, source, &fixture, |_| ()).unwrap();
+        let id = token(&format!("{source}/TEST"));
+        let available = available_image_types(&conn, &[id], &files.job).unwrap();
+        assert_eq!(available.counts["cart_label"], 3);
+        assert_eq!(available.counts["cart_front"], 1);
+        let images = conn.prepare("SELECT filename,kind,region,crc FROM images WHERE game_id=?1").unwrap()
+            .query_map([id], |r| Ok(CatalogImage { filename: r.get(0)?, kind: r.get(1)?, region: r.get(2)?, crc: r.get(3)? }))
+            .unwrap().collect::<rusqlite::Result<Vec<_>>>().unwrap();
+        let mut options: MediaOptions = serde_json::from_value(serde_json::json!({"selected_types": ["cart_label"]})).unwrap();
+        options.validate().unwrap();
+        let selected = select_images(images.clone(), &options, "Game (USA).nds");
+        assert_eq!(selected.len(), 1);
+        assert_eq!(selected[0].kind, "cart_label");
+        options.download_all = true;
+        assert_eq!(select_images(images, &options, "Game (USA).nds").len(), 3);
+        assert!(image_url(&files.job, IMAGE_BASE, &selected[0].filename).unwrap().contains("label"));
+        assert_eq!(kind("label99").as_deref(), Some("cart_label"));
+        assert_eq!(kind("label_other"), None);
+        drop(conn);
+        ensure_platform(&files.job, source, |_| panic!("indexed labels should work offline")).unwrap();
     }
 
     #[test]

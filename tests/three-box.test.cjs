@@ -113,6 +113,17 @@ test('Full covers retain contiguous UV windows; separate back and spine images e
   assert.deepEqual(artworkWindow('back_cover'),{offset:[0,0],repeat:[1,1]});assert.deepEqual(artworkWindow('spine'),{offset:[0,0],repeat:[1,1]});
   assert.equal(chooseArtwork([{kind:'cover',path:'front'},{kind:'box_full',path:'wrap'}]).cover,'wrap');
 });
+test('Cartridge artwork prioritizes labels over photos regardless of their order',async()=>{
+  const {chooseArtwork}=await import('../src/three-box-artwork.js');
+  const photo={kind:'cart_front',path:'cartridge.webp'},label={kind:'cart_label',path:'label.webp'};
+  for(const images of [[photo,label],[label,photo],[photo,{kind:'cart_label',path:''},label]]) {
+    assert.equal(chooseArtwork(images).cartridge,label.path);
+  }
+  assert.equal(chooseArtwork([photo]).cartridge,photo.path);
+  assert.equal(chooseArtwork([]).cartridge,null);
+  assert.equal(photo.kind,'cart_front');assert.equal(label.kind,'cart_label');
+});
+
 test('The bundled geometry has one shell, a movable lid and separate UV surfaces for both spines',async()=>{
   const {manifest,binary}=dreamcastModel();
   const shells=manifest.meshes.filter(mesh=>mesh.material==='acrylic');

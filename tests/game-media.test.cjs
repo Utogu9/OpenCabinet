@@ -1172,7 +1172,22 @@ test('Cartridge labels can be added manually, saved and shown separately from ca
   const thumbnails=app.get('gallery-thumbnails').children;await thumbnails.at(-1).trigger('click');
   assert.match(app.get('gallery-viewer').children[0].alt,/Etiqueta de cartucho/);
   await app.open();await app.get('btn-download-game-images').trigger('click');
-  assert.equal(app.quantity('cart_label'),undefined,'manual-only labels are not offered as metadata catalog downloads');
+  assert.equal(app.quantity('cart_label'),undefined,'labels are only offered when the source has them');
+});
+
+test('Available cartridge labels can be selected, downloaded and saved independently of cartridge photos',async()=>{
+  const downloaded={path:'C:/temp/label.webp',kind:'cart_label'};
+  const app=mediaApp({handlers:{
+    get_metadata_image_types:()=>({counts:{cart_label:2,cart_front:1},skipped_games:0}),
+    download_editor_game_images:()=>({images:[downloaded],image_count:1,available_count:2,failures:[]}),
+  }});
+  await app.open();await app.get('btn-download-game-images').trigger('click');
+  assert.equal(app.quantity('cart_label').type,'checkbox');
+  app.quantity('cart_label').checked=true;app.quantity('cart_front').checked=false;
+  await app.get('btn-editor-artwork-download').trigger('click');
+  assert.deepEqual(app.calls.find(call=>call.command==='download_editor_game_images').args.options.selected_types,['cart_label']);
+  await app.save();
+  assert.ok(app.calls.find(call=>call.command==='update_game').args.details.images.some(image=>image.path===downloaded.path&&image.kind==='cart_label'));
 });
 
 test("Cancelling image edits leaves the game untouched", async () => {

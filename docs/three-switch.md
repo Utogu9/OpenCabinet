@@ -22,7 +22,8 @@ contraportada, sin aplicar el refuerzo de dispersión de los relieves rígidos.
 
 El exterior utiliza una cubierta completa cuando está disponible; en su
 ausencia, compone portada, lomo y contraportada. El inlay sustituye el interior
-impreso y `cart_front` proporciona la etiqueta del cartucho. Sin esas imágenes
+impreso y `cart_label` proporciona la etiqueta del cartucho. Si no hay etiqueta,
+se utiliza `cart_front` (incluida su alternativa fanart). Sin esas imágenes
 se utiliza papel blanco o un título de reserva, según la superficie.
 
 Se mantienen apertura, giro con arrastre, rueda para zoom, teclado, vistas

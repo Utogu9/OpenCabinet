@@ -275,7 +275,7 @@ export async function createModelViewer(host,options={},definition) {
       if(pictures.disc)assign('UMD Label',pictures.disc);
       else {const disc=document.createElement('canvas');disc.width=512;disc.height=512;label(disc.getContext('2d'),game.title,0,0,512,512);assign('UMD Label',disc);}
     }
-    if(pictures.cart_front)assign('Cartridge Cover',pictures.cart_front);
+    if(pictures.cartridge)assign('Cartridge Cover',pictures.cartridge);
     else if(!options.useModelArtwork) {
       const card=document.createElement('canvas');card.width=256;card.height=352;label(card.getContext('2d'),game.title,0,0,256,352);assign('Cartridge Cover',card);
     }
@@ -291,8 +291,8 @@ export async function createModelViewer(host,options={},definition) {
     });
   }
   async function loadArtwork(images,token) {
-    const art=chooseArtwork(images),resolved=globalThis.OpenCabinetImages?.resolve(images)||images;
-    const paths={cover:art.full||art.cover,back_cover:art.back_cover,spine:art.spine,inlay:art.inlay,cart_front:resolved.find(image=>image.kind==='cart_front')?.path,...(modelId==='psp'?{disc:art.disc}:{})};
+    const art=chooseArtwork(images);
+    const paths={cover:art.full||art.cover,back_cover:art.back_cover,spine:art.spine,inlay:art.inlay,cartridge:art.cartridge,...(modelId==='psp'?{disc:art.disc}:{})};
     const signal=controller.signal,current=()=>!disposed&&revision===token&&!signal.aborted;
     const front=art.full?'full':'cover';
     let originalReady=false;

@@ -1,5 +1,15 @@
 # Imágenes alternativas
 
+Las etiquetas de cartuchos (`label` en OpenCabinet-BDD) se guardan como
+`cart_label`, el mismo tipo **Etiqueta de cartucho** disponible en Editar juego.
+Se ofrecen para descargar si el catálogo las contiene, tanto individualmente
+como por lotes. También se reconocen variantes numeradas, como `label2`.
+Los cartuchos de los visores CSS y Three.js priorizan esta etiqueta sobre
+**Cartucho: frente**; si no existe, utilizan la foto frontal o su variante
+fanart. La foto y la etiqueta conservan sus categorías independientes.
+Los catálogos de plataformas ya indexados se actualizan una vez para incluir
+las etiquetas que las versiones anteriores no reconocían.
+
 En la caja 3D, **Cubierta completa** (`Box - Full` / `box_full`) tiene prioridad
 sobre portada, contraportada y lomo individuales. Se aplica el archivo original
 como un atlas continuo: contraportada, lomo y portada comparten la misma textura,

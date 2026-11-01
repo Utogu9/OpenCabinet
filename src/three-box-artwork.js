@@ -8,9 +8,10 @@ export function artworkWindow(kind, {full=false, width=142, depth=10}={}) {
 }
 export function chooseArtwork(images) {
   const resolved=globalThis.OpenCabinetImages?.resolve(images) || images;
-  const find=kind=>resolved.find(image=>image.kind===kind)?.path || null;
+  const find=kind=>resolved.find(image=>image.kind===kind && image.path)?.path || null;
   const full=find('box_full');
-  return {cover:full||find('cover'),back_cover:full||find('back_cover'),spine:full||find('spine'),disc:find('disc'),inlay:find('inlay'),full};
+  return {cover:full||find('cover'),back_cover:full||find('back_cover'),spine:full||find('spine'),disc:find('disc'),inlay:find('inlay'),
+    cartridge:find('cart_label')||find('cart_front'),full};
 }
 
 // A CD tray insert is ~139 x 120 mm, with two ~6 mm folded side strips.

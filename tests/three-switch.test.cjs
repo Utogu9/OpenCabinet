@@ -60,6 +60,20 @@ test('The optional Switch rig opens both folds, keeps the cartridge fixed and re
   await page.waitForFunction(()=>debug.materials.get('Cover Outside').map?.image?.width===2048);
   await page.waitForTimeout(100);
   assert.equal(await page.locator('#stage canvas').count(),canvasCount);
+  await page.evaluate(()=>{
+    const solid=(color,width,height)=>{const image=document.createElement('canvas');image.width=width;image.height=height;
+      const ctx=image.getContext('2d');ctx.fillStyle=color;ctx.fillRect(0,0,width,height);return image.toDataURL();};
+    window.cartPhoto=solid('#ff0000',32,48);window.cartLabel=solid('#00ff00',40,52);
+    select(3,[{kind:'cart_front',path:cartPhoto},{kind:'cart_label',path:cartLabel}]);
+  });
+  await page.waitForFunction(()=>debug.materials.get('Cartridge Cover').map?.image?.width===40);
+  assert.deepEqual(await page.evaluate(()=>{
+    const canvas=document.createElement('canvas');canvas.width=canvas.height=1;
+    const ctx=canvas.getContext('2d');ctx.drawImage(debug.materials.get('Cartridge Cover').map.image,0,0,1,1);
+    return Array.from(ctx.getImageData(0,0,1,1).data);
+  }),[0,255,0,255],'the label supplies the cartridge texture, not the complete cartridge photo');
+  await page.evaluate(()=>select(4,[{kind:'cart_front',path:cartPhoto}]));
+  await page.waitForFunction(()=>debug.materials.get('Cartridge Cover').map?.image?.width===32);
   await page.evaluate(()=>{viewer.setRotationLock('x');viewer.zoom(.1);viewer.showBack();});
   assert.equal(await page.evaluate(()=>viewer.rotationLock),'x');
   await page.evaluate(()=>viewer.setOpen(true,false));await page.waitForTimeout(100);
