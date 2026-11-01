@@ -7,3 +7,12 @@ export function arcballPoint(event,rect) {
   return [x,y,Math.sqrt(Math.max(0,1-x*x-y*y))];
 }
 export const lidAngle=amount=>-Math.PI*Math.max(0,Math.min(1,amount));
+
+// Keep framing based on the original host while giving zoomed carousel boxes
+// a larger drawing surface. One fixed expansion avoids reallocating on each
+// wheel tick; ordinary views and unzoomed neighbors retain their normal cost.
+export function canvasViewport(width,height,zoom,overflow=false) {
+  const scale=overflow&&zoom>1?1.75:1;
+  const renderWidth=Math.ceil(width*scale),renderHeight=Math.ceil(height*scale);
+  return {width:renderWidth,height:renderHeight,left:(width-renderWidth)/2,top:(height-renderHeight)/2,scale};
+}

@@ -167,7 +167,7 @@
     let rotationLock = "free", menu = null, menuButtons = [];
     host.dataset.rotationLock = rotationLock;
     let layoutScale = null, viewport = null, viewportFill = .86, cornerRadii = [0, 0, 0, 0];
-    let revision = 0, disposed = false, faces = [], textures = [];
+    let revision = 0, disposed = false, suspended = false, faces = [], textures = [];
     const spineLoads = [], spineUrls = [];
     let parts = null, previews = [], lastLightAt = -Infinity, lastLightKey = "", referenceDiameter = 1;
     let lightGroups=new Map(), lightPass=0;
@@ -281,7 +281,7 @@
 
     function paint(timestamp) {
       frame = null;
-      if (disposed || !profile) return;
+      if (disposed || suspended || !profile) return;
       if (opening) {
         const now = Number.isFinite(timestamp) ? timestamp : Date.now();
         opening.started ??= now;
@@ -412,7 +412,7 @@
       if (opening) schedule();
     }
     function schedule() {
-      if (!disposed && frame === null) frame = requestAnimationFrame(paint);
+      if (!disposed && !suspended && frame === null) frame = requestAnimationFrame(paint);
     }
     function clearTextures() {
       spineLoads.splice(0).forEach(controller => controller.abort());
@@ -1079,6 +1079,8 @@
     });
     const observer = new ResizeObserver(() => { viewport = null; closeMenu(); schedule(); }); observer.observe(host);
     const api = {
+      suspend() { suspended = true; stopDrag(); if (frame !== null) { cancelAnimationFrame(frame); frame = null; } },
+      resume() { if (!disposed) { suspended = false; schedule(); } },
       update(nextGame, nextImages, nextSettings = null) {
         nextSettings = resolveSettings(nextSettings, nextGame.box_3d);
         const fallbacks = globalThis.OpenCabinetImages || globalThis.window?.OpenCabinetImages;

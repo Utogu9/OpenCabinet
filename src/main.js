@@ -127,6 +127,7 @@ let detailsGameBox = null;
 let logoPanelKey = null;
 let catalogCoverLoader = null;
 let catalogCoverCache = null;
+const sofaArtworkWindows = new Map();
 let catalogFullCoverPaths = new Set();
 let catalogInlayPaths = new Set();
 let manualCoverCache = null;
@@ -706,6 +707,27 @@ function invalidateCatalogArtwork(path) {
   catalogCoverCache?.invalidate(`sofa:${path}`);
 }
 
+function sofaArtworkCacheKey(path) {
+  return window.OpenCabinetRuntime?.linux && preferences.cacheMode === 'disk' ? `sofa:${path}` : path;
+}
+function applySofaArtworkReservation(entry) {
+  catalogCoverCache?.retain?.(entry, [...entry.paths].map(sofaArtworkCacheKey));
+}
+function retainSofaArtwork(platform, paths) {
+  let entry = sofaArtworkWindows.get(platform);
+  if (!entry) { entry = {}; sofaArtworkWindows.set(platform, entry); }
+  entry.paths = new Set(paths);
+  applySofaArtworkReservation(entry);
+}
+function pruneSofaArtwork(validPaths, validPlatforms) {
+  for (const [platform, entry] of sofaArtworkWindows) {
+    const paths = new Set([...entry.paths].filter(path => validPaths.has(path)));
+    if (!validPlatforms.has(platform) || !paths.size) {
+      catalogCoverCache?.retain?.(entry, []); sofaArtworkWindows.delete(platform);
+    } else if (paths.size !== entry.paths.size) { entry.paths = paths; applySofaArtworkReservation(entry); }
+  }
+}
+
 function createCatalogCoverLoader(root) {
   if (!root || !window.IntersectionObserver || !window.OpenCabinetCovers) return null;
   catalogFullCoverPaths = new Set(allGames.flatMap(game => [game, ...(game.regions || []).map(region => region.game)]).flatMap(game => gameImages(game).filter(image => image.kind === "box_full").map(image => image.path)));
@@ -726,6 +748,7 @@ function createCatalogCoverLoader(root) {
       },
     }) : Object.assign((path, signal) => decode(imageSource(path), signal, null, { fullCover: catalogFullCoverPaths.has(path)||catalogInlayPaths.has(path) }), { dispose: () => decode.dispose() });
     catalogCoverCache = window.OpenCabinetCovers.createCache(preferences.maxCachedCovers, decodePath);
+    sofaArtworkWindows.forEach(applySofaArtworkReservation);
     if(window.OpenCabinetManualCovers) {
       manualCoverCache=window.OpenCabinetManualCovers.create({cache:catalogCoverCache,decode,toUrl:imageSource,disk:preferences.cacheMode==='disk',
         render:(path,options)=>window.OpenCabinetManualPDF.render(path,{imageSource,...options}),
@@ -5796,6 +5819,11 @@ function setupSofaMode() {
     preferCachedArtwork: window.OpenCabinetRuntime?.linux === true,
     // Finish shared thumbnail jobs into the cache even if couch mode is closed.
     loadCoverPreview: loadSofaPreview,
+    retainArtwork: (platform, paths) => {
+      retainSofaArtwork(platform, paths);
+      for (const path of paths) if (!catalogCoverCache?.get(sofaArtworkCacheKey(path))) void loadSofaPreview(path).catch(() => {});
+    },
+    pruneArtwork: pruneSofaArtwork,
     sortGames: games => {
       const sorted = [...games].sort((a, b) => a.title.localeCompare(b.title));
       return window.OpenCabinetOrder?.apply(sorted, allGames) || sorted;
@@ -5805,7 +5833,8 @@ function setupSofaMode() {
       const platform = allPlatforms.find(item => item.name === game.platform);
       return platform ? (await getPlatformDetails(platform)).box_3d || null : null;
     },
-    createViewer: stage => window.OpenCabinet3D.createViewer(stage, {
+    createViewer: (stage, session) => window.OpenCabinet3D.createViewer(stage, {
+      ...session,
       carousel: true,
       imageSource,
       getCoverPreview: getSofaPreview,

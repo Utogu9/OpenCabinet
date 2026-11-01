@@ -1,8 +1,9 @@
 import * as THREE from './vendor/three/three.module.js';
 import { RoomEnvironment } from './vendor/three/RoomEnvironment.js';
 import { artworkWindow, chooseArtwork, dreamcastInsertWindows, dreamcastInsertTheme, dreamcastInsertProbes } from './three-box-artwork.js';
-import { arcballPoint, lidAngle } from './three-box-motion.js';
+import { arcballPoint, lidAngle, canvasViewport } from './three-box-motion.js';
 import { createContactShadows, configureAcrylicOptics, maskClearPanels } from './three-box-relief.js';
+import { prepareRenderGroup, createRenderLease, releaseSceneGpu } from './three-box-session.js';
 
 let caseTask;
 async function caseData() {
@@ -20,6 +21,7 @@ export async function createViewer(host, options={}) {
   const {imageSource=path=>path,onProfile=()=>{},onOpenState=()=>{},loadManual,
     onManualState=()=>{},onManualActivate=()=>false,onManualDeactivate=()=>{},onManualCoverChange=()=>{}}=options;
   const math=globalThis.OpenCabinet3D.math;
+  prepareRenderGroup(options.renderGroup);
   const renderer=new THREE.WebGLRenderer({alpha:true,antialias:true,powerPreference:'high-performance'});
   renderer.setClearColor(0,0);renderer.outputColorSpace=THREE.SRGBColorSpace;
   renderer.toneMapping=THREE.ACESFilmicToneMapping;renderer.toneMappingExposure=1.05;
@@ -28,7 +30,7 @@ export async function createViewer(host, options={}) {
   host.replaceChildren(canvas);host.classList.add('game-box-webgl');host.dataset.renderer='three';
   const scene=new THREE.Scene(),camera=new THREE.PerspectiveCamera(35,1,10,2000);
   const environment=new RoomEnvironment(),pmrem=new THREE.PMREMGenerator(renderer);
-  const environmentTarget=pmrem.fromScene(environment,.04,1,100);
+  let environmentTarget=pmrem.fromScene(environment,.04,1,100);
   scene.environment=environmentTarget.texture;environment.dispose();pmrem.dispose();
   scene.add(new THREE.HemisphereLight(0xeaf2ff,0x566377,.65));
   const keyLight=new THREE.DirectionalLight(0xfff7ed,3.2);keyLight.position.set(-180,100,200);scene.add(keyLight);
@@ -92,9 +94,9 @@ export async function createViewer(host, options={}) {
     rear:meshes.find(mesh=>mesh.name==='7:base:acrylic'),lidShell:meshes.find(mesh=>mesh.name==='7:lid:acrylic'),
     paper:meshes.find(mesh=>mesh.material===materials.paper),manualBack:meshes.find(mesh=>mesh.material===materials.manualBack),
   });relief.reset();
-  let disposed=false,game=null,profile=null,key=null,revision=0,artController=null,manualController=null,manual=null,manualExtracted=false,manualBackTask=null,manualPreviewReady=false;
+  let disposed=false,renderLease=null,game=null,profile=null,key=null,revision=0,artController=null,manualController=null,manual=null,manualExtracted=false,manualBackTask=null,manualPreviewReady=false;
   let frame=null,opened=0,openTarget=false,animation=null,zoom=1,side='front',rotationLock='free',rotation=initialRotation(),drag=null;
-  let distance=400,viewportWidth=0,viewportHeight=0,layoutDirty=true,menu=null,framingBounds=null;
+  let distance=400,viewportWidth=0,viewportHeight=0,surfaceScale=1,layoutDirty=true,menu=null,framingBounds=null;
   const textures=new Set(),manualTextures=new Set(),listeners=[];
   const retiredTextures=[],blankTextures=new Map();
   let insertTheme='black';
@@ -118,15 +120,20 @@ export async function createViewer(host, options={}) {
   const raycaster=new THREE.Raycaster(),pointer=new THREE.Vector2();
   const listen=(target,name,callback,config)=>{target.addEventListener(name,callback,config);listeners.push([target,name,callback,config]);};
   function initialRotation(){return math.multiply(math.axisAngle([1,0,0],9),math.axisAngle([0,1,0],28));}
-  function schedule(){if(!disposed && frame===null)frame=requestAnimationFrame(render);}
+  function schedule(){if(!disposed&&!renderLease?.paused&&!renderLease?.lost&&frame===null)frame=requestAnimationFrame(render);}
   function notify(){onOpenState({canOpen:!!game,open:openTarget});}
   function render(time) {
-    frame=null;if(disposed||!game)return;
+    frame=null;if(disposed||renderLease?.paused||renderLease?.lost||!game)return;
     const width=host.clientWidth,height=host.clientHeight;if(!width||!height)return;
-    if(width!==viewportWidth||height!==viewportHeight) {
-      viewportWidth=width;viewportHeight=height;
+    const surface=canvasViewport(width,height,zoom,options.carousel);
+    if(width!==viewportWidth||height!==viewportHeight||surface.scale!==surfaceScale) {
+      viewportWidth=width;viewportHeight=height;surfaceScale=surface.scale;
       renderer.setPixelRatio(Math.min(globalThis.devicePixelRatio||1,width>650?2:1.5));
-      renderer.setSize(width,height,false);camera.aspect=width/height;camera.updateProjectionMatrix();layoutDirty=true;
+      renderer.setSize(surface.width,surface.height,false);camera.aspect=width/height;
+      if(surface.scale>1)camera.setViewOffset(width,height,surface.left,surface.top,surface.width,surface.height);
+      else camera.clearViewOffset();
+      if(options.carousel)Object.assign(canvas.style,{width:`${surface.width}px`,height:`${surface.height}px`,left:`${surface.left}px`,top:`${surface.top}px`,right:'auto',bottom:'auto'});
+      camera.updateProjectionMatrix();layoutDirty=true;
     }
     if(animation) {
       animation.start ??= time;const t=Math.min(1,(time-animation.start)/460);
@@ -187,7 +194,7 @@ export async function createViewer(host, options={}) {
       }
       // Upload first, switch maps second, retire the cached texture only after
       // a frame using its replacement. The material always keeps a map.
-      renderer.initTexture(next);material.map=next;material.color.set(texture?0xffffff:0xe7e4db);
+      if(!renderLease?.lost&&!renderLease?.paused)renderer.initTexture(next);material.map=next;material.color.set(texture?0xffffff:0xe7e4db);
       if(!previous)material.needsUpdate=true;
       if(previous!==next&&textures.delete(previous))retiredTextures.push(previous);
       schedule();return;
@@ -416,7 +423,7 @@ export async function createViewer(host, options={}) {
   }
   function hitsManual(event) {
     if(!manual||manualExtracted||opened<.98)return false;
-    const rect=host.getBoundingClientRect();pointer.set((event.clientX-rect.left)/rect.width*2-1,-(event.clientY-rect.top)/rect.height*2+1);
+    const rect=canvas.getBoundingClientRect();pointer.set((event.clientX-rect.left)/rect.width*2-1,-(event.clientY-rect.top)/rect.height*2+1);
     raycaster.setFromCamera(pointer,camera);return raycaster.intersectObjects(manualMeshes,false).length>0;
   }
   function closeMenu(focus=false){menu?.remove();menu=null;if(focus)host.focus({preventScroll:true});}
@@ -480,10 +487,10 @@ export async function createViewer(host, options={}) {
       rotation=math.multiply(math.axisAngle(horizontal?[0,1,0]:[1,0,0],['arrowleft','arrowup'].includes(key)?-15:15),rotation);side=null;schedule();
     }else return;event.preventDefault();event.stopPropagation();
   });
-  listen(canvas,'webglcontextlost',event=>{event.preventDefault();});
-  listen(canvas,'webglcontextrestored',()=>{relief.reset();schedule();});
   const resize=new ResizeObserver(()=>{layoutDirty=true;closeMenu();schedule();});resize.observe(host);
   const api={
+    suspend(release=false){stopDrag();renderLease.suspend(release);if(frame!==null){cancelAnimationFrame(frame);frame=null;}},
+    resume(){if(!disposed)renderLease.resume();},
     clearArtwork() {
       revision++;artController?.abort();clearManual();key=null;
       insertMesh.visible=true;
@@ -535,14 +542,23 @@ export async function createViewer(host, options={}) {
       for(const kind of ['cover','back_cover','spine_left','spine_right','disc','paper','paper_spine_left','paper_spine_right'])assign(kind,null);
       meshes.find(mesh=>mesh.name==='dreamcast-insert').visible=true;selectInsert();
       if(!options.carousel){textures.forEach(texture=>texture.dispose());textures.clear();}game=null;key=null;
-      if(frame!==null){cancelAnimationFrame(frame);frame=null;}relief.reset();renderer.clear();notify();},
+      if(frame!==null){cancelAnimationFrame(frame);frame=null;}relief.reset();if(!renderLease?.lost&&!renderLease?.paused)renderer.clear();notify();},
     dispose(){api.clear();disposed=true;resize.disconnect();listeners.forEach(([target,name,callback,config])=>target.removeEventListener(name,callback,config));
       textures.forEach(texture=>texture.dispose());textures.clear();
       retiredTextures.splice(0).forEach(texture=>texture.dispose());blankTextures.forEach(texture=>texture.dispose());blankTextures.clear();
-      relief.dispose();meshes.forEach(mesh=>mesh.geometry.dispose());new Set(Object.values(materials)).forEach(material=>material.dispose());
-      Object.values(insertTextures).forEach(texture=>texture.dispose());ribsTexture.dispose();environmentTarget.dispose();renderer.dispose();renderer.forceContextLoss();canvas.remove();host.classList.remove('game-box-webgl');
+      renderLease.dispose();relief.dispose();meshes.forEach(mesh=>mesh.geometry.dispose());new Set(Object.values(materials)).forEach(material=>material.dispose());
+      Object.values(insertTextures).forEach(texture=>texture.dispose());ribsTexture.dispose();environmentTarget?.dispose();renderer.dispose();if(!renderer.getContext().isContextLost())renderer.forceContextLoss();canvas.remove();host.classList.remove('game-box-webgl');
       delete host.dataset.renderer;delete host.dataset.triangles;delete host.dataset.drawCalls;},
   };
+  renderLease=createRenderLease(renderer,options.renderGroup,restored=>{
+    if(restored){const room=new RoomEnvironment(),generator=new THREE.PMREMGenerator(renderer);
+      environmentTarget=generator.fromScene(room,.04,1,100);scene.environment=environmentTarget.texture;room.dispose();generator.dispose();relief.reset();}
+    schedule();
+  },()=>{
+    releaseSceneGpu(scene);environmentTarget?.dispose();environmentTarget=null;scene.environment=null;
+    new Set([...textures,...manualTextures,...retiredTextures,...blankTextures.values(),...Object.values(insertTextures),ribsTexture]).forEach(texture=>texture.dispose());
+    keyLight.shadow.dispose();keyLight.shadow.map=null;keyLight.shadow.mapPass=null;
+  });
   options.debug?.({scene,renderer,camera,materials,meshes,root,lid,relief,render:()=>schedule()});
   return api;
 }

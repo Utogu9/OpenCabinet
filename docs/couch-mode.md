@@ -8,6 +8,13 @@ The bottom carousel contains platforms with games and their downloaded logos.
 Platforms without a logo show their names. **All** combines the library. The game
 carousel respects alphabetical and custom series ordering, and remembers the
 selected game for each platform while switching between platforms.
+The last nine games around that selection keep their cover and full-cover
+previews decoded in RAM for each visited platform, including **All**. Switching
+platforms or closing couch mode does not discard these reservations. Moving
+within a platform replaces its reserved window; removed games or changed image
+paths release obsolete reservations. These per-platform minimums can exceed
+the general RAM LRU limit. Disk caching still supplies images after restarting
+the application.
 Drag the bottom platform rail with the mouse to scroll it, or swipe on a
 touchscreen. Dragging does not select text or activate a platform; a normal
 click still selects it.
@@ -32,8 +39,13 @@ the replacement before switching maps and retires the old texture after drawing
 the replacement frame. Carousel focus uses a subtle background glow.
 Cases share a consistent visible height and receive no extra perspective tilt
 from the carousel; neighbors only become smaller with distance. Manual zoom and
-rotation reset when the selection changes. Model preparation keeps progressing
-while a direction is held, prioritizing the current selection and leaving a
+rotation reset when the selection changes.
+Zoomed boxes can extend beyond their individual cards and the game carousel,
+drawing above the rest of the interface without moving its layout. Three.js
+includes extra drawing area around the zoomed box, retaining the original
+framing and pixel density. Neighboring viewers keep their normal render size.
+Model preparation keeps progressing while a direction is held, prioritizing
+the current selection and leaving a
 short gap between model updates. Every job checks the latest visible games;
 navigation does not reset a debounce timer or apply obsolete results. Existing
 compatible boxes apply RAM artwork immediately, using the same preview cache
@@ -45,8 +57,13 @@ is bounded to 2048 pixels on the longest edge. Changing games cancels obsolete
 work and releases its prepared pixels. Applying a spine in the glTF viewer
 updates only the outside atlas, retaining the other GPU textures. If workers
 are unavailable, asynchronous image loading remains available as a fallback.
-Viewers are released when switching to covers, starting a game or closing couch
-mode. Cover sizing depends
+Each visited platform keeps its last window of up to nine prepared viewers and
+their artwork in RAM throughout the couch-mode session. Returning to a platform
+reuses those models instead of reconstructing them. Inactive viewers pause,
+including when switching to covers or starting a game. WebGL contexts for older
+platforms can be released while retaining their scenes and texture sources, so
+visiting several platforms does not exhaust the browser's context limit. Closing
+couch mode disposes every cached viewer. Cover sizing depends
 on aspect ratio and available space, so low-resolution images fill the same
 space as their larger equivalents. The nearest neighbors leave more room around
 the selected game; farther neighbors are grouped more tightly.

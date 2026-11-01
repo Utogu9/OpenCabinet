@@ -84,12 +84,12 @@
     tools.append(search, view, exit); header.append(brand, tools);
     const deck = element('section', 'sofa-deck'); deck.id = 'sofa-deck';
     deck.setAttribute('aria-label', t('sofa.games')); deck.setAttribute('aria-roledescription', t('sofa.carousel'));
-    const cards = element('div', 'sofa-cards');
+    let cards = null;
     const previous = button('‹', () => moveGame(-1), 'sofa-arrow sofa-arrow-previous');
     previous.setAttribute('aria-label', t('sofa.previous'));
     const next = button('›', () => moveGame(1), 'sofa-arrow sofa-arrow-next');
     next.setAttribute('aria-label', t('sofa.next'));
-    const empty = element('p', 'sofa-empty'); deck.append(cards, previous, next, empty);
+    const empty = element('p', 'sofa-empty'); deck.append(previous, next, empty);
     const details = element('section', 'sofa-details');
     const caption = element('div', 'sofa-caption');
     const title = element('h1'); title.id = 'sofa-game-title';
@@ -113,10 +113,14 @@
     let busy = false, availability = null, watchedGame = null, wasRunning = false, pendingFocus = false;
     let lastPad = false, selectedKey = null, backgroundAbort = null, lastBoxSelection = null, lastPollTime = null;
     let railDrag = null, railDragged = false;
-    const remembered = new Map(), cardNodes = new Map(), platformNodes = new Map(), padInput = createPadInput();
-    const spareCards = [];
+    const remembered = new Map(), banks = new Map(), platformNodes = new Map(), padInput = createPadInput();
+    let cardNodes = new Map(), spareCards = [], activeBank = null;
     try { boxMode = window.localStorage.getItem('opencabinet.sofaView') !== 'cover'; } catch {}
     const selected = () => games.find(game => game.id === gameId) || null;
+    const coverPaths = game => {
+      const images = options.images(game);
+      return ['cover', 'box_full'].map(kind => images.find(image => image.kind === kind && image.path)?.path).filter(Boolean);
+    };
     const controller = options.fullscreen;
     function topDialog() {
       const focused = document.activeElement?.closest?.('dialog[open]');
@@ -152,17 +156,53 @@
       node._viewer?.dispose(); node._viewer = null;
       node._preview.replaceChildren(); node.dataset.hasBox = 'false';
     }
-    function clearPreview() {
+    function stopPreviewQueue() {
       ++previewGeneration; clearTimeout(previewTimer); previewTimer = null;
       previewWork = null;
-      for (const node of cardNodes.values()) clearCardPreview(node);
-      for (const node of spareCards) clearCardPreview(node);
-      lastBoxSelection = null;
+    }
+    function pauseBank(bank) {
+      if (!bank || bank.paused) return;
+      bank.paused = true;
+      for (const node of [...bank.nodes.values(), ...bank.spare]) node._viewer?.suspend?.();
+    }
+    function resumeBank(bank) {
+      if (!bank?.paused) return;
+      bank.paused = false;
+      for (const node of [...bank.nodes.values(), ...bank.spare]) node._viewer?.resume?.();
+    }
+    function pausePreview() {
+      stopPreviewQueue(); pauseBank(activeBank);
       dialog.dataset.hasBox = 'false';
+    }
+    function disposeBank(bank) {
+      bank.active = false;
+      for (const node of [...bank.nodes.values(), ...bank.spare]) { node._abort.abort(); clearCardPreview(node); }
+      bank.cards.remove(); banks.delete(bank.platform);
+    }
+    function selectBank() {
+      if (activeBank?.platform === platformName) return;
+      stopPreviewQueue();
+      if (activeBank) {
+        activeBank.active = false; activeBank.cards.hidden = true;
+        for (const node of activeBank.nodes.values()) {
+          node.classList.replace('sofa-card', 'sofa-cached'); node._selectArtwork?.(false);
+          if (node._interacted) { node._viewer?.reset(); node._interacted = false; }
+        }
+        pauseBank(activeBank);
+      }
+      let bank = banks.get(platformName);
+      if (!bank) {
+        bank = { platform: platformName, cards: element('div', 'sofa-cards'), nodes: new Map(), spare: [], active: false, paused: true };
+        deck.insertBefore(bank.cards, previous); banks.set(platformName, bank);
+      }
+      bank.active = true; bank.cards.hidden = false;
+      for (const node of bank.nodes.values()) node.classList.replace('sofa-cached', 'sofa-card');
+      activeBank = bank; cards = bank.cards; cardNodes = bank.nodes; spareCards = bank.spare; lastBoxSelection = null;
     }
     const observer = new window.MutationObserver(updateBoxVisibility);
     function preparePreviews() {
-      if (!boxMode || watchedGame !== null) { clearPreview(); return; }
+      if (!boxMode || watchedGame !== null) { pausePreview(); return; }
+      resumeBank(activeBank);
       if (previewTimer !== null || previewWork !== null) return;
       const token = previewGeneration;
       const current = () => active && boxMode && watchedGame === null && previewGeneration === token;
@@ -181,7 +221,7 @@
           if (current() && cardNodes.get(id) === node && node._boxKey === key && node._renderedBoxKey !== key) {
             // A recycled Three.js viewer keeps its renderer, geometry, lights
             // and materials. update replaces the artwork for the incoming game.
-            node._viewer ||= options.createViewer(node._preview);
+            node._viewer ||= options.createViewer(node._preview, { renderGroup: activeBank });
             node._viewer.update(options.sourceGame(item), options.images(item), settings);
             node._boxSettings = settings; node._settingsPlatform = item.platform;
             node._renderedBoxKey = key;
@@ -282,9 +322,12 @@
       return select;
     }
     function renderCards() {
+      selectBank();
       dialog.dataset.view = boxMode ? 'box' : 'cover';
       const index = games.findIndex(game => game.id === gameId);
       const visible = carousel(games, Math.max(0, index), boxMode ? 4 : 3);
+      const retained = carousel(games, Math.max(0, index), 4).sort((a, b) => Math.abs(a.offset) - Math.abs(b.offset));
+      options.retainArtwork?.(platformName, [...new Set(retained.flatMap(({ item }) => coverPaths(item)))]);
       if (lastBoxSelection !== gameId) {
         for (const id of [lastBoxSelection, gameId]) {
           const node = cardNodes.get(id);
@@ -345,7 +388,7 @@
         node.style.setProperty('--offset', offset); node.style.setProperty('--position', position); node.style.setProperty('--scale', scale);
         node.style.setProperty('--turn', `${boxMode || offset === 0 ? 0 : offset > 0 ? -24 : 24}deg`);
         node.style.setProperty('--cover-width-scale', offset === 0 ? 1 : 1 / Math.cos(24 * Math.PI / 180));
-        node.style.zIndex = String(10 - Math.abs(offset)); node.classList.toggle('is-selected', offset === 0);
+        node.style.zIndex = String(boxMode && offset === 0 ? 20 : 10 - Math.abs(offset)); node.classList.toggle('is-selected', offset === 0);
         node.tabIndex = offset === 0 ? 0 : -1; node.setAttribute('aria-current', String(offset === 0));
         node._selectArtwork?.(offset === 0);
         node._boxKey = JSON.stringify([options.sourceGame(item), options.images(item)]);
@@ -417,6 +460,7 @@
     }
     function changePlatform(name, focus = true) {
       if (!platforms.some(platform => platform.name === name)) return;
+      if (gameId !== null) remembered.set(platformName, gameId);
       platformName = name; zone = 'platforms'; refresh(); if (focus) focusCurrent();
     }
     function movePlatform(delta) {
@@ -447,7 +491,7 @@
         if (!active) return;
         const current = options.games().find(item => item.id === game.id);
         if (result && current?.is_running) {
-          wasRunning = true; clearPreview(); await options.minimize?.();
+          wasRunning = true; pausePreview(); await options.minimize?.();
         } else { watchedGame = null; wasRunning = false; }
       } catch (error) { watchedGame = null; wasRunning = false; options.onError(error); }
       finally {
@@ -473,6 +517,7 @@
     function refresh() {
       if (!active) return;
       const library = options.games(); platforms = platformsFor(library, options.platforms());
+      options.pruneArtwork?.(new Set(library.flatMap(coverPaths)), new Set(platforms.map(platform => platform.name)));
       if (!platforms.some(platform => platform.name === platformName)) platformName = null;
       const source = library.filter(game => platformName === null || game.platform === platformName)
         .filter(game => !query || game.title.toLocaleLowerCase().includes(query.toLocaleLowerCase()));
@@ -480,6 +525,7 @@
       gameId = games.some(game => game.id === remembered.get(platformName)) ? remembered.get(platformName)
         : games.some(game => game.id === gameId) ? gameId : games[0]?.id ?? null;
       const names = new Set(platforms.map(platform => platform.name));
+      for (const bank of banks.values()) if (bank !== activeBank && !names.has(bank.platform)) disposeBank(bank);
       for (const [name, node] of platformNodes) if (!names.has(name)) { node.remove(); platformNodes.delete(name); }
       for (const platform of platforms) {
         let node = platformNodes.get(platform.name);
@@ -589,11 +635,11 @@
       active = false; ++generation; ++selectionVersion;
       backgroundAbort?.abort(); backgroundAbort = null;
       watchedGame = null; wasRunning = false; pendingFocus = false; selectedKey = null;
-      window.clearTimeout(frame); padInput.reset(); clearPreview();
-      for (const node of cardNodes.values()) node._abort.abort();
-      spareCards.length = 0;
+      window.clearTimeout(frame); padInput.reset(); stopPreviewQueue();
+      for (const bank of banks.values()) disposeBank(bank);
+      activeBank = null; cards = null; cardNodes = new Map(); spareCards = []; lastBoxSelection = null;
       observer.disconnect();
-      cardNodes.clear(); cards.replaceChildren(); platformNodes.clear(); rail.replaceChildren();
+      platformNodes.clear(); rail.replaceChildren();
       dialog.close(); const old = lease; lease = null; void old?.release();
       opener?.focus?.({ preventScroll: true });
     }

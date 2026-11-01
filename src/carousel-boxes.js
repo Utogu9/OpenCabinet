@@ -257,7 +257,7 @@
       clear() { clearArtwork(); inner.clear(); source = model = geometryKey = null; bindings = []; },
       dispose() { api.clear(); disposed = true; host.removeEventListener('keydown', openKey, true); inner.dispose(); },
     };
-    for (const name of ['reset','zoom','rotate','toggleSide','showBack','setRotationLock','readManual','returnManual','refreshManual']) api[name] = (...args) => inner[name]?.(...args);
+    for (const name of ['reset','zoom','rotate','toggleSide','showBack','setRotationLock','readManual','returnManual','refreshManual','suspend','resume']) api[name] = (...args) => inner[name]?.(...args);
     return api;
   }
   async function cachedImage(path, signal, options) {

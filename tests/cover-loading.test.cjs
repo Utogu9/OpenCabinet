@@ -120,6 +120,24 @@ test("Going beyond the limit evicts the least used offscreen thumbnail and keeps
   assert.equal(app.cache.size, 2);
 });
 
+test('Each couch platform keeps its last nine decoded covers despite shared LRU pressure',async()=>{
+  const {api}=library(),decoded=[],signal=new AbortController().signal;
+  const cache=api.createCache(2,async file=>{decoded.push(file);return {width:320,height:400,closed:false,close(){this.closed=true;}};});
+  const first=Array.from({length:9},(_,i)=>`A${i}`),second=Array.from({length:9},(_,i)=>`B${i}`);
+  cache.retain('console A',first);const a=await Promise.all(first.map(path=>cache.load(path,signal)));
+  cache.retain('console B',second);await Promise.all(second.map(path=>cache.load(path,signal)));
+  for(let i=0;i<20;i++)await cache.load(`noise${i}`,signal);
+  assert.ok(a.every(bitmap=>!bitmap.closed));assert.ok(first.every((path,i)=>cache.get(path)===a[i]));
+  const reads=decoded.length;await Promise.all(first.map(path=>cache.load(path,signal)));assert.equal(decoded.length,reads,'Returning to a console needs no decoding');
+  cache.retain('All',[first[0]]);cache.retain('console A',[]);
+  await cache.load('more pressure',signal);assert.equal(cache.get(first[0]),a[0],'Shared artwork stays retained by another platform window');
+  assert.ok(a.slice(1).every(bitmap=>bitmap.closed),'Images leaving the last-nine window become evictable');
+  cache.invalidate(first[0]);assert.equal(a[0].closed,true,'Retained files can still be invalidated after an edit');
+  const fresh=await cache.load(first[0],signal);assert.notEqual(fresh,a[0]);
+  cache.retain('console B',[]);cache.retain('All',[]);cache.setLimit(1);assert.ok(cache.size<=1);
+  cache.dispose();assert.equal(fresh.closed,true);
+});
+
 test("Scrolling pauses new decodes and then prioritizes covers at the new position", async () => {
   const app = library(2);
   app.cover("A"); app.cover("B"); const last = app.cover("Z");
@@ -335,6 +353,27 @@ test("The library prewarms full covers and routes their disk lookups and decoder
   await vm.runInContext('catalogCoverCache.load("full.jpg",new AbortController().signal)',context);
   assert.equal(calls[0].source,'full.jpg');assert.equal(calls[0].fullCover,true);
   assert.equal(decodes[0].fullCover,true);
+});
+
+test('Couch reservations use the correct Windows/Linux keys and release deleted platforms or changed images',async()=>{
+  const {api}=library();
+  for(const linux of [false,true]){
+    const context=vm.createContext({AbortController,window:{addEventListener(){},OpenCabinetRuntime:{linux},__TAURI__:{core:{invoke(){}}}}});
+    context.cache=api.createCache(1,async()=>({width:320,height:400,close(){this.closed=true;}}));
+    vm.runInContext(fs.readFileSync(path.join(__dirname,'../src/main.js'),'utf8'),context);
+    vm.runInContext(`preferences.cacheMode='disk';catalogCoverCache=cache;
+      retainSofaArtwork('PS2',['front.webp','wrap.webp']);retainSofaArtwork('Wii',['wii.webp']);`,context);
+    const prefix=linux?'sofa:':'';
+    const front=await context.cache.load(prefix+'front.webp',new AbortController().signal);
+    const wrap=await context.cache.load(prefix+'wrap.webp',new AbortController().signal);
+    const wii=await context.cache.load(prefix+'wii.webp',new AbortController().signal);
+    await context.cache.load('library-pressure',new AbortController().signal);
+    assert.equal(front.closed,undefined);assert.equal(wrap.closed,undefined);assert.equal(wii.closed,undefined);
+    vm.runInContext(`pruneSofaArtwork(new Set(['wii.webp']),new Set([null,'Wii']));`,context);
+    assert.equal(front.closed,true);assert.equal(wrap.closed,true);assert.equal(wii.closed,undefined);
+    assert.equal(vm.runInContext('sofaArtworkWindows.has("PS2")',context),false);
+    context.cache.dispose();
+  }
 });
 
 test('Editing artwork invalidates both library and couch previews of the same file',()=>{

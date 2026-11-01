@@ -23,7 +23,7 @@ test('Couch mode carousels, controller selectors, launch return and cleanup work
   await page.goto(`http://127.0.0.1:${server.address().port}/`);
   const messages=JSON.parse(fs.readFileSync('src/locales/en-US.json','utf8')).messages;
   await page.evaluate(messages=>{window.OpenCabinetI18n={t:(key,...values)=>(messages[key]||key).replace(/\{(\d+)\}/g,(token,index)=>values[index]??token)};},messages);
-  for(const name of ['dvd-case.js','image-fallbacks.js','game-box.js','carousel-boxes.js','three-box-router.js','game-discs.js','game-regions.js','sofa-mode.js'])await page.addScriptTag({url:`/src/${name}`});
+  for(const name of ['dvd-case.js','image-fallbacks.js','cover-cache.js','game-box.js','carousel-boxes.js','three-box-router.js','game-discs.js','game-regions.js','sofa-mode.js'])await page.addScriptTag({url:`/src/${name}`});
   await page.evaluate(messages=>{
     window.OpenCabinetI18n={t:(key,...values)=>(messages[key]||key).replace(/\{(\d+)\}/g,(token,index)=>values[index]??token)};
     const image=(text,color)=>'data:image/svg+xml,'+encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="480" height="680"><rect width="480" height="680" fill="${color}"/><path d="M0 140 480 430V680H0Z" fill="#0003"/><text x="35" y="75" font-family="sans-serif" font-size="22" fill="white">OpenCabinet</text><text x="35" y="320" font-family="sans-serif" font-size="34" fill="white">${text}</text></svg>`);
@@ -46,8 +46,8 @@ test('Couch mode carousels, controller selectors, launch return and cleanup work
       formatPlayTime:game=>`${game.session_count} sessions`,variantLabel:game=>game.regions?'2 regions':game.discs?.length>1?'2 discs':'',
       sortGames:games=>[...games].sort((a,b)=>a.title.localeCompare(b.title)),
       platformDetails:async platform=>({images:[{kind:'logo',path:image(platform.name.includes('Sony')?'PS2':'Wii','#252c3c')}]}),
-      boxSettings:async()=>null,createViewer:host=>{
-        const viewer=window.OpenCabinet3D.createViewer(host,{carousel:true,imageSource:path=>path,debug:state=>{host._debug=state;},
+      boxSettings:async()=>null,createViewer:(host,session)=>{
+        const viewer=window.OpenCabinet3D.createViewer(host,{...session,carousel:true,imageSource:path=>path,debug:state=>{host._debug=state;},
           getCoverPreview:path=>fixtureOptions.getCoverPreview?.(path),loadCoverPreview:(path,signal)=>fixtureOptions.loadCoverPreview?.(path,signal)}),dispose=viewer.dispose;
         fixture.liveViewers++;fixture.createdViewers++;
         viewer.dispose=()=>{fixture.liveViewers--;dispose();};return viewer;
@@ -111,7 +111,7 @@ test('Couch mode carousels, controller selectors, launch return and cleanup work
   fs.mkdirSync('target',{recursive:true});await page.screenshot({path:'target/sofa-boxes.png'});
   await page.click('#sofa-view');assert.equal(await page.locator('#sofa-view').getAttribute('aria-pressed'),'false');
   assert.equal(await page.locator('.sofa-preview:visible').count(),0);
-  assert.equal(await page.evaluate(()=>fixture.liveViewers),0,'Switching to covers releases every 3D viewer');
+  assert.equal(await page.evaluate(()=>fixture.liveViewers),4,'Switching to covers pauses the prepared 3D viewers without discarding them');
   const appearance=await page.locator('.sofa-card').evaluateAll(nodes=>nodes.map(node=>({opacity:getComputedStyle(node).opacity,filter:getComputedStyle(node).filter})));
   assert.ok(appearance.every(card=>card.opacity==='1'&&card.filter==='none'),'All covers keep full opacity and brightness');
   await page.waitForTimeout(300);
@@ -129,6 +129,14 @@ test('Couch mode carousels, controller selectors, launch return and cleanup work
   await page.screenshot({path:'target/sofa-covers.png'});
   await page.click('#sofa-view');
   await page.waitForFunction(()=>fixture.liveViewers===4);
+  assert.equal(await page.evaluate(()=>fixture.createdViewers),created,'Returning from covers reuses the prepared models');
+  await page.evaluate(()=>{fixture.savedAllCards=[...document.querySelectorAll('.sofa-card')];});
+  await page.locator('.sofa-platform[data-platform="Nintendo Wii"]').click();
+  await page.waitForFunction(()=>document.querySelector('.sofa-card')?.dataset.boxReady==='true');
+  await page.locator('.sofa-platform[data-platform=""]').click();
+  assert.equal(await page.evaluate(()=>[...document.querySelectorAll('.sofa-card')].every(node=>fixture.savedAllCards.includes(node)&&node.dataset.boxReady==='true')),true,
+    'Returning to All shows the same prepared models immediately');
+  assert.equal(await page.evaluate(()=>fixture.createdViewers),created+1,'Visiting another console creates only that console’s viewer');
   await page.click('#sofa-view');
   await page.locator('.sofa-card.is-selected').focus();
   await press(0);await page.waitForSelector('.disc-dialog[open]');
@@ -221,6 +229,16 @@ test('Couch mode carousels, controller selectors, launch return and cleanup work
     node._preview.dispatchEvent(new WheelEvent('wheel',{deltaY:-100,bubbles:true,cancelable:true}));
   });
   await page.waitForFunction(()=>fixture.zoomedNode.querySelector('.game-box-model').style.getPropertyValue('--box-scale')!==fixture.initialScale);
+  await page.evaluate(()=>{
+    for(let i=0;i<4;i++)fixture.zoomedNode._preview.dispatchEvent(new WheelEvent('wheel',{deltaY:-200,bubbles:true,cancelable:true}));
+  });await page.waitForTimeout(60);
+  assert.equal(await page.evaluate(()=>getComputedStyle(fixture.zoomedNode._preview).overflow),'visible','Legacy zoom can extend beyond its card');
+  assert.equal(await page.locator('.sofa-deck').evaluate(node=>getComputedStyle(node).overflow),'visible','The carousel does not clip an enlarged box');
+  assert.equal(await page.evaluate(()=>{
+    const face=fixture.zoomedNode.querySelector('.game-box-front').getBoundingClientRect(),stage=fixture.zoomedNode._preview.getBoundingClientRect();
+    return face.top<stage.top||face.bottom>stage.bottom||face.left<stage.left||face.right>stage.right;
+  }),true,'The enlarged legacy box actually extends outside its former clipping rectangle');
+  await page.screenshot({path:'target/sofa-zoom-legacy.png'});
   await page.keyboard.press('ArrowRight');
   await page.waitForFunction(()=>fixture.zoomedNode.querySelector('.game-box-model').style.getPropertyValue('--box-scale')===fixture.initialScale);
   await page.evaluate(()=>{
@@ -253,6 +271,22 @@ test('Couch mode carousels, controller selectors, launch return and cleanup work
     cards:[...document.querySelectorAll('.sofa-card')].map(node=>({id:node.dataset.gameId,ready:node.dataset.boxReady,children:node._preview.childElementCount,renderer:node._preview.dataset.renderer})),errors:[]})));throw error; }
   assert.equal(await page.evaluate(()=>fixture.liveViewers),2,'Both the selected and neighboring Dreamcast boxes use Three.js');
   await page.waitForFunction(()=>document.querySelector('.sofa-card.is-selected').dataset.boxReady==='true');
+  await page.waitForFunction(()=>document.querySelector('.sofa-card.is-selected')._preview._debug?.renderer.info.render.calls>0);
+  await page.evaluate(()=>{
+    const node=document.querySelector('.sofa-card.is-selected');fixture.zoomedWebgl=node;fixture.webglWidth=node._preview.querySelector('canvas').width;
+    fixture.neighborCanvas=document.querySelector('.sofa-card:not(.is-selected) .sofa-preview canvas');fixture.neighborWidth=fixture.neighborCanvas.width;
+    node._interacted=true;node._viewer.zoom(.7);
+  });
+  await page.waitForFunction(()=>fixture.zoomedWebgl._preview.querySelector('canvas').width>fixture.webglWidth);
+  assert.equal(await page.evaluate(()=>{
+    const stage=fixture.zoomedWebgl._preview,canvas=stage.querySelector('canvas'),view=stage._debug.camera.view;
+    return canvas.getBoundingClientRect().width>stage.getBoundingClientRect().width
+      &&view.enabled&&view.fullWidth===stage.clientWidth&&view.offsetX<0&&view.offsetY<0;
+  }),true,'Three.js expands its drawing surface around the original framing');
+  assert.equal(await page.evaluate(()=>fixture.neighborCanvas.width),await page.evaluate(()=>fixture.neighborWidth),'Only the zoomed viewer allocates the larger canvas');
+  await page.screenshot({path:'target/sofa-zoom-three.png'});
+  await page.evaluate(()=>fixture.zoomedWebgl._viewer.reset());
+  await page.waitForFunction(()=>fixture.zoomedWebgl._preview.querySelector('canvas').width===fixture.webglWidth);
   await page.evaluate(()=>{
     const node=document.querySelector('.sofa-card.is-selected');fixture.webglRoot=node._preview._debug.root;
     fixture.webglRotation=fixture.webglRoot.quaternion.toArray();fixture.webglCanvas=node.querySelector('canvas');fixturePad.axes=[0,0,-.8,.5];
@@ -267,6 +301,32 @@ test('Couch mode carousels, controller selectors, launch return and cleanup work
   await page.waitForFunction(()=>document.querySelector('.sofa-card[data-game-id="101"]')?.dataset.hasBox==='true');
   assert.equal(await page.evaluate(()=>document.querySelector('.sofa-preview canvas')===fixture.previousCanvas&&fixture.createdViewers===fixture.previousViewers),true,
     'Changing the game reuses the same Three.js canvas and model');
+  await page.fill('.sofa-search','');
+  await page.evaluate(()=>{
+    fixtureGames.push(...fixtureGames.map(game=>({...game,id:game.id+1000,platform:'Sony PlayStation'})));
+    fixtureSofa.refresh();
+  });
+  await page.locator('.sofa-platform[data-platform="Sega Dreamcast"]').click();
+  await page.waitForFunction(()=>document.querySelector('.sofa-card.is-selected')._preview._debug?.renderer.info.render.calls>0);
+  await page.evaluate(()=>{
+    const node=document.querySelector('.sofa-card.is-selected'),state=node._preview._debug;
+    fixture.savedModel={node,viewer:node._viewer,renderer:state.renderer,geometry:state.meshes[0].geometry,environment:state.scene.environment};
+    fixture.modelRestores=0;state.renderer.domElement.addEventListener('webglcontextrestored',()=>fixture.modelRestores++);
+  });
+  await page.locator('.sofa-platform[data-platform="Sony PlayStation"]').click();
+  await page.waitForFunction(()=>document.querySelector('.sofa-card.is-selected')._preview._debug?.renderer.info.render.calls>0);
+  await page.waitForFunction(()=>fixture.savedModel.renderer.getContext().isContextLost());
+  const cachedViewers=await page.evaluate(()=>fixture.createdViewers);
+  await page.locator('.sofa-platform[data-platform="Sega Dreamcast"]').click();
+  assert.equal(await page.evaluate(()=>{
+    const saved=fixture.savedModel,node=document.querySelector('.sofa-card.is-selected'),state=node._preview._debug;
+    return node===saved.node&&node._viewer===saved.viewer&&state.renderer===saved.renderer&&state.meshes[0].geometry===saved.geometry;
+  }),true,'Switching WebGL platforms retains the actual scene, geometry, renderer and DOM');
+  await page.waitForFunction(()=>fixture.modelRestores>0&&!fixture.savedModel.renderer.getContext().isContextLost()
+    &&fixture.savedModel.node._preview._debug.scene.environment!==fixture.savedModel.environment);
+  await page.waitForFunction(()=>fixture.savedModel.renderer.info.render.calls>0);
+  assert.equal(await page.evaluate(()=>fixture.createdViewers),cachedViewers,'Returning restores GPU resources without rebuilding or reparsing the model');
+  await page.screenshot({path:'target/sofa-model-cache-restored.png'});
   await page.keyboard.press('Escape');
   assert.equal(await page.evaluate(()=>fixture.liveViewers),0);
   await page.evaluate(()=>{
@@ -306,6 +366,43 @@ test('Couch mode carousels, controller selectors, launch return and cleanup work
   assert.equal(await page.evaluate(()=>fixture.cacheStage.dataset.artworkReady), 'true',
     'A resident front cover paints immediately even while the preferred full wrap is still loading');
   await page.evaluate(()=>{fixture.cacheViewer.dispose();fixture.cacheStage.remove();fixture.finishWrap(null);});
+  await page.evaluate(()=>{
+    fixture.retainedWindows=new Map();fixture.retainedDecodes=[];
+    fixture.retainedCache=OpenCabinetCovers.createCache(2,async path=>{
+      fixture.retainedDecodes.push(path);const canvas=document.createElement('canvas');canvas.width=96;canvas.height=136;
+      canvas.getContext('2d').fillRect(0,0,96,136);canvas.close=()=>{canvas.width=canvas.height=0;};return canvas;
+    });
+    fixtureOptions.getCoverPreview=path=>fixture.retainedCache.get(path);
+    fixtureOptions.loadCoverPreview=path=>fixture.retainedCache.load(path,new AbortController().signal);
+    fixtureOptions.retainArtwork=(platform,paths)=>{
+      fixture.retainedWindows.set(platform,paths);fixture.retainedCache.retain(platform,paths);
+      for(const path of paths)void fixtureOptions.loadCoverPreview(path);
+    };
+    const original=fixtureGames[0];
+    fixtureGames=Array.from({length:36},(_,i)=>{
+      const image=document.createElement('canvas');image.width=96;image.height=136;
+      const ctx=image.getContext('2d');ctx.fillStyle=`hsl(${i*10} 60% 40%)`;ctx.fillRect(0,0,96,136);
+      return {...original,id:2000+i,title:`Cache game ${String(i).padStart(2,'0')}`,platform:i<18?'Cache A':'Cache B',
+        regions:null,discs:[],images:[{kind:'cover',path:image.toDataURL()},{kind:'cover',path:`unused-alternate-cover-${i}`}]};
+    });
+    fixtureSofa.open();if(document.getElementById('sofa-mode').dataset.view==='box')document.getElementById('sofa-view').click();
+  });
+  await page.locator('.sofa-platform[data-platform="Cache A"]').click();
+  await page.waitForFunction(()=>fixture.retainedWindows.get('Cache A')?.length===9&&fixture.retainedWindows.get('Cache A').every(path=>fixture.retainedCache.get(path)));
+  await page.evaluate(()=>{fixture.savedCovers=fixture.retainedWindows.get('Cache A').map(path=>({path,image:fixture.retainedCache.get(path)}));});
+  await page.locator('.sofa-platform[data-platform="Cache B"]').click();
+  await page.waitForFunction(()=>fixture.retainedWindows.get('Cache B')?.length===9&&fixture.retainedWindows.get('Cache B').every(path=>fixture.retainedCache.get(path)));
+  await page.evaluate(async()=>{
+    for(let i=0;i<15;i++)await fixture.retainedCache.load(`other-library-image-${i}`,new AbortController().signal);
+    fixture.readsBeforeReturn=fixture.retainedDecodes.length;
+  });
+  await page.locator('.sofa-platform[data-platform="Cache A"]').click();
+  assert.equal(await page.evaluate(()=>fixture.retainedDecodes.length),await page.evaluate(()=>fixture.readsBeforeReturn),'Returning to a console does not decode any of its remembered covers');
+  assert.equal(await page.locator('.sofa-card .sofa-card-art canvas.sofa-cover').count(),7,'Remembered covers paint immediately, without waiting for another thumbnail task');
+  assert.equal(await page.evaluate(()=>fixture.savedCovers.every(({path,image})=>image.width>0&&fixture.retainedCache.get(path)===image)),true,'The actual decoded RAM images survive platform changes and library pressure');
+  await page.keyboard.press('Escape');await page.evaluate(()=>fixtureSofa.open());
+  assert.equal(await page.locator('.sofa-card-art canvas.sofa-cover').count(),7,'Closing and reopening couch mode keeps the last console window warm');
+  await page.keyboard.press('Escape');await page.evaluate(()=>fixture.retainedCache.dispose());
   assert.deepEqual(errors,[]);
   assert.deepEqual(graphicsErrors,[],'Texture upgrades and recycled models do not produce WebGL errors');
 });

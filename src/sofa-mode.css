@@ -27,6 +27,8 @@ dialog.sofa-mode[open] { display: grid; grid-template-rows: auto minmax(170px, 1
 .sofa-card::before { content: ''; position: absolute; inset: 4% -5%; z-index: -1; pointer-events: none; opacity: 0; background: radial-gradient(ellipse, color-mix(in srgb, var(--accent-color) 60%, transparent), color-mix(in srgb, var(--accent-color) 38%, transparent) 43%, color-mix(in srgb, var(--accent-color) 14%, transparent) 62%, transparent 78%); transition: opacity .15s ease; }
 .sofa-card:focus-within::before { opacity: 1; }
 .sofa-mode[data-view="box"] .sofa-card { width: clamp(210px, 32vw, 490px); }
+.sofa-mode[data-view="box"] .sofa-deck { overflow: visible; z-index: 1; }
+.sofa-mode[data-view="box"] .sofa-preview { overflow: visible; }
 .sofa-mode[data-view="box"] .sofa-card::before { inset: auto; left: 14%; bottom: 5%; width: 72%; height: 14%; border-radius: 50%; background: radial-gradient(ellipse closest-side, color-mix(in srgb, var(--accent-color) 90%, transparent), color-mix(in srgb, var(--accent-color) 55%, transparent) 35%, color-mix(in srgb, var(--accent-color) 18%, transparent) 68%, transparent 100%); }
 .sofa-mode[data-view="box"] .sofa-card:focus-within .sofa-preview::after { opacity: 0; }
 .sofa-mode[data-view="cover"] .sofa-deck { perspective: none; }

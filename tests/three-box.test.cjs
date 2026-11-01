@@ -16,7 +16,8 @@ function router(load,{switchModel=false,pspModel=false}={}) {
   function make(type) {
     const calls=[];const viewer={type,calls,canOpen:true,isOpen:false,disposed:false,
       update(...args){calls.push(['update',...args]);},dispose(){this.disposed=true;},setRotationLock(mode){calls.push(['lock',mode]);},
-      setOpen(open){this.isOpen=open;calls.push(['open',open]);},zoom(delta){calls.push(['zoom',delta]);},rotate(x,y){calls.push(['rotate',x,y]);}};
+      setOpen(open){this.isOpen=open;calls.push(['open',open]);},zoom(delta){calls.push(['zoom',delta]);},rotate(x,y){calls.push(['rotate',x,y]);},
+      suspend(release){calls.push(['suspend',release]);},resume(){calls.push(['resume']);}};
     viewers.push(viewer);return viewer;
   }
   const api=context.OpenCabinetThreeBoxes.createRouter({classList:{remove(){}},dataset:{}},{},()=>make('css'),
@@ -30,6 +31,16 @@ test('Dreamcast switches to Three.js; PS2 keeps the existing viewer',async()=>{
   app.api.update({id:2,platform:'Dreamcast'},[]);await tick();
   assert.equal(imports,1);assert.equal(app.viewers[0].disposed,true);assert.equal(app.viewers[1].type,'three');
   app.api.update({id:3,platform:'PS2'},[]);assert.equal(app.viewers[1].disposed,true);assert.equal(app.viewers[2].type,'css');
+});
+
+test('Cached CSS viewers pause without disposal and a loading WebGL viewer inherits its parked state',async()=>{
+  let finish;const app=router(make=>new Promise(resolve=>{finish=()=>resolve({createViewer:()=>make('three')});}));
+  app.api.update({id:1,platform:'PS2'},[]);const css=app.viewers[0];
+  app.api.suspend();assert.deepEqual(css.calls.at(-1),['suspend',false]);assert.equal(css.disposed,false);
+  app.api.resume();assert.deepEqual(css.calls.at(-1),['resume']);
+  app.api.update({id:2,platform:'Dreamcast'},[]);app.api.suspend(true);finish();await tick();
+  const webgl=app.viewers[1];assert.ok(webgl.calls.some(call=>call[0]==='suspend'&&call[1]===true));assert.equal(webgl.disposed,false);
+  app.api.resume();assert.deepEqual(webgl.calls.at(-1),['resume']);app.api.dispose();assert.equal(webgl.disposed,true);
 });
 
 test('PlayStation jewel cases share the bundled Dreamcast viewer and respect explicit case overrides',async()=>{
@@ -257,6 +268,23 @@ test('Both printed spine windows stay optically flat without suppressing the oth
     assert.ok(relief>mask.count*.7,'the remaining molded acrylic keeps its relief and edge scattering');
     geometry.dispose();
   }
+});
+
+test('Carousel zoom expands the canvas without changing its framing or distorting the projection',async()=>{
+  const {canvasViewport}=await import('../src/three-box-motion.js');
+  const {PerspectiveCamera,Vector3}=await import('three');
+  const normal=canvasViewport(490,480,1,true),expanded=canvasViewport(490,480,1.7,true);
+  assert.deepEqual(normal,{width:490,height:480,left:0,top:0,scale:1});
+  assert.equal(expanded.width,858);assert.equal(expanded.height,840);
+  assert.deepEqual(canvasViewport(490,480,1.01,true),expanded,'Wheel ticks reuse one expanded render surface');
+  assert.deepEqual(canvasViewport(490,480,1.7,false),normal,'Normal sidebar/fullscreen rendering keeps its existing viewport');
+  const camera=new PerspectiveCamera(35,490/480,10,2000);camera.position.z=400;camera.updateMatrixWorld();
+  const point=new Vector3(200,0,0),before=point.clone().project(camera);
+  assert.ok(before.x>1,'The test point lies outside the original canvas');
+  camera.setViewOffset(490,480,expanded.left,expanded.top,expanded.width,expanded.height);
+  const after=point.clone().project(camera);
+  assert.ok(Math.abs(after.x)<1,'The expanded canvas can draw the formerly clipped point');
+  assert.ok(Math.abs((before.x+1)*490/2-(expanded.left+(after.x+1)*expanded.width/2))<1e-9,'Visible points keep the same screen position and perspective');
 });
 
 test('Pointer movement follows the mouse in Three.js world space and the lid opens toward the front',async()=>{

@@ -119,6 +119,18 @@ test('The optional Switch rig opens both folds, keeps the cartridge fixed and re
   await page.evaluate(()=>{viewer.setRotationLock('x');viewer.zoom(.1);viewer.showBack();});
   assert.equal(await page.evaluate(()=>viewer.rotationLock),'x');
   await page.evaluate(()=>viewer.setOpen(true,false));await page.waitForTimeout(100);
+  await page.evaluate(()=>{
+    window.savedSession={model:debug.model,geometry:debug.meshes[0].geometry,renderer:debug.renderer,
+      outside:debug.materials.get('Cover Outside').map,environment:debug.scene.environment};
+    viewer.suspend(true);
+  });
+  await page.waitForFunction(()=>debug.renderer.getContext().isContextLost());
+  await page.evaluate(()=>viewer.resume());
+  await page.waitForFunction(()=>!debug.renderer.getContext().isContextLost()&&debug.scene.environment
+    &&debug.scene.environment!==savedSession.environment&&debug.renderer.info.render.calls>0);
+  assert.equal(await page.evaluate(()=>debug.model===savedSession.model&&debug.meshes[0].geometry===savedSession.geometry
+    &&debug.renderer===savedSession.renderer&&debug.materials.get('Cover Outside').map===savedSession.outside),true,
+    'Parking a glTF box preserves its prepared model and texture images while restoring lighting');
   assert.equal(await page.evaluate(()=>debug.renderer.getContext().getError()),0);assert.deepEqual(errors,[]);
   await page.evaluate(()=>viewer.dispose());assert.equal(await page.locator('#stage canvas').count(),0);
 });

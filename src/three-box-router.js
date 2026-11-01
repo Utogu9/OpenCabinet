@@ -11,9 +11,10 @@
   function createRouter(host, options, createLegacy, profileFor, resolveSettings, loadModule = load) {
     let viewer=null, backend=null, pending=null, generation=0, disposed=false, open=false, lock='free';
     let commands=[];
+    let suspended=false,releaseContext=false;
     const isThree=()=>backend?.startsWith('three:');
     function release() { generation++; viewer?.dispose(); viewer=null; backend=null; commands=[]; }
-    function legacy() { backend='css';viewer=createLegacy(host,options);viewer.setRotationLock?.(lock);viewer.update(...pending); }
+    function legacy() { backend='css';viewer=createLegacy(host,options);viewer.setRotationLock?.(lock);if(suspended)viewer.suspend?.(releaseContext);viewer.update(...pending); }
     function backendFor(game,settings) {
       const profile=profileFor(game.platform,null,game.rom_path,resolveSettings(settings,game.box_3d));
       const model=globalThis.OpenCabinet3D.jewelFamily(game.platform) && ['jewel','jewelPal'].includes(profile.id) ? 'dreamcast'
@@ -41,7 +42,7 @@
         }).then(created=>{
           if(!created)return;
           if(disposed||token!==generation) {created.dispose();return;}
-          viewer=created;viewer.setRotationLock(lock);viewer.update(...pending);
+          viewer=created;viewer.setRotationLock(lock);if(suspended)viewer.suspend?.(releaseContext);viewer.update(...pending);
           if(open)viewer.setOpen(open,false);
           const queued=commands;commands=[];queued.forEach(([name,args])=>viewer[name]?.(...args));
         }).catch(error=>{
@@ -53,6 +54,8 @@
         });
       },
       get canOpen() {return viewer?.canOpen ?? !!isThree();},
+      suspend(release=false) {suspended=true;releaseContext ||= release;viewer?.suspend?.(releaseContext);},
+      resume() {suspended=false;releaseContext=false;viewer?.resume?.();},
       get isOpen() {return viewer?.isOpen ?? open;},
       get rotationLock() {return lock;},
       setRotationLock(value) {if(['free','x','y'].includes(value)){lock=value;viewer?.setRotationLock(value);}},

@@ -208,13 +208,14 @@
   function createCache(limit, decode) {
     const ready = new Map();
     const pending = new Map();
+    const reservations = new Map(), retained = new Map();
     let disposed = false;
     let protectedPaths = new Set();
     function trim(keep = null) {
       for (const [path, task] of pending) if (task.signal.aborted) pending.delete(path);
       while (ready.size && ready.size + pending.size > limit) {
         const keys=[...ready.keys()];
-        const path=keys.find(key=>key!==keep&&!protectedPaths.has(key)) ?? keys.find(key=>key!==keep);
+        const path=keys.find(key=>key!==keep&&!retained.has(key)&&!protectedPaths.has(key)) ?? keys.find(key=>key!==keep&&!retained.has(key));
         if(path===undefined)break;
         ready.get(path).close();
         ready.delete(path);
@@ -224,6 +225,17 @@
       get limit() { return limit; },
       get size() { return ready.size; },
       protect(paths) { protectedPaths = paths; },
+      retain(owner, paths) {
+        const previous = reservations.get(owner) || new Set(), next = new Set(paths);
+        for (const path of previous) if (!next.has(path)) {
+          const count = retained.get(path) - 1;
+          if (count) retained.set(path, count); else retained.delete(path);
+        }
+        for (const path of next) if (!previous.has(path)) retained.set(path, (retained.get(path) || 0) + 1);
+        if (next.size) reservations.set(owner, next); else reservations.delete(owner);
+        // Explicit couch windows are a RAM minimum, independent of LRU pressure.
+        trim();
+      },
       get(path) {
         const bitmap = ready.get(path);
         if (bitmap) { ready.delete(path); ready.set(path, bitmap); }
@@ -263,6 +275,7 @@
       },
       dispose() {
         disposed = true;
+        reservations.clear(); retained.clear();
         for (const bitmap of ready.values()) bitmap.close();
         ready.clear();
         decode.dispose?.();

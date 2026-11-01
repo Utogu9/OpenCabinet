@@ -65,6 +65,16 @@ function scene(options = {}) {
 }
 const game = { id: 1, title: "A <literal> title", platform: "PS2" };
 const artwork = [{ kind: "cover", path: "front.png" }, { kind: "back_cover", path: "back.png" }, { kind: "spine", path: "spine.png" }];
+
+test('Parked legacy boxes retain their geometry and artwork without rendering until resumed',()=>{
+  const app=scene();app.viewer.update(game,artwork);app.loadCover();app.flush();
+  const face=app.face('front'),model=app.model(),rotation=model.style.transform;
+  app.viewer.rotate(15,0);assert.ok(app.frames.size>0);app.viewer.suspend();assert.equal(app.frames.size,0);
+  app.viewer.rotate(15,0);app.observer.callback();assert.equal(app.frames.size,0);
+  assert.equal(app.face('front'),face);assert.equal(model.style.transform,rotation);
+  app.viewer.resume();assert.equal(app.frames.size,1);app.flush();assert.notEqual(model.style.transform,rotation);
+  assert.equal(app.face('front'),face);app.viewer.dispose();
+});
 test('Carousel zoom and perspective never become part of the legacy model fit', () => {
   const app=scene();
   app.host.layout={width:490,height:450};app.host.rect={width:588,height:540};

@@ -1,9 +1,10 @@
 import * as THREE from './vendor/three/three.module.js';
 import { GLTFLoader } from './vendor/three/GLTFLoader.js';
 import { RoomEnvironment } from './vendor/three/RoomEnvironment.js';
-import { arcballPoint } from './three-box-motion.js';
+import { arcballPoint, canvasViewport } from './three-box-motion.js';
 import { chooseArtwork } from './three-box-artwork.js';
 import { configureAcrylicOptics } from './three-box-relief.js';
+import { prepareRenderGroup, createRenderLease, releaseSceneGpu } from './three-box-session.js';
 
 // Cache source bytes; individual viewers own their meshes, textures and animations.
 const sourceTasks=new Map();
@@ -44,6 +45,7 @@ export async function createModelViewer(host,options={},definition) {
   const names=manifest.animations||[manifest.animation];
   const clips=names.map(name=>gltf.animations.find(clip=>clip.name===name));
   if(!clips.length||clips.some(clip=>!clip)){releaseModel(model);throw Error(`The ${modelId} opening animation is missing`);}
+  prepareRenderGroup(options.renderGroup);
   const renderer=new THREE.WebGLRenderer({alpha:true,antialias:true,powerPreference:'high-performance'});
   renderer.setClearColor(0,0);renderer.outputColorSpace=THREE.SRGBColorSpace;
   renderer.toneMapping=THREE.ACESFilmicToneMapping;renderer.toneMappingExposure=1.05;renderer.transmissionResolutionScale=.5;
@@ -51,7 +53,7 @@ export async function createModelViewer(host,options={},definition) {
   host.replaceChildren(canvas);host.classList.add('game-box-webgl');host.dataset.renderer=`three-${modelId}`;
   const scene=new THREE.Scene(),camera=new THREE.PerspectiveCamera(35,1,5,3000);
   const environment=new RoomEnvironment(),pmrem=new THREE.PMREMGenerator(renderer);
-  const environmentTarget=pmrem.fromScene(environment,.04,1,100);
+  let environmentTarget=pmrem.fromScene(environment,.04,1,100);
   environment.dispose();pmrem.dispose();scene.environment=environmentTarget.texture;
   scene.add(new THREE.HemisphereLight(0xeaf2ff,0x566377,.65));
   for(const [color,intensity,position] of [[0xfff7ed,3.2,[-180,150,200]],[0xdceaff,1.6,[180,-60,-80]]]) {
@@ -129,9 +131,9 @@ export async function createModelViewer(host,options={},definition) {
   const frames=[];
   for(let i=0;i<=4;i++){pose(i/4);frames.push(new THREE.Box3().setFromObject(model,true));}
   pose(0);
-  let game=null,profile=null,key=null,revision=0,controller=null,disposed=false;
+  let game=null,profile=null,key=null,revision=0,controller=null,disposed=false,renderLease=null;
   let frame=null,opened=0,openTarget=false,animation=null,zoom=1,side='front',rotationLock='free',drag=null,menu=null;
-  let rotation=initialRotation(),width=0,height=0;
+  let rotation=initialRotation(),width=0,height=0,surfaceScale=1;
   const listeners=[],dynamicTextures=new Set(),pictures={};
   const composed=new Map();
   const retiredTextures=[],blankTextures=new Map();
@@ -176,19 +178,24 @@ export async function createModelViewer(host,options={},definition) {
   }
   function hitsManual(event) {
     if(!manual||manualExtracted||opened<.98)return false;
-    const rect=host.getBoundingClientRect();pointer.set((event.clientX-rect.left)/rect.width*2-1,-(event.clientY-rect.top)/rect.height*2+1);
+    const rect=canvas.getBoundingClientRect();pointer.set((event.clientX-rect.left)/rect.width*2-1,-(event.clientY-rect.top)/rect.height*2+1);
     raycaster.setFromCamera(pointer,camera);return raycaster.intersectObjects(manualMeshes,false).length>0;
   }
   function listen(target,name,callback,config){target.addEventListener(name,callback,config);listeners.push([target,name,callback,config]);}
   function initialRotation(){return math.multiply(math.axisAngle([1,0,0],9),math.axisAngle([0,1,0],28));}
-  function schedule(){if(!disposed&&frame===null)frame=requestAnimationFrame(render);}
+  function schedule(){if(!disposed&&!renderLease?.paused&&!renderLease?.lost&&frame===null)frame=requestAnimationFrame(render);}
   function notify(){onOpenState({canOpen:!!game,open:openTarget});}
   function render(time) {
-    frame=null;if(disposed||!game||!host.clientWidth||!host.clientHeight)return;
-    if(width!==host.clientWidth||height!==host.clientHeight) {
-      width=host.clientWidth;height=host.clientHeight;
+    frame=null;if(disposed||renderLease?.paused||renderLease?.lost||!game||!host.clientWidth||!host.clientHeight)return;
+    const nextWidth=host.clientWidth,nextHeight=host.clientHeight,surface=canvasViewport(nextWidth,nextHeight,zoom,options.carousel);
+    if(width!==nextWidth||height!==nextHeight||surface.scale!==surfaceScale) {
+      width=nextWidth;height=nextHeight;surfaceScale=surface.scale;
       renderer.setPixelRatio(Math.min(globalThis.devicePixelRatio||1,width>650?2:1.5));
-      renderer.setSize(width,height,false);camera.aspect=width/height;camera.updateProjectionMatrix();
+      renderer.setSize(surface.width,surface.height,false);camera.aspect=width/height;
+      if(surface.scale>1)camera.setViewOffset(width,height,surface.left,surface.top,surface.width,surface.height);
+      else camera.clearViewOffset();
+      if(options.carousel)Object.assign(canvas.style,{width:`${surface.width}px`,height:`${surface.height}px`,left:`${surface.left}px`,top:`${surface.top}px`,right:'auto',bottom:'auto'});
+      camera.updateProjectionMatrix();
     }
     if(animation) {
       animation.start ??= time;const t=Math.min(1,(time-animation.start)/460),eased=t*t*(3-2*t);
@@ -238,7 +245,7 @@ export async function createModelViewer(host,options={},definition) {
         texture=blankTextures.get(name);
       }
       if(name==='Cover Inside'){texture.repeat.x=-1;texture.wrapS=THREE.RepeatWrapping;}
-      renderer.initTexture(texture);material.map=texture;material.color.set(image?0xffffff:0xe7e4db);
+      if(!renderLease?.lost&&!renderLease?.paused)renderer.initTexture(texture);material.map=texture;material.color.set(image?0xffffff:0xe7e4db);
       if(!previous)material.needsUpdate=true;
       if(previous!==texture&&dynamicTextures.delete(previous))retiredTextures.push(previous);
       schedule();return;
@@ -389,9 +396,10 @@ export async function createModelViewer(host,options={},definition) {
       rotation=math.multiply(math.axisAngle(horizontal?[0,1,0]:[1,0,0],['arrowleft','arrowup'].includes(key)?-15:15),rotation);side=null;schedule();
     }else return;event.preventDefault();event.stopPropagation();
   });
-  listen(canvas,'webglcontextlost',event=>event.preventDefault());listen(canvas,'webglcontextrestored',schedule);
   const resize=new ResizeObserver(()=>{closeMenu();schedule();});resize.observe(host);
   const api={
+    suspend(release=false){stopDrag();renderLease.suspend(release);if(frame!==null){cancelAnimationFrame(frame);frame=null;}},
+    resume(){if(!disposed)renderLease.resume();},
     clearArtwork(){revision++;controller?.abort();key=null;clearManual();composed.clear();
       if(!options.carousel){dynamicTextures.forEach(texture=>texture.dispose());dynamicTextures.clear();}for(const kind of Object.keys(pictures))delete pictures[kind];
       for(const name of ['Cover Outside','Cover Inside','Cartridge Cover','UMD Label'])assign(name,null);
@@ -437,16 +445,24 @@ export async function createModelViewer(host,options={},definition) {
       clearManual();
       if(!options.carousel){dynamicTextures.forEach(texture=>texture.dispose());dynamicTextures.clear();}for(const kind of Object.keys(pictures))delete pictures[kind];
       for(const name of ['Cover Outside','Cover Inside','Cartridge Cover','UMD Label']){const material=materials.get(name);if(material){if(options.carousel)assign(name,null);else {material.map=options.useModelArtwork?[...originalMaterials].find(value=>value.name===name)?.map||null:null;material.needsUpdate=true;}}}
-      if(frame!==null){cancelAnimationFrame(frame);frame=null;}renderer.clear();notify();},
+      if(frame!==null){cancelAnimationFrame(frame);frame=null;}if(!renderLease?.lost&&!renderLease?.paused)renderer.clear();notify();},
     dispose(){if(disposed)return;api.clear();disposed=true;resize.disconnect();listeners.forEach(([target,name,callback,config])=>target.removeEventListener(name,callback,config));
       dynamicTextures.forEach(texture=>texture.dispose());dynamicTextures.clear();
       retiredTextures.splice(0).forEach(texture=>texture.dispose());blankTextures.forEach(texture=>texture.dispose());blankTextures.clear();
       mixer.stopAllAction();mixer.uncacheRoot(model);releaseModel(model);originalMaterials.forEach(value=>value.dispose());
       new Set([manualFront,manualBack,manualPages]).forEach(material=>material.dispose());
       const images=new Set();originalTextures.forEach(value=>{images.add(value.image);value.dispose();});images.forEach(value=>value?.close?.());
-      environmentTarget.dispose();renderer.dispose();renderer.forceContextLoss();canvas.remove();host.classList.remove('game-box-webgl');
+      renderLease.dispose();environmentTarget?.dispose();renderer.dispose();if(!renderer.getContext().isContextLost())renderer.forceContextLoss();canvas.remove();host.classList.remove('game-box-webgl');
       delete host.dataset.renderer;delete host.dataset.triangles;delete host.dataset.drawCalls;},
   };
+  renderLease=createRenderLease(renderer,options.renderGroup,restored=>{
+    if(restored){const room=new RoomEnvironment(),generator=new THREE.PMREMGenerator(renderer);
+      environmentTarget=generator.fromScene(room,.04,1,100);scene.environment=environmentTarget.texture;room.dispose();generator.dispose();}
+    schedule();
+  },()=>{
+    releaseSceneGpu(scene);environmentTarget?.dispose();environmentTarget=null;scene.environment=null;
+    new Set([...dynamicTextures,...originalTextures,...retiredTextures,...blankTextures.values()]).forEach(texture=>texture.dispose());
+  });
   options.debug?.({scene,renderer,camera,root,model,meshes,materials,mixer,action:actions[0],actions,frames,render:schedule,pose});
   return api;
 }
