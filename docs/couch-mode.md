@@ -61,8 +61,10 @@ Each visited platform keeps its last window of up to nine prepared viewers and
 their artwork in RAM throughout the couch-mode session. Returning to a platform
 reuses those models instead of reconstructing them. Inactive viewers pause,
 including when switching to covers or starting a game. WebGL contexts for older
-platforms can be released while retaining their scenes and texture sources, so
-visiting several platforms does not exhaust the browser's context limit. Closing
+platforms are kept resident within a shared context budget. Older contexts can
+be released while retaining their scenes, texture sources and a frozen frame,
+so visiting several platforms does not exhaust the browser's context limit or
+show an untextured scene during restoration. Closing
 couch mode disposes every cached viewer. Cover sizing depends
 on aspect ratio and available space, so low-resolution images fill the same
 space as their larger equivalents. The nearest neighbors leave more room around

@@ -4,7 +4,7 @@ import { RoomEnvironment } from './vendor/three/RoomEnvironment.js';
 import { arcballPoint, canvasViewport } from './three-box-motion.js';
 import { chooseArtwork } from './three-box-artwork.js';
 import { configureAcrylicOptics } from './three-box-relief.js';
-import { prepareRenderGroup, createRenderLease, releaseSceneGpu } from './three-box-session.js';
+import { prepareRenderGroup, createRenderLease, releaseSceneGpu, createFrameHold } from './three-box-session.js';
 
 // Cache source bytes; individual viewers own their meshes, textures and animations.
 const sourceTasks=new Map();
@@ -132,6 +132,7 @@ export async function createModelViewer(host,options={},definition) {
   for(let i=0;i<=4;i++){pose(i/4);frames.push(new THREE.Box3().setFromObject(model,true));}
   pose(0);
   let game=null,profile=null,key=null,revision=0,controller=null,disposed=false,renderLease=null;
+  const frameHold=createFrameHold(renderer,host,()=>renderer.render(scene,camera));
   let frame=null,opened=0,openTarget=false,animation=null,zoom=1,side='front',rotationLock='free',drag=null,menu=null;
   let rotation=initialRotation(),width=0,height=0,surfaceScale=1;
   const listeners=[],dynamicTextures=new Set(),pictures={};
@@ -217,7 +218,7 @@ export async function createModelViewer(host,options={},definition) {
       distance=Math.max(distance,Math.abs(p.y)/(tangent*(fill ? .78 : 1))+p.z,Math.abs(p.x)/(tangent*camera.aspect*(fill ? .9 : 1))+p.z);
     }
     if(!options.carousel||opened!==0)distance*=1.12;
-    camera.position.set(0,0,distance/zoom);camera.lookAt(0,0,0);renderer.render(scene,camera);
+    camera.position.set(0,0,distance/zoom);camera.lookAt(0,0,0);renderer.render(scene,camera);frameHold.release();
     retiredTextures.splice(0).forEach(texture=>texture.dispose());
     host.dataset.triangles=String(renderer.info.render.triangles);host.dataset.drawCalls=String(renderer.info.render.calls);
   }
@@ -452,7 +453,7 @@ export async function createModelViewer(host,options={},definition) {
       mixer.stopAllAction();mixer.uncacheRoot(model);releaseModel(model);originalMaterials.forEach(value=>value.dispose());
       new Set([manualFront,manualBack,manualPages]).forEach(material=>material.dispose());
       const images=new Set();originalTextures.forEach(value=>{images.add(value.image);value.dispose();});images.forEach(value=>value?.close?.());
-      renderLease.dispose();environmentTarget?.dispose();renderer.dispose();if(!renderer.getContext().isContextLost())renderer.forceContextLoss();canvas.remove();host.classList.remove('game-box-webgl');
+      renderLease.dispose();frameHold.release();environmentTarget?.dispose();renderer.dispose();if(!renderer.getContext().isContextLost())renderer.forceContextLoss();canvas.remove();host.classList.remove('game-box-webgl');
       delete host.dataset.renderer;delete host.dataset.triangles;delete host.dataset.drawCalls;},
   };
   renderLease=createRenderLease(renderer,options.renderGroup,restored=>{
@@ -462,7 +463,7 @@ export async function createModelViewer(host,options={},definition) {
   },()=>{
     releaseSceneGpu(scene);environmentTarget?.dispose();environmentTarget=null;scene.environment=null;
     new Set([...dynamicTextures,...originalTextures,...retiredTextures,...blankTextures.values()]).forEach(texture=>texture.dispose());
-  });
+  },()=>{if(game&&renderer.info.render.calls)frameHold.capture();});
   options.debug?.({scene,renderer,camera,root,model,meshes,materials,mixer,action:actions[0],actions,frames,render:schedule,pose});
   return api;
 }

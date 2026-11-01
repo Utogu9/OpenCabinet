@@ -23,7 +23,7 @@ test('Couch mode carousels, controller selectors, launch return and cleanup work
   await page.goto(`http://127.0.0.1:${server.address().port}/`);
   const messages=JSON.parse(fs.readFileSync('src/locales/en-US.json','utf8')).messages;
   await page.evaluate(messages=>{window.OpenCabinetI18n={t:(key,...values)=>(messages[key]||key).replace(/\{(\d+)\}/g,(token,index)=>values[index]??token)};},messages);
-  for(const name of ['dvd-case.js','image-fallbacks.js','cover-cache.js','game-box.js','carousel-boxes.js','three-box-router.js','game-discs.js','game-regions.js','sofa-mode.js'])await page.addScriptTag({url:`/src/${name}`});
+  for(const name of ['local-models.js','dvd-case.js','image-fallbacks.js','cover-cache.js','game-box.js','carousel-boxes.js','three-box-router.js','game-discs.js','game-regions.js','sofa-mode.js'])await page.addScriptTag({url:`/src/${name}`});
   await page.evaluate(messages=>{
     window.OpenCabinetI18n={t:(key,...values)=>(messages[key]||key).replace(/\{(\d+)\}/g,(token,index)=>values[index]??token)};
     const image=(text,color)=>'data:image/svg+xml,'+encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="480" height="680"><rect width="480" height="680" fill="${color}"/><path d="M0 140 480 430V680H0Z" fill="#0003"/><text x="35" y="75" font-family="sans-serif" font-size="22" fill="white">OpenCabinet</text><text x="35" y="320" font-family="sans-serif" font-size="34" fill="white">${text}</text></svg>`);
@@ -315,21 +315,52 @@ test('Couch mode carousels, controller selectors, launch return and cleanup work
   });
   await page.locator('.sofa-platform[data-platform="Sony PlayStation"]').click();
   await page.waitForFunction(()=>document.querySelector('.sofa-card.is-selected')._preview._debug?.renderer.info.render.calls>0);
-  await page.waitForFunction(()=>fixture.savedModel.renderer.getContext().isContextLost());
+  assert.equal(await page.evaluate(()=>fixture.savedModel.renderer.getContext().isContextLost()),false,'Small platform banks keep their GPU contexts warm');
   const cachedViewers=await page.evaluate(()=>fixture.createdViewers);
   await page.locator('.sofa-platform[data-platform="Sega Dreamcast"]').click();
   assert.equal(await page.evaluate(()=>{
     const saved=fixture.savedModel,node=document.querySelector('.sofa-card.is-selected'),state=node._preview._debug;
     return node===saved.node&&node._viewer===saved.viewer&&state.renderer===saved.renderer&&state.meshes[0].geometry===saved.geometry;
   }),true,'Switching WebGL platforms retains the actual scene, geometry, renderer and DOM');
+  assert.equal(await page.evaluate(()=>fixture.modelRestores),0,'Returning to a resident model does not restore or reload graphics');
+  await page.evaluate(()=>fixture.savedModel.node._viewer.suspend(true));
+  assert.equal(await page.evaluate(()=>!!fixture.savedModel.node._preview.querySelector('[data-frozen-frame]')),true,
+    'A context that must retire keeps its last complete frame visible');
+  await page.waitForFunction(()=>fixture.savedModel.renderer.getContext().isContextLost());
+  await page.evaluate(()=>fixture.savedModel.node._viewer.resume());
   await page.waitForFunction(()=>fixture.modelRestores>0&&!fixture.savedModel.renderer.getContext().isContextLost()
-    &&fixture.savedModel.node._preview._debug.scene.environment!==fixture.savedModel.environment);
+    &&fixture.savedModel.node._preview._debug.scene.environment!==fixture.savedModel.environment
+    &&!fixture.savedModel.node._preview.querySelector('[data-frozen-frame]'));
   await page.waitForFunction(()=>fixture.savedModel.renderer.info.render.calls>0);
   assert.equal(await page.evaluate(()=>fixture.createdViewers),cachedViewers,'Returning restores GPU resources without rebuilding or reparsing the model');
+  if(await page.evaluate(()=>!!OpenCabinetLocalModels.switch)) {
+    await page.evaluate(()=>{
+      fixtureGames.push({...fixtureGames[0],id:2100,platform:'Nintendo Switch',regions:null});fixtureSofa.refresh();
+    });
+    await page.locator('.sofa-platform[data-platform="Nintendo Switch"]').click();
+    await page.waitForFunction(()=>document.querySelector('.sofa-card.is-selected')._preview.dataset.renderer==='three-switch'
+      &&document.querySelector('.sofa-card.is-selected')._preview._debug?.renderer.info.render.calls>0);
+    await page.evaluate(()=>{fixture.switchModel=document.querySelector('.sofa-card.is-selected')._preview._debug;fixture.switchRestores=0;
+      fixture.switchModel.renderer.domElement.addEventListener('webglcontextrestored',()=>fixture.switchRestores++);});
+    const prepared=await page.evaluate(()=>fixture.createdViewers);
+    for(let i=0;i<3;i++) {
+      await page.locator('.sofa-platform[data-platform="Sega Dreamcast"]').click();
+      assert.equal(await page.evaluate(()=>!fixture.savedModel.renderer.getContext().isContextLost()
+        &&!!fixture.savedModel.node._preview._debug.scene.environment&&!fixture.savedModel.node._preview.querySelector('[data-frozen-frame]')),true,
+        'Dreamcast remains resident after visiting the glTF Switch model');
+      await page.locator('.sofa-platform[data-platform="Nintendo Switch"]').click();
+      assert.equal(await page.evaluate(()=>!fixture.switchModel.renderer.getContext().isContextLost()
+        &&document.querySelector('.sofa-card.is-selected')._preview._debug===fixture.switchModel),true);
+    }
+    assert.equal(await page.evaluate(()=>fixture.createdViewers),prepared);assert.equal(await page.evaluate(()=>fixture.switchRestores),0);
+    await page.locator('.sofa-platform[data-platform="Sega Dreamcast"]').click();
+  }
   await page.screenshot({path:'target/sofa-model-cache-restored.png'});
   await page.keyboard.press('Escape');
   assert.equal(await page.evaluate(()=>fixture.liveViewers),0);
   await page.evaluate(()=>{
+    // The following geometry checks explicitly exercise the legacy Switch.
+    OpenCabinetLocalModels.switch=false;
     const stage=document.createElement('div');stage.className='game-box-stage';Object.assign(stage.style,{width:'490px',height:'480px'});document.body.append(stage);
     const bitmap=document.createElement('canvas');bitmap.width=96;bitmap.height=136;bitmap.getContext('2d').fillRect(0,0,96,136);
     fixture.cacheLoads=0;fixture.cacheStage=stage;

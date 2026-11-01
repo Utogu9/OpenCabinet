@@ -3,7 +3,7 @@ import { RoomEnvironment } from './vendor/three/RoomEnvironment.js';
 import { artworkWindow, chooseArtwork, dreamcastInsertWindows, dreamcastInsertTheme, dreamcastInsertProbes } from './three-box-artwork.js';
 import { arcballPoint, lidAngle, canvasViewport } from './three-box-motion.js';
 import { createContactShadows, configureAcrylicOptics, maskClearPanels } from './three-box-relief.js';
-import { prepareRenderGroup, createRenderLease, releaseSceneGpu } from './three-box-session.js';
+import { prepareRenderGroup, createRenderLease, releaseSceneGpu, createFrameHold } from './three-box-session.js';
 
 let caseTask;
 async function caseData() {
@@ -95,6 +95,7 @@ export async function createViewer(host, options={}) {
     paper:meshes.find(mesh=>mesh.material===materials.paper),manualBack:meshes.find(mesh=>mesh.material===materials.manualBack),
   });relief.reset();
   let disposed=false,renderLease=null,game=null,profile=null,key=null,revision=0,artController=null,manualController=null,manual=null,manualExtracted=false,manualBackTask=null,manualPreviewReady=false;
+  const frameHold=createFrameHold(renderer,host,()=>renderer.render(scene,camera));
   let frame=null,opened=0,openTarget=false,animation=null,zoom=1,side='front',rotationLock='free',rotation=initialRotation(),drag=null;
   let distance=400,viewportWidth=0,viewportHeight=0,surfaceScale=1,layoutDirty=true,menu=null,framingBounds=null;
   const textures=new Set(),manualTextures=new Set(),listeners=[];
@@ -163,6 +164,7 @@ export async function createViewer(host, options={}) {
     camera.position.set(0,0,distance/zoom);camera.lookAt(0,0,0);
     relief.update(opened,`${rotation.join(',')};${opened};${root.scale.toArray().join(',')}`,manualExtracted);
     renderer.render(scene,camera);
+    frameHold.release();
     retiredTextures.splice(0).forEach(texture=>texture.dispose());
     host.dataset.triangles=String(renderer.info.render.triangles);host.dataset.drawCalls=String(renderer.info.render.calls);
   }
@@ -546,7 +548,7 @@ export async function createViewer(host, options={}) {
     dispose(){api.clear();disposed=true;resize.disconnect();listeners.forEach(([target,name,callback,config])=>target.removeEventListener(name,callback,config));
       textures.forEach(texture=>texture.dispose());textures.clear();
       retiredTextures.splice(0).forEach(texture=>texture.dispose());blankTextures.forEach(texture=>texture.dispose());blankTextures.clear();
-      renderLease.dispose();relief.dispose();meshes.forEach(mesh=>mesh.geometry.dispose());new Set(Object.values(materials)).forEach(material=>material.dispose());
+      renderLease.dispose();frameHold.release();relief.dispose();meshes.forEach(mesh=>mesh.geometry.dispose());new Set(Object.values(materials)).forEach(material=>material.dispose());
       Object.values(insertTextures).forEach(texture=>texture.dispose());ribsTexture.dispose();environmentTarget?.dispose();renderer.dispose();if(!renderer.getContext().isContextLost())renderer.forceContextLoss();canvas.remove();host.classList.remove('game-box-webgl');
       delete host.dataset.renderer;delete host.dataset.triangles;delete host.dataset.drawCalls;},
   };
@@ -558,7 +560,7 @@ export async function createViewer(host, options={}) {
     releaseSceneGpu(scene);environmentTarget?.dispose();environmentTarget=null;scene.environment=null;
     new Set([...textures,...manualTextures,...retiredTextures,...blankTextures.values(),...Object.values(insertTextures),ribsTexture]).forEach(texture=>texture.dispose());
     keyLight.shadow.dispose();keyLight.shadow.map=null;keyLight.shadow.mapPass=null;
-  });
+  },()=>{if(game&&renderer.info.render.calls)frameHold.capture();});
   options.debug?.({scene,renderer,camera,materials,meshes,root,lid,relief,render:()=>schedule()});
   return api;
 }
