@@ -74,6 +74,8 @@ test('The optional Switch rig opens both folds, keeps the cartridge fixed and re
   }),[0,255,0,255],'the label supplies the cartridge texture, not the complete cartridge photo');
   await page.evaluate(()=>select(4,[{kind:'cart_front',path:cartPhoto}]));
   await page.waitForFunction(()=>debug.materials.get('Cartridge Cover').map?.image?.width===32);
+  await page.evaluate(()=>{window.previousRotation=debug.root.quaternion.toArray();viewer.rotate(12,-8);});
+  await page.waitForFunction(()=>debug.root.quaternion.toArray().some((value,i)=>Math.abs(value-previousRotation[i])>1e-5));
   await page.evaluate(()=>{viewer.setRotationLock('x');viewer.zoom(.1);viewer.showBack();});
   assert.equal(await page.evaluate(()=>viewer.rotationLock),'x');
   await page.evaluate(()=>viewer.setOpen(true,false));await page.waitForTimeout(100);

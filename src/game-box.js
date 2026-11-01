@@ -132,6 +132,11 @@
     const angle = degrees * Math.PI / 360;
     return [...axis.map((n) => n * Math.sin(angle)), Math.cos(angle)];
   }
+  function rotationStep(rotation, horizontal = 0, vertical = 0, lock = 'free') {
+    if (lock !== 'y' && Number.isFinite(horizontal) && horizontal) rotation = multiply(axisAngle([0,1,0], horizontal), rotation);
+    if (lock !== 'x' && Number.isFinite(vertical) && vertical) rotation = multiply(axisAngle([1,0,0], vertical), rotation);
+    return rotation;
+  }
   function between(a, b) {
     const dot = a.reduce((sum, n, i) => sum + n * b[i], 0);
     if (dot < -0.999999) {
@@ -1091,6 +1096,12 @@
       returnManual() { delete model.dataset.manualExtracted; schedule(); },
       setOpen,
       toggleOpen() { return setOpen(!openTarget); },
+      rotate(horizontal, vertical) {
+        if (!game || disposed) return;
+        const next = rotationStep(rotation, horizontal, vertical, rotationLock);
+        if (next === rotation) return;
+        stopDrag(); rotation = next; viewSide = null; schedule();
+      },
       refreshManual() { clearManual(); layoutScale = null; ensureManual(); schedule(); },
       reset() { stopDrag(); setOpen(false, false); rotation = initialRotation(); viewSide = "front"; zoom = 1; schedule(); },
       showBack() { stopDrag(); setOpen(false, false); rotation = axisAngle([0,1,0], 180); viewSide = "back"; schedule(); },
@@ -1121,5 +1132,5 @@
       ? globalThis.OpenCabinetThreeBoxes.createRouter(host, options, legacyViewer, profileFor, resolveSettings)
       : legacyViewer(host, options), profileFor, regionFor, jewelFamily,
     formats: Object.entries(formats).map(([id, [width, height, depth, label]]) => ({ id, width, height, depth, label })),
-    math: { multiply, axisAngle, between, matrix, rotate } };
+    math: { multiply, axisAngle, rotationStep, between, matrix, rotate } };
 })();

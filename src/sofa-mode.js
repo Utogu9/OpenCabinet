@@ -16,6 +16,15 @@
       ...byName.get(name), name, count: games.filter(game => game.platform === name).length,
     }))];
   }
+  function rightStick(pad) {
+    if (!pad || pad.connected === false || pad.mapping !== 'standard') return null;
+    const x = pad.axes?.[2], y = pad.axes?.[3];
+    if (!Number.isFinite(x) || !Number.isFinite(y)) return null;
+    const length = Math.hypot(x, y), deadZone = .18;
+    if (length <= deadZone) return null;
+    const strength = Math.min(1, (length - deadZone) / (1 - deadZone));
+    return [x / length * strength, y / length * strength];
+  }
   function createPadInput() {
     let identity = null, held = new Set(), direction = null, nextRepeat = 0;
     return {
@@ -102,7 +111,7 @@
     let platforms = [], games = [], platformName = null, gameId = null, zone = 'games', query = '';
     let boxMode = true, frame = null, previewTimer = null, previewGeneration = 0, previewWork = null;
     let busy = false, availability = null, watchedGame = null, wasRunning = false, pendingFocus = false;
-    let lastPad = false, selectedKey = null, backgroundAbort = null, lastBoxSelection = null;
+    let lastPad = false, selectedKey = null, backgroundAbort = null, lastBoxSelection = null, lastPollTime = null;
     let railDrag = null, railDragged = false;
     const remembered = new Map(), cardNodes = new Map(), platformNodes = new Map(), padInput = createPadInput();
     const spareCards = [];
@@ -528,6 +537,16 @@
         else void launch();
       }
     }
+    function rotateSelected(pad, elapsed) {
+      if (!active || !boxMode || busy || watchedGame !== null || topDialog() !== dialog
+        || document.activeElement?.matches?.('input, textarea, select')) return false;
+      const stick = rightStick(pad), node = cardNodes.get(gameId);
+      if (!stick || !elapsed || node?.dataset.boxReady !== 'true' || !node._viewer?.rotate) return false;
+      node._interacted = true;
+      // Degrees per millisecond: analog speed, with no jump after a slow frame.
+      node._viewer.rotate(stick[0] * elapsed * .11, stick[1] * elapsed * .11);
+      return true;
+    }
     function poll() {
       if (!active) return;
       const now = window.performance.now();
@@ -538,17 +557,21 @@
         lastPad = connected; hint.textContent = t(connected ? 'sofa.padHelp' : 'sofa.keyboardHelp');
         padStatus.textContent = t(connected ? 'sofa.padConnected' : 'sofa.padConnect');
       }
+      let rotating = false;
       if (document.visibilityState !== 'hidden' && document.hasFocus()) {
+        const elapsed = lastPollTime === null ? 0 : Math.max(0, Math.min(50, now - lastPollTime));
+        lastPollTime = now;
         for (const command of padInput.sample(pad, now)) action(command);
-      } else padInput.reset();
+        rotating = rotateSelected(pad, elapsed);
+      } else { padInput.reset(); lastPollTime = null; }
       // Menu input must not wait for the 3D renderer's next animation frame.
-      if (active) frame = window.setTimeout(poll, document.hasFocus() ? 32 : 150);
+      if (active) frame = window.setTimeout(poll, document.hasFocus() ? rotating ? 16 : 32 : 150);
     }
     async function open(initial = {}) {
       if (active) return;
       opener = document.activeElement; active = true; const token = ++generation;
       if (gameId === null) { gameId = initial.gameId ?? null; platformName = initial.platform ?? null; }
-      zone = 'games'; query = ''; search.value = ''; lastPad = false;
+      zone = 'games'; query = ''; search.value = ''; lastPad = false; lastPollTime = null;
       hint.textContent = t('sofa.keyboardHelp'); padStatus.textContent = t('sofa.padConnect');
       view.textContent = t(boxMode ? 'sofa.coverView' : 'sofa.boxView'); view.setAttribute('aria-pressed', String(boxMode));
       dialog.showModal(); refresh(); focusCurrent();
@@ -621,11 +644,11 @@
     }, true);
     rail.addEventListener('dragstart', event => event.preventDefault());
     search.addEventListener('input', () => { query = search.value.trim(); refresh(); });
-    window.addEventListener('blur', () => { padInput.reset(); stopRailDrag(); });
+    window.addEventListener('blur', () => { padInput.reset(); lastPollTime = null; stopRailDrag(); });
     window.addEventListener('beforeunload', () => { close(); observer.disconnect(); }, { once: true });
     return { open, close, refresh, updateStatistics, get active() { return active; } };
   }
-  const api = { create, createPadInput, carousel, platformsFor, wrap };
+  const api = { create, createPadInput, rightStick, carousel, platformsFor, wrap };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.OpenCabinetSofa = api;
 })(globalThis);

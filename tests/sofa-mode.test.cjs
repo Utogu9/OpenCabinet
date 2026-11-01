@@ -1,5 +1,5 @@
 const {test}=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('node:vm');
-const {carousel,platformsFor,createPadInput,wrap}=vm.runInThisContext('(function(module){'+fs.readFileSync('src/sofa-mode.js','utf8')+';return module.exports;})({exports:{}})');
+const {carousel,platformsFor,createPadInput,rightStick,wrap}=vm.runInThisContext('(function(module){'+fs.readFileSync('src/sofa-mode.js','utf8')+';return module.exports;})({exports:{}})');
 
 test('The carousel keeps unique covers or nine preloaded boxes, wrapping around either end',()=>{
   for(const count of [0,1,2,3,6,7,8,400,2000]){
@@ -23,6 +23,19 @@ test('Only platforms with games are listed, retaining local identities and an Al
 });
 
 function pad(pressed=[],axes=[0,0],index=0){return {id:'Fixture controller',index,connected:true,mapping:'standard',axes,buttons:Array.from({length:17},(_,i)=>({pressed:pressed.includes(i),value:pressed.includes(i)?1:0}))};}
+
+test('Right-stick rotation has a radial dead zone, proportional speed and bounded diagonals independent of navigation and R3',()=>{
+  for(const axes of [[],[1,1],[0,0,0,0],[0,0,.1,-.1],[0,0,.18,0],[0,0,NaN,0],[0,0,Infinity,0]])assert.equal(rightStick(pad([11],axes)),null);
+  const half=rightStick(pad([],[1,-1,.59,0]));
+  assert.ok(Math.abs(half[0]-.5)<1e-12);assert.equal(half[1],0);
+  for(const axes of [[0,0,.8,-.6],[0,0,1,1],[0,0,-1,-1]]){
+    const result=rightStick(pad([],axes));assert.ok(Math.abs(Math.hypot(...result)-1)<1e-12);
+    assert.equal(Math.sign(result[0]),Math.sign(axes[2]));assert.equal(Math.sign(result[1]),Math.sign(axes[3]));
+  }
+  assert.equal(rightStick(null),null);
+  assert.equal(rightStick({...pad([],[0,0,1,1]),connected:false}),null);
+  assert.equal(rightStick({...pad([],[0,0,1,1]),mapping:''}),null);
+});
 
 test('Controller buttons are edge-triggered and held buttons are suppressed on open, reconnect and focus return',()=>{
   const input=createPadInput();

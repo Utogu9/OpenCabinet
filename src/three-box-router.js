@@ -62,7 +62,7 @@
       clear() {release();pending=null;open=false;options.onOpenState?.({canOpen:false,open:false});},
       dispose() {api.clear();disposed=true;},
     };
-    for(const method of ['zoom','reset','toggleSide','showBack','refreshManual','returnManual','clearArtwork']) api[method]=(...args)=>{
+    for(const method of ['zoom','rotate','reset','toggleSide','showBack','refreshManual','returnManual','clearArtwork']) api[method]=(...args)=>{
       if(viewer)return viewer[method]?.(...args);
       if(isThree())commands.push([method,args]);
     };

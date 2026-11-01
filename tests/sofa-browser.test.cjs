@@ -47,7 +47,7 @@ test('Couch mode carousels, controller selectors, launch return and cleanup work
       sortGames:games=>[...games].sort((a,b)=>a.title.localeCompare(b.title)),
       platformDetails:async platform=>({images:[{kind:'logo',path:image(platform.name.includes('Sony')?'PS2':'Wii','#252c3c')}]}),
       boxSettings:async()=>null,createViewer:host=>{
-        const viewer=window.OpenCabinet3D.createViewer(host,{carousel:true,imageSource:path=>path,
+        const viewer=window.OpenCabinet3D.createViewer(host,{carousel:true,imageSource:path=>path,debug:state=>{host._debug=state;},
           getCoverPreview:path=>fixtureOptions.getCoverPreview?.(path),loadCoverPreview:(path,signal)=>fixtureOptions.loadCoverPreview?.(path,signal)}),dispose=viewer.dispose;
         fixture.liveViewers++;fixture.createdViewers++;
         viewer.dispose=()=>{fixture.liveViewers--;dispose();};return viewer;
@@ -78,10 +78,32 @@ test('Couch mode carousels, controller selectors, launch return and cleanup work
   await press(15);assert.equal(await page.locator('#sofa-game-title').textContent(),'Regional fixture');
   await page.waitForFunction(()=>document.getElementById('sofa-mode').dataset.hasBox==='true');
   await page.waitForFunction(()=>document.querySelectorAll('.sofa-card[data-has-box="true"]').length===4);
+  await page.waitForFunction(()=>document.querySelector('.sofa-card.is-selected').dataset.boxReady==='true');
+  await page.evaluate(()=>{
+    fixture.rotatedCard=document.querySelector('.sofa-card.is-selected');fixture.rotationStart=fixture.rotatedCard.querySelector('.game-box-model').style.transform;
+    fixture.neighborTransforms=[...document.querySelectorAll('.sofa-card:not(.is-selected) .game-box-model')].map(node=>({node,transform:node.style.transform}));
+    fixturePad.axes=[0,0,.8,-.6];
+  });
+  await page.waitForFunction(()=>fixture.rotatedCard.querySelector('.game-box-model').style.transform!==fixture.rotationStart);
+  await page.evaluate(()=>{fixturePad.axes=[0,0,.05,-.04];});await page.waitForTimeout(80);
+  const neutral=await page.evaluate(()=>fixture.rotatedCard.querySelector('.game-box-model').style.transform);
+  await page.waitForTimeout(100);
+  assert.equal(await page.evaluate(()=>fixture.rotatedCard.querySelector('.game-box-model').style.transform),neutral,'Stick drift does not rotate the box');
+  assert.equal(await page.evaluate(()=>fixture.neighborTransforms.every(({node,transform})=>node.style.transform===transform)),true,'Only the selected box rotates');
+  assert.equal(await page.locator('#sofa-game-title').textContent(),'Regional fixture','Right-stick movement never navigates games');
+  await page.locator('.sofa-search').focus();await page.evaluate(()=>{fixturePad.axes=[0,0,1,0];});await page.waitForTimeout(100);
+  assert.equal(await page.evaluate(()=>fixture.rotatedCard.querySelector('.game-box-model').style.transform),neutral,'Typing in search pauses rotation');
+  await page.evaluate(()=>{
+    const modal=document.createElement('dialog');modal.id='rotation-overlay';modal.innerHTML='<button>Continue</button>';document.body.append(modal);modal.showModal();
+  });await page.waitForTimeout(100);
+  assert.equal(await page.evaluate(()=>fixture.rotatedCard.querySelector('.game-box-model').style.transform),neutral,'Another dialog pauses rotation');
+  await page.evaluate(()=>{fixturePad.axes=[0,0,0,0];document.getElementById('rotation-overlay').close();document.getElementById('rotation-overlay').remove();});
+  await page.locator('.sofa-card.is-selected').focus();
   assert.equal(await page.locator('.sofa-card.is-selected').evaluate(node=>Number(node.style.getPropertyValue('--scale'))),1.2);
   assert.equal(await page.evaluate(()=>fixture.liveViewers),4,'Every visible game has its own 3D viewer');
   const created=await page.evaluate(()=>fixture.createdViewers);
   await page.keyboard.press('ArrowRight');await page.waitForTimeout(350);
+  assert.equal(await page.evaluate(()=>fixture.rotatedCard.querySelector('.game-box-model').style.transform===fixture.rotationStart),true,'Changing games resets controller rotation');
   assert.equal(await page.evaluate(()=>fixture.createdViewers),created,'Moving selection reuses neighboring viewers');
   await page.keyboard.press('ArrowLeft');
   await page.waitForFunction(()=>document.querySelectorAll('.sofa-platform-art img').length===2);
@@ -230,6 +252,14 @@ test('Couch mode carousels, controller selectors, launch return and cleanup work
   catch(error) { console.log('Couch model state',await page.evaluate(()=>({active:fixtureSofa.active,view:document.getElementById('sofa-mode').dataset.view,live:fixture.liveViewers,
     cards:[...document.querySelectorAll('.sofa-card')].map(node=>({id:node.dataset.gameId,ready:node.dataset.boxReady,children:node._preview.childElementCount,renderer:node._preview.dataset.renderer})),errors:[]})));throw error; }
   assert.equal(await page.evaluate(()=>fixture.liveViewers),2,'Both the selected and neighboring Dreamcast boxes use Three.js');
+  await page.waitForFunction(()=>document.querySelector('.sofa-card.is-selected').dataset.boxReady==='true');
+  await page.evaluate(()=>{
+    const node=document.querySelector('.sofa-card.is-selected');fixture.webglRoot=node._preview._debug.root;
+    fixture.webglRotation=fixture.webglRoot.quaternion.toArray();fixture.webglCanvas=node.querySelector('canvas');fixturePad.axes=[0,0,-.8,.5];
+  });
+  await page.waitForFunction(()=>fixture.webglRoot.quaternion.toArray().some((value,i)=>Math.abs(value-fixture.webglRotation[i])>1e-5));
+  await page.evaluate(()=>{fixturePad.axes=[0,0,0,0];});
+  assert.equal(await page.evaluate(()=>document.querySelector('.sofa-card.is-selected canvas')===fixture.webglCanvas),true,'Controller rotation retains the Three.js model and renderer');
   await page.fill('.sofa-search','Game 00');
   await page.waitForFunction(()=>document.querySelectorAll('.sofa-card').length===1&&document.querySelector('.sofa-card').dataset.hasBox==='true');
   await page.evaluate(()=>{fixture.previousCanvas=document.querySelector('.sofa-preview canvas');fixture.previousViewers=fixture.createdViewers;});

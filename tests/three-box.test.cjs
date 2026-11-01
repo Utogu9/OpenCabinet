@@ -16,7 +16,7 @@ function router(load,{switchModel=false,pspModel=false}={}) {
   function make(type) {
     const calls=[];const viewer={type,calls,canOpen:true,isOpen:false,disposed:false,
       update(...args){calls.push(['update',...args]);},dispose(){this.disposed=true;},setRotationLock(mode){calls.push(['lock',mode]);},
-      setOpen(open){this.isOpen=open;calls.push(['open',open]);},zoom(delta){calls.push(['zoom',delta]);}};
+      setOpen(open){this.isOpen=open;calls.push(['open',open]);},zoom(delta){calls.push(['zoom',delta]);},rotate(x,y){calls.push(['rotate',x,y]);}};
     viewers.push(viewer);return viewer;
   }
   const api=context.OpenCabinetThreeBoxes.createRouter({classList:{remove(){}},dataset:{}},{},()=>make('css'),
@@ -99,6 +99,14 @@ test('Updates and controls during loading apply to the most recently selected ga
   assert.equal(viewer.isOpen,true);assert.deepEqual(viewer.calls.at(-1),['zoom',.15]);assert.ok(viewer.calls.some(call=>call[0]==='lock'&&call[1]==='x'));
   app.api.dispose();assert.equal(viewer.disposed,true);
 });
+test('Incremental rotation is forwarded to CSS and queued for a loading Three.js model',async()=>{
+  let finish;const app=router(make=>new Promise(resolve=>{finish=()=>resolve({createViewer:()=>make('three')});}));
+  app.api.update({id:1,platform:'PS2'},[]);app.api.rotate(2,-3);
+  assert.deepEqual(app.viewers[0].calls.at(-1),['rotate',2,-3]);
+  app.api.update({id:2,platform:'Dreamcast'},[]);app.api.rotate(-4,5);finish();await tick();
+  assert.deepEqual(app.viewers[1].calls.at(-1),['rotate',-4,5]);app.api.dispose();
+});
+
 test('An in-flight model load can check cancellation before touching a replacement viewer',async()=>{
   let finish,options;const app=router(async make=>({createViewer:(_host,config)=>{options=config;return new Promise(resolve=>{finish=()=>resolve(config.isCurrent()?make('three'):null);});}}));
   app.api.update({id:1,platform:'Dreamcast'},[]);await tick();assert.equal(options.isCurrent(),true);

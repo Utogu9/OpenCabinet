@@ -405,6 +405,11 @@ export async function createModelViewer(host,options={},definition) {
       animation=animate&&!reduced&&opened!==Number(openTarget)?{from:opened,to:Number(openTarget),start:null}:null;
       if(!animation){opened=Number(openTarget);pose(opened);}notify();schedule();return true;},
     toggleOpen(){return api.setOpen(!openTarget);},
+    rotate(horizontal,vertical){
+      if(!game||disposed)return;
+      const next=math.rotationStep(rotation,horizontal,vertical,rotationLock);if(next===rotation)return;
+      stopDrag();rotation=next;side=null;schedule();
+    },
     zoom(delta){zoom=Math.max(.65,Math.min(1.7,zoom+delta));schedule();},
     reset(){stopDrag();api.setOpen(false,false);rotation=initialRotation();side='front';zoom=1;schedule();},
     showBack(){stopDrag();api.setOpen(false,false);rotation=math.axisAngle([0,1,0],180);side='back';schedule();},

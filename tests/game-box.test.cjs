@@ -1468,6 +1468,25 @@ test('Rotation locks constrain mouse and keyboard to the unlocked axis; free mod
   assert.equal(app.host.dataset.rotationLock, 'free'); app.viewer.dispose();
 });
 
+test('Analog rotation shares keyboard axes, respects locks and preserves an open case',()=>{
+  const app=scene();app.viewer.update(game,artwork);app.flush();
+  const initial=app.model().style.transform;
+  app.viewer.rotate(15,0);app.flush();const turned=app.model().style.transform;
+  assert.notEqual(turned,initial);
+  app.viewer.reset();app.flush();app.host.trigger('keydown',{key:'ArrowRight'});app.flush();
+  assert.equal(app.model().style.transform,turned,'positive horizontal motion matches the existing right-arrow control');
+  app.viewer.reset();app.flush();app.viewer.setRotationLock('x');app.viewer.rotate(0,15);app.flush();
+  assert.equal(app.model().style.transform,initial);
+  app.viewer.setRotationLock('y');app.viewer.rotate(15,0);app.flush();assert.equal(app.model().style.transform,initial);
+  app.viewer.setRotationLock('free');app.viewer.setOpen(true,false);app.flush();
+  app.viewer.rotate(4,-7);app.flush();assert.equal(app.viewer.isOpen,true);assert.notEqual(app.model().style.transform,initial);
+  const before=app.model().style.transform;app.viewer.rotate(NaN,Infinity);app.flush();assert.equal(app.model().style.transform,before);
+  const faces=app.elements().length;
+  for(let i=0;i<120;i++){app.viewer.rotate(.8,-.4);app.flush();}
+  assert.equal(app.elements().length,faces,'continuous rotation retains the existing molded geometry');
+  assert.equal(app.model().style.transform.includes('NaN'),false);app.viewer.dispose();
+});
+
 test('The 3D context menu selects one rotation mode and is removed on resize, game changes and disposal', () => {
   const app = scene(); app.viewer.update(game, artwork); app.flush();
   app.host.trigger('contextmenu'); const menu = app.host.children[1];
