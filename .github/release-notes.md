@@ -1,18 +1,18 @@
-## What's new in v0.2.2
+## What's new in v0.2.3
 
-- Add fullscreen couch mode with game and platform carousels, keyboard navigation and controller support.
-- Replace emoji buttons with consistent SVG icons on Windows and Linux.
-- Fix missing or mismatched library covers on Linux after importing games or rebuilding the grid.
-- Prepare Linux disk thumbnails in Rust in the background and reuse cached artwork in couch mode.
-- Reduce repaints during Linux cover hover animations while preserving zoom, reflection and selection effects.
+- Show 3D boxes throughout the couch-mode carousel, with an enlarged selection and neighboring boxes prepared ahead of navigation.
+- Reuse box geometry and keep artwork loading while a direction is held, including regional case variants.
+- Apply cached covers immediately and keep them visible until the original artwork is ready, with smoother image upgrades.
+- Normalize 3D case framing, remove extra carousel tilt and reset manual zoom when selecting another game.
+- Preserve cover proportions and full opacity, improve carousel spacing and replace the blue focus outline with a subtle glow.
 
-## Novedades de v0.2.2
+## Novedades de v0.2.3
 
-- Nuevo modo sofá en pantalla completa, con carruseles de juegos y consolas, navegación por teclado y soporte para mandos.
-- Botones con iconos SVG en Windows y Linux, en reemplazo de los emojis.
-- Corrección de portadas ausentes o asignadas a otro juego en Linux después de importar o reconstruir la grilla.
-- Preparación de miniaturas de disco en segundo plano mediante Rust y reutilización de la caché en el modo sofá de Linux.
-- Menos repintados al pasar el mouse sobre las portadas en Linux, conservando el zoom, el reflejo y los efectos de selección.
+- Cajas 3D en todo el carrusel del modo sofá, con la selección ampliada y las cajas vecinas preparadas de antemano.
+- Reutilización de la geometría y carga de imágenes durante la navegación sostenida, incluidas las variantes regionales de las cajas.
+- Aplicación inmediata de portadas cacheadas, que permanecen visibles hasta que la imagen original está lista, con transiciones más suaves.
+- Encuadre uniforme de las cajas 3D, sin inclinación adicional del carrusel, y reinicio del zoom manual al cambiar de juego.
+- Portadas con sus proporciones y opacidad completas, mejor separación entre juegos y un brillo sutil en reemplazo del delineado azul de foco.
 
 ## Downloads / Descargas
 
