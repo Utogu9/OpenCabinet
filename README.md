@@ -2,6 +2,14 @@
 
 [English](README.md) · [Español](README.es.md)
 
+[![Latest release](https://img.shields.io/github/v/release/Utogu9/OpenCabinet?label=release)](https://github.com/Utogu9/OpenCabinet/releases/latest)
+[![Downloads](https://img.shields.io/github/downloads/Utogu9/OpenCabinet/total?label=downloads)](https://github.com/Utogu9/OpenCabinet/releases)
+[![README views](https://hits.sh/github.com/Utogu9/OpenCabinet.svg?label=README%20views&color=6e56cf)](https://hits.sh/github.com/Utogu9/OpenCabinet/)
+[![Release build](https://img.shields.io/github/actions/workflow/status/Utogu9/OpenCabinet/release-windows.yml?label=release%20build)](https://github.com/Utogu9/OpenCabinet/actions/workflows/release-windows.yml)
+[![Linux validation](https://img.shields.io/github/actions/workflow/status/Utogu9/OpenCabinet/linux-check.yml?branch=main&label=Linux)](https://github.com/Utogu9/OpenCabinet/actions/workflows/linux-check.yml)
+[![License](https://img.shields.io/github/license/Utogu9/OpenCabinet)](LICENSE)
+[![Join our Discord](https://img.shields.io/badge/Discord-Join%20us-5865F2?logo=discord&logoColor=white)](https://discord.gg/TCnMAppXB4)
+
 <img src="src/assets/OpenCabinetLogo.webp" alt="OpenCabinet logo" width="96" />
 
 OpenCabinet is a desktop game library and launcher, built
