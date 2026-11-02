@@ -1,22 +1,18 @@
-## What's new in v0.3.0
+## What's new in v0.3.1
 
-- Add cartridge label artwork and prioritize it over complete cartridge photos in supported 3D models.
-- Rotate the selected couch-mode box with the controller's right analog stick.
-- Drag the console carousel with the mouse without selecting text, and keep long game titles on one line.
-- Improve selection glows and allow zoomed 3D boxes to extend above the interface.
-- Keep the last nine cover previews and prepared 3D boxes per console in RAM for faster return navigation.
-- Prepare spine artwork independently and improve cached-to-original image transitions.
-- Preserve WebGL contexts within a shared budget and keep the last complete frame visible during restoration, avoiding white boxes when switching models.
+- Support Nintendo Switch and Sega Dreamcast catalogs hosted in OpenCabinet-BDD submodules.
+- Read catalogs and artwork from each repository's `main` branch instead of its pinned submodule commit.
+- Migrate saved artwork URLs when a platform moves to a separate repository, preserving existing catalog matches and offline access.
+- Read Switch catalog metadata, descriptions, original filenames and artwork regions.
+- Treat an absent optional console-artwork catalog as no available artwork rather than a download failure.
 
-## Novedades de v0.3.0
+## Novedades de v0.3.1
 
-- Nuevo tipo de imagen para las etiquetas de cartuchos, con prioridad sobre las fotos del cartucho completo en los modelos 3D compatibles.
-- Rotación de la caja seleccionada en modo sofá con el stick analógico derecho del joystick.
-- Desplazamiento del carrusel de consolas arrastrando con el mouse, sin seleccionar texto, y títulos largos en un único renglón.
-- Mejoras en el brillo de selección y cajas que pueden sobresalir sobre la interfaz al hacer zoom.
-- Conservación en RAM de las últimas nueve portadas y cajas 3D preparadas por consola para volver a ellas más rápido.
-- Preparación independiente de las imágenes del lomo y mejores transiciones entre imágenes cacheadas y originales.
-- Conservación de contextos WebGL dentro de un límite compartido y de la última imagen completa durante su restauración, evitando cajas blancas al cambiar de modelo.
+- Soporte para los catálogos de Nintendo Switch y Sega Dreamcast alojados como submódulos de OpenCabinet-BDD.
+- Lectura de catálogos e imágenes desde la rama `main` de cada repositorio, en lugar del commit fijado en el submódulo.
+- Actualización de las URLs guardadas cuando una plataforma cambia de repositorio, conservando las coincidencias existentes y el uso sin conexión.
+- Lectura de metadatos, descripciones, nombres originales y regiones de imágenes del catálogo de Switch.
+- La ausencia de un catálogo opcional de imágenes de consola se considera como falta de imágenes disponibles, sin producir un error de descarga.
 
 ## Downloads / Descargas
 
