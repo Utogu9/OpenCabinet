@@ -9,6 +9,8 @@ pub(super) struct Record {
     #[serde(default)]
     short_descriptions: Value,
     #[serde(default)]
+    descriptions: Value,
+    #[serde(default)]
     fields: Value,
     #[serde(default)]
     sources: Value,
@@ -160,7 +162,7 @@ impl Record {
             genre: list("genre"),
             game_mode: list("game_mode"),
             max_players,
-            description: localized(&self.short_descriptions, locale),
+            description: localized(&self.short_descriptions, locale).or_else(|| localized(&self.descriptions, locale)),
         }
     }
 }

@@ -7,6 +7,15 @@ SQLite para reutilizarlo sin nuevas descargas. El botón de actualizar catálogo
 renueva el índice e invalida las plataformas preparadas; estas vuelven a
 descargarse cuando se necesitan.
 
+Las plataformas pueden ser carpetas o submódulos de GitHub. En ambos casos se
+usan los catálogos y las imágenes de la rama `main` del repositorio correspondiente;
+el commit fijado por el repositorio principal no limita las actualizaciones.
+El índice guarda estas ubicaciones para reutilizarlas sin conexión. Los índices
+anteriores se actualizan una vez al preparar el catálogo, conservando las
+coincidencias y corrigiendo las URLs de plataformas trasladadas a submódulos.
+Si no hay conexión, se conserva el catálogo anterior y se puede reintentar con
+«Actualizar catálogo». Los cambios posteriores de contenido siguen siendo manuales.
+
 El repositorio proporciona imágenes, nombres de ediciones e identificadores
 comerciales, y fichas opcionales de metadatos compartidas mediante `metadata_id`.
 Al importar ROMs se busca primero su nombre original, conservando región,
@@ -37,7 +46,10 @@ muestra el título que se guardará y conserva la búsqueda original separadamen
 
 `console_metadata` completa fecha, desarrollador y fabricante de las consolas.
 Sus imágenes se consultan en `console_artwork.json`; los logos SVG se conservan
-como vectores estáticos, con validación antes de guardarlos. Las descargas usan
+como vectores estáticos, con validación antes de guardarlos. Si el repositorio
+de una plataforma no publica `console_artwork.json`, se guarda
+una lista vacía hasta la próxima actualización del catálogo, sin tratarlo como
+un fallo de descarga. Las descargas usan
 la misma revisión, guardado o cancelación del editor de consola y se intentan
 automáticamente al importar juegos para una consola nueva. Los índices anteriores
 de imágenes se actualizan por plataforma cuando se utilizan por primera vez con

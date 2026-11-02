@@ -1,0 +1,7 @@
+[
+  {"name":"Sony - PlayStation 2","type":"dir","git_url":"https://api.github.com/repos/Utogu9/OpenCabinet-BDD/git/trees/ordinary-directory"},
+  {"name":"Nintendo - Switch","type":"file","git_url":"https://api.github.com/repos/Utogu9/Nintendo_-_Switch/git/trees/pinned-switch-commit"},
+  {"name":"Sega - Dreamcast","type":"file","git_url":"https://api.github.com/repos/Utogu9/Sega_-_Dreamcast/git/trees/pinned-dreamcast-commit"},
+  {"name":"README.md","type":"file","git_url":"https://api.github.com/repos/Utogu9/OpenCabinet-BDD/git/blobs/readme"},
+  {"name":".github","type":"dir"}
+]

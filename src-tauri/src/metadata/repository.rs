@@ -1,8 +1,9 @@
 //! Default artwork source and explicitly imported personal catalogs.
 use super::*;
 mod matching;
+mod sources;
 pub(super) use matching::{finish_search_results, search_candidate};
-const ROOT_URL: &str = "https://api.github.com/repos/Utogu9/OpenCabinet-BDD/contents";
+const ROOT_URL: &str = "https://api.github.com/repos/Utogu9/OpenCabinet-BDD/contents?ref=main";
 const RAW_URL: &str = "https://raw.githubusercontent.com/Utogu9/OpenCabinet-BDD/main/";
 const CONFIG: &str = "metadata/source.json";
 const MIN_REPOSITORY_ID: i64 = 1_000_000_000_000;
@@ -334,12 +335,6 @@ fn publish_selection_with_progress(
 }
 
 #[derive(Deserialize)]
-struct DirectoryEntry {
-    name: String,
-    #[serde(rename = "type")]
-    kind: String,
-}
-#[derive(Deserialize)]
 struct RepoCatalog {
     schema_version: u32,
     system: String,
@@ -361,6 +356,8 @@ struct RepoGame {
 #[derive(Deserialize)]
 struct RepoEntry {
     name: String,
+    #[serde(default)]
+    dat_name: String,
 }
 #[derive(Deserialize)]
 struct RepoImage {
@@ -376,6 +373,8 @@ struct RepoImage {
 struct RepoImageSource {
     #[serde(default)]
     dat_name: String,
+    #[serde(default)]
+    region: String,
 }
 
 fn token(value: &str) -> i64 {
@@ -419,6 +418,7 @@ fn kind(value: &str) -> Option<String> {
 }
 fn create_repository(conn: &Connection) -> Result<()> {
     catalog_schema(conn)?;
+    sources::schema(conn)?;
     conn.execute_batch("CREATE TABLE image_urls(filename TEXT PRIMARY KEY,url TEXT NOT NULL);CREATE TABLE repository_keys(id INTEGER PRIMARY KEY,source_key TEXT UNIQUE NOT NULL);CREATE TABLE ready_platforms(name TEXT PRIMARY KEY);CREATE INDEX idx_names_normalized ON names(normalized);CREATE INDEX idx_games_platform ON games(platform);CREATE INDEX idx_images_game ON images(game_id);CREATE VIRTUAL TABLE names_fts USING fts5(name,content='names',content_rowid='rowid',tokenize='unicode61 remove_diacritics 2');INSERT INTO catalog_info VALUES(strftime('%Y-%m-%dT%H:%M:%SZ','now'));").map_err(err)
 }
 fn metadata_schema(conn: &Connection) -> Result<()> {
@@ -427,8 +427,20 @@ fn metadata_schema(conn: &Connection) -> Result<()> {
 pub(super) fn prepare(
     job: &ImportJob,
     refresh: bool,
-    mut progress: impl FnMut(MetadataProgress),
+    progress: impl FnMut(MetadataProgress),
 ) -> Result<CatalogSummary> {
+    prepare_with_index(job,refresh,progress,|index,progress| {
+        download(&http_client()?,ROOT_URL,index,2*1024*1024,job,
+            |n,total|progress(job.progress("catalog",n,total,None)))
+    })
+}
+fn prepare_with_index(
+    job: &ImportJob,
+    refresh: bool,
+    mut progress: impl FnMut(MetadataProgress),
+    fetch_index: impl FnOnce(&Path, &mut dyn FnMut(MetadataProgress)) -> Result<()>,
+) -> Result<CatalogSummary> {
+    job.check()?;
     if job.personal_catalog {
         let path = job.catalog_path();
         recover_catalog(&path)?;
@@ -436,17 +448,18 @@ pub(super) fn prepare(
     }
     let path = job.catalog_path();
     recover_catalog(&path)?;
-    if refresh || !path.exists() {
+    let upgrade = path.exists() && !sources::indexed(&open_catalog(&path)?);
+    if refresh || !path.exists() || (upgrade && !job.repository_upgrade_attempted.swap(true, Ordering::AcqRel)) {
         let index = job.directory.join("repository-index.json");
-        download(
-            &http_client()?,
-            ROOT_URL,
-            &index,
-            2 * 1024 * 1024,
-            job,
-            |n, total| progress(job.progress("catalog", n, total, None)),
-        )?;
-        let entries: Vec<DirectoryEntry> =
+        let outcome = fetch_index(&index,&mut progress);
+        if upgrade && !refresh && outcome.is_err() {
+            job.check()?;
+            // Existing catalogs remain available offline. Retry migration in
+            // the next operation, or immediately after an explicit refresh.
+            return cached_catalog_summary(&path);
+        }
+        outcome?;
+        let entries: Vec<sources::DirectoryEntry> =
             serde_json::from_reader(BufReader::new(File::open(index).map_err(err)?))
                 .map_err(err)?;
         let next = job.directory.join("repository.next.db");
@@ -454,19 +467,11 @@ pub(super) fn prepare(
         if path.exists() {
             fs::copy(&path, &next).map_err(err)?;
         }
-        let conn = Connection::open(&next).map_err(err)?;
+        let mut conn = Connection::open(&next).map_err(err)?;
         if !path.exists() {
             create_repository(&conn)?;
         }
-        for entry in entries
-            .into_iter()
-            .filter(|e| e.kind == "dir" && !e.name.starts_with('.'))
-        {
-            if valid_relative(&entry.name) && !entry.name.contains('/') {
-                conn.execute("INSERT OR IGNORE INTO platforms VALUES(?1)", [entry.name])
-                    .map_err(err)?;
-            }
-        }
+        sources::apply(&mut conn, entries)?;
         if refresh {
             conn.execute("DELETE FROM ready_platforms", [])
                 .map_err(err)?;
@@ -481,6 +486,7 @@ pub(super) fn prepare(
         drop(conn);
         job.check()?;
         replace_catalog(&next, &path)?;
+        job.image_urls.lock().map_err(err)?.clear();
     }
     cached_catalog_summary(&path)
 }
@@ -493,11 +499,12 @@ fn insert_platform(
 ) -> Result<()> {
     let data: RepoCatalog =
         serde_json::from_reader(BufReader::new(File::open(file).map_err(err)?)).map_err(err)?;
-    if data.schema_version != 2 || data.system != source {
+    if data.schema_version != 2 || !same_system(&data.system, source) {
         return Err(crate::i18n::text("source.invalid").into());
     }
     let tx = conn.transaction().map_err(err)?;
     metadata_schema(&tx)?;
+    let raw = sources::base(&tx, source)?;
     let mut console_localized=serde_json::Map::new();
     for locale in ["es", "en"] {
         let values=data.console_metadata.values(locale,None,&[]);
@@ -588,6 +595,10 @@ fn insert_platform(
         for entry in &game.entries {
             names.insert(entry.name.clone());
             names.insert(super::super::clean_rom_title(&entry.name));
+            if !entry.dat_name.is_empty() {
+                names.insert(entry.dat_name.clone());
+                names.insert(super::super::clean_rom_title(&entry.dat_name));
+            }
         }
         for name in names {
             tx.execute(
@@ -608,7 +619,7 @@ fn insert_platform(
                 continue;
             }
             let filename = format!("repo-{}.webp", -token(&format!("{source}/{}", image.path)));
-            let url = format!("{RAW_URL}{}", url_path(&format!("{source}/{}", image.path)));
+            let url = format!("{raw}{}", url_path(&image.path));
             let names = image
                 .sources
                 .iter()
@@ -618,6 +629,13 @@ fn insert_platform(
             let region = names
                 .iter()
                 .find_map(|n| rom_regions(n).first().copied())
+                .or_else(|| image.sources.iter().find_map(|s| match s.region.to_ascii_uppercase().as_str() {
+                    "US" | "USA" | "NA" => Some("North America"),
+                    "EU" | "EUR" | "EUROPE" => Some("Europe"),
+                    "JP" | "JPN" | "JAPAN" => Some("Japan"),
+                    "ALL" | "WORLD" => Some("World"),
+                    _ => None,
+                }))
                 .unwrap_or("World")
                 .to_string();
             tx.execute(
@@ -678,9 +696,10 @@ pub(super) fn ensure_platform(
     }
     drop(conn);
     let json = job.directory.join("platform-catalog.json");
+    let raw = sources::base(&open_catalog(&path)?, source)?;
     download(
         &http_client()?,
-        &format!("{RAW_URL}{}/catalog.json", url_path(source)),
+        &format!("{raw}catalog.json"),
         &json,
         256 * 1024 * 1024,
         job,
@@ -707,6 +726,9 @@ fn canonical_platform(value: &str) -> String {
     value
         .replace("Nintendo - Nintendo ", "Nintendo ")
         .replace("Nintendo - Super Nintendo ", "Super Nintendo ")
+}
+fn same_system(a: &str, b: &str) -> bool {
+    crate::platform_defaults::equivalent(&canonical_platform(a), &canonical_platform(b))
 }
 pub(super) fn regional_match(
     catalog: &Connection,
@@ -838,9 +860,10 @@ struct ConsoleArtwork {
 }
 fn insert_console_artwork(conn: &mut Connection, source: &str, file: &Path) -> Result<()> {
     let data: ConsoleArtwork=serde_json::from_reader(BufReader::new(File::open(file).map_err(err)?)).map_err(err)?;
-    if data.schema_version!=1 || data.system!=source { return Err(crate::i18n::text("source.invalid").into()); }
+    if data.schema_version!=1 || !same_system(&data.system,source) { return Err(crate::i18n::text("source.invalid").into()); }
     let tx=conn.transaction().map_err(err)?;
     metadata_schema(&tx)?;
+    let raw=sources::base(&tx,source)?;
     tx.execute("DELETE FROM image_urls WHERE filename IN (SELECT filename FROM repository_platform_images WHERE platform=?1)",[source]).map_err(err)?;
     tx.execute("DELETE FROM repository_platform_images WHERE platform=?1",[source]).map_err(err)?;
     for (key,image) in data.images {
@@ -853,7 +876,7 @@ fn insert_console_artwork(conn: &mut Connection, source: &str, file: &Path) -> R
         if !["svg","webp","png","jpg","jpeg"].contains(&extension) { continue; }
         let filename=console_image_filename(source,&image.path);
         tx.execute("INSERT INTO repository_platform_images VALUES(?1,?2,?3,'World',?4)",params![source,filename,kind,image.sha256]).map_err(err)?;
-        tx.execute("INSERT OR REPLACE INTO image_urls VALUES(?1,?2)",params![filename,format!("{RAW_URL}{}",url_path(&format!("{source}/{}",image.path)))]).map_err(err)?;
+        tx.execute("INSERT OR REPLACE INTO image_urls VALUES(?1,?2)",params![filename,format!("{raw}{}",url_path(&image.path))]).map_err(err)?;
     }
     tx.execute("INSERT OR REPLACE INTO repository_versions VALUES(?1,2)",[format!("artwork:{source}")]).map_err(err)?;
     tx.commit().map_err(err)
@@ -866,10 +889,16 @@ pub(super) fn console_images(job: &ImportJob, source: &str) -> Result<Vec<Catalo
         return Err(crate::i18n::text("source.invalid").into());
     }
     let cached=conn.query_row("SELECT version FROM repository_versions WHERE name=?1",[format!("artwork:{source}")],|r|r.get::<_,i64>(0)).ok()==Some(2);
+    let raw=sources::base(&conn,source)?;
     drop(conn);
     if !cached {
         let file=job.directory.join("console-artwork.json");
-        download(&http_client()?,&format!("{RAW_URL}{}/console_artwork.json",url_path(source)),&file,4*1024*1024,job,|_,_|())?;
+        let present=download_file(&http_client()?,&format!("{raw}console_artwork.json"),&file,4*1024*1024,job,true,|_,_|())?;
+        if !present {
+            // Some repositories only publish game artwork. Cache an empty
+            // console manifest until the next catalog refresh.
+            fs::write(&file,serde_json::to_vec(&serde_json::json!({"schema_version":1,"system":source,"images":{}})).map_err(err)?).map_err(err)?;
+        }
         let next=job.directory.join("console.next.db");fs::copy(&path,&next).map_err(err)?;
         let mut conn=Connection::open(&next).map_err(err)?;
         insert_console_artwork(&mut conn,source,&file)?;
@@ -899,6 +928,7 @@ pub(crate) fn retained_console_filename(path: &Path) -> Option<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    const SUBMODULES: &str = include_str!("../../tests/fixtures/repository-submodules.json");
     const FIXTURE: &str = r#"{"schema_version":2,"system":"Sony - PlayStation 2","games":{
       "SLUS-12345":{"entries":[{"name":"Example Game (USA)"}],"images":{
         "cover_front":{"kind":"cover_front","path":"SLUS-12345/cover_front.webp","sha256":"a","sources":[{"dat_name":"Example Game (USA)"}]},
@@ -953,6 +983,134 @@ mod tests {
                     && self.root.parent().unwrap().ends_with("repository-tests")
             );
             let _ = fs::remove_dir_all(&self.root);
+        }
+    }
+    #[test]
+    fn discovers_submodules_from_contents_listings_and_uses_child_main_for_games_and_consoles() {
+        let files=Sandbox::new();let mut conn=files.catalog();
+        sources::apply(&mut conn,serde_json::from_str(SUBMODULES).unwrap()).unwrap();
+        assert_eq!(sources::base(&conn,"Nintendo - Switch").unwrap(),"https://raw.githubusercontent.com/Utogu9/Nintendo_-_Switch/main/");
+        assert_eq!(sources::base(&conn,"Sega - Dreamcast").unwrap(),"https://raw.githubusercontent.com/Utogu9/Sega_-_Dreamcast/main/");
+        assert_eq!(sources::base(&conn,"Sony - PlayStation 2").unwrap(),format!("{RAW_URL}Sony%20-%20PlayStation%202/"));
+        let names:Vec<String>=conn.prepare("SELECT name FROM platforms ORDER BY name").unwrap()
+            .query_map([],|r|r.get(0)).unwrap().collect::<rusqlite::Result<_>>().unwrap();
+        assert_eq!(names,vec!["Nintendo - Switch","Sega - Dreamcast","Sony - PlayStation 2"]);
+        let file=files.job.directory.join("switch.json");fs::write(&file,include_str!("../../tests/fixtures/repository-switch.json")).unwrap();
+        insert_platform(&mut conn,&files.job,"Nintendo - Switch",&file,|_|()).unwrap();
+        let result=search_candidate(&conn,"wrong title","Nintendo - Switch","Switch Example (EN,ES).nsp").unwrap();
+        assert_eq!(result.len(),1);let game=&result[0].game;
+        assert_eq!(game.id,token("Nintendo - Switch/AAAAA"));assert_eq!(game.platform,"Nintendo - Switch");
+        assert_eq!(game.release_date.as_deref(),Some("2017-03-03"));assert_eq!(game.developer.as_deref(),Some("Example developer"));
+        assert_eq!(game.publisher.as_deref(),Some("Example publisher"));assert_eq!(game.max_players,Some(1));assert!(game.description.is_some());
+        let urls:Vec<String>=conn.prepare("SELECT url FROM image_urls WHERE filename IN (SELECT filename FROM images WHERE game_id=?1)").unwrap()
+            .query_map([game.id],|r|r.get(0)).unwrap().collect::<rusqlite::Result<_>>().unwrap();
+        assert_eq!(urls.len(),2);assert!(urls.iter().all(|url|url.starts_with("https://raw.githubusercontent.com/Utogu9/Nintendo_-_Switch/main/AAAAA/")));
+        let regions:Vec<String>=conn.prepare("SELECT region FROM images WHERE game_id=?1 ORDER BY region").unwrap()
+            .query_map([game.id],|r|r.get(0)).unwrap().collect::<rusqlite::Result<_>>().unwrap();
+        assert_eq!(regions,vec!["Japan","North America"]);
+        fs::write(&file,r#"{"schema_version":1,"system":"Nintendo Switch","images":{"logo":{"path":"logo.svg","kind":"logo"}}}"#).unwrap();
+        insert_console_artwork(&mut conn,"Nintendo - Switch",&file).unwrap();
+        let logo=console_image_filename("Nintendo - Switch","logo.svg");
+        assert_eq!(image_url(&files.job,platforms::PLATFORM_IMAGES,&logo).unwrap(),"https://raw.githubusercontent.com/Utogu9/Nintendo_-_Switch/main/logo.svg");
+        // The new source is still usable after restarting, without contacting GitHub.
+        drop(conn);ensure_platform(&files.job,"Nintendo - Switch",|_|panic!("must remain cached")).unwrap();
+    }
+
+    #[test]
+    fn existing_dreamcast_catalogs_relocate_saved_game_and_console_urls_without_changing_identities() {
+        let files=Sandbox::new();let mut conn=files.catalog();let source="Sega - Dreamcast";
+        conn.execute("INSERT INTO platforms VALUES(?1)",[source]).unwrap();
+        let fixture=files.job.directory.join("dreamcast.json");fs::write(&fixture,FIXTURE.replace("Sony - PlayStation 2",source)).unwrap();
+        insert_platform(&mut conn,&files.job,source,&fixture,|_|()).unwrap();
+        fs::write(&fixture,r#"{"schema_version":1,"system":"Sega - Dreamcast","images":{"logo":{"path":"logo.svg","kind":"logo"}}}"#).unwrap();
+        insert_console_artwork(&mut conn,source,&fixture).unwrap();
+        let old_prefix=format!("{RAW_URL}Sega%20-%20Dreamcast/");
+        let rows:Vec<(String,String)>=conn.prepare("SELECT filename,url FROM image_urls WHERE substr(url,1,length(?1))=?1 ORDER BY filename").unwrap()
+            .query_map([&old_prefix],|r|Ok((r.get(0)?,r.get(1)?))).unwrap().collect::<rusqlite::Result<_>>().unwrap();
+        assert!(rows.len()>1);let before=catalog_summary(&files.job.catalog_path()).unwrap().game_count;
+        conn.execute_batch("DROP TABLE repository_sources").unwrap();drop(conn);
+        assert_eq!(image_url(&files.job,IMAGE_BASE,&rows[0].0).unwrap(),rows[0].1);
+        prepare_with_index(&files.job,false,|_|(),|path,_|fs::write(path,SUBMODULES).map_err(err)).unwrap();
+        assert!(files.job.image_urls.lock().unwrap().is_empty());
+        let reopened=open_catalog(&files.job.catalog_path()).unwrap();
+        assert_eq!(catalog_summary(&files.job.catalog_path()).unwrap().game_count,before);
+        for (filename,old) in rows {
+            let expected=old.replacen(&old_prefix,"https://raw.githubusercontent.com/Utogu9/Sega_-_Dreamcast/main/",1);
+            assert_eq!(image_url(&files.job,IMAGE_BASE,&filename).unwrap(),expected);
+        }
+        assert_eq!(search_catalog(&reopened,"Example Game",source).unwrap().len(),2);
+        assert!(sources::indexed(&reopened));drop(reopened);
+        ensure_platform(&files.job,source,|_|panic!("migration must preserve prepared games")).unwrap();
+    }
+
+    #[test]
+    fn source_migration_keeps_old_catalogs_offline_and_failed_refreshes_never_replace_them() {
+        let files=Sandbox::new();let conn=files.catalog();conn.execute_batch("DROP TABLE repository_sources").unwrap();drop(conn);
+        let before=fs::read(files.job.catalog_path()).unwrap();
+        prepare_with_index(&files.job,false,|_|(),|_,_|Err("offline".into())).unwrap();
+        prepare_with_index(&files.job,false,|_|(),|_,_|panic!("only attempt the automatic upgrade once per job")).unwrap();
+        assert_eq!(fs::read(files.job.catalog_path()).unwrap(),before);
+        assert!(prepare_with_index(&files.job,true,|_|(),|_,_|Err("offline".into())).is_err());
+        assert!(prepare_with_index(&files.job,true,|_|(),|path,_|fs::write(path,"[]").map_err(err)).is_err());
+        assert_eq!(fs::read(files.job.catalog_path()).unwrap(),before);
+        prepare_with_index(&files.job,true,|_|(),|path,_|fs::write(path,SUBMODULES).map_err(err)).unwrap();
+        assert!(sources::indexed(&open_catalog(&files.job.catalog_path()).unwrap()));
+    }
+
+    #[test]
+    fn source_index_rejects_unsafe_endpoints_and_accepts_explicit_submodule_entries() {
+        let files=Sandbox::new();let mut conn=files.catalog();
+        let entries=serde_json::from_value(serde_json::json!([
+            {"name":"Safe","type":"submodule","submodule_git_url":"https://github.com/example/safe.git"},
+            {"name":"Wrong host","type":"file","git_url":"https://api.github.com.evil.example/repos/a/b/git/trees/sha"},
+            {"name":"Insecure","type":"submodule","submodule_git_url":"http://github.com/a/b.git"},
+            {"name":"Credentials","type":"submodule","submodule_git_url":"https://user:password@github.com/a/b.git"},
+            {"name":"../Escape","type":"dir"}, {"name":"Ordinary file","type":"file","git_url":"https://api.github.com/repos/a/b/git/blobs/sha"}
+        ])).unwrap();
+        sources::apply(&mut conn,entries).unwrap();
+        let count:i64=conn.query_row("SELECT count(*) FROM repository_sources",[],|r|r.get(0)).unwrap();
+        assert_eq!(count,1);assert_eq!(sources::base(&conn,"Safe").unwrap(),"https://raw.githubusercontent.com/example/safe/main/");
+        let bad=files.job.directory.join("bad-switch.json");fs::write(&bad,r#"{"schema_version":2,"system":"Nintendo Wii","games":{}}"#).unwrap();
+        assert!(insert_platform(&mut conn,&files.job,"Nintendo - Switch",&bad,|_|()).is_err());
+    }
+
+    #[test]
+    fn missing_optional_console_manifests_are_empty_but_http_failures_still_surface() {
+        use std::net::TcpListener;
+        let files=Sandbox::new();let mut conn=files.catalog();
+        sources::apply(&mut conn,serde_json::from_str(SUBMODULES).unwrap()).unwrap();
+        let file=files.job.directory.join("optional-console.json");
+        for (status,optional,expected) in [(404,true,Some(false)),(200,true,Some(true)),(500,true,None),(404,false,None)] {
+            let listener=TcpListener::bind("127.0.0.1:0").unwrap();let address=listener.local_addr().unwrap();
+            let server=std::thread::spawn(move||{
+                let (mut socket,_)=listener.accept().unwrap();let mut request=[0u8;2048];socket.read(&mut request).unwrap();
+                write!(socket,"HTTP/1.1 {status} Test\r\nContent-Length: 2\r\nConnection: close\r\n\r\n{{}}").unwrap();
+            });
+            fs::write(&file,"stale manifest").unwrap();
+            let result=download_file(&http_client().unwrap(),&format!("http://{address}/console_artwork.json"),&file,1024,&files.job,optional,|_,_|());
+            server.join().unwrap();assert_eq!(result.ok(),expected);
+            assert_eq!(file.exists(),expected==Some(true),"A missing manifest cannot reuse a file from another platform");
+        }
+        fs::write(&file,r#"{"schema_version":1,"system":"Nintendo Switch","images":{}}"#).unwrap();
+        insert_console_artwork(&mut conn,"Nintendo - Switch",&file).unwrap();drop(conn);
+        assert!(console_images(&files.job,"Nintendo - Switch").unwrap().is_empty());
+    }
+
+    #[test]
+    #[ignore="Reads the public submodule samples downloaded into target; no network or user library changes"]
+    fn indexes_current_switch_and_dreamcast_submodule_samples() {
+        let files=Sandbox::new();let mut conn=files.catalog();
+        let index=Path::new(env!("CARGO_MANIFEST_DIR")).join("../target/bdd-root-index.json");
+        let entries=serde_json::from_reader(BufReader::new(File::open(index).unwrap())).unwrap();
+        sources::apply(&mut conn,entries).unwrap();
+        for (source,repo,title) in [("Nintendo - Switch","Nintendo_-_Switch","The Legend of Zelda: Breath of the Wild"),("Sega - Dreamcast","Sega_-_Dreamcast","Sonic Adventure")] {
+            let path=Path::new(env!("CARGO_MANIFEST_DIR")).join(format!("../target/{repo}-catalog.json"));
+            insert_platform(&mut conn,&files.job,source,&path,|_|()).unwrap();
+            let found=search_catalog(&conn,title,source).unwrap();assert!(!found.is_empty());
+            let id=found[0].game.id;
+            let url:String=conn.query_row("SELECT u.url FROM images i JOIN image_urls u USING(filename) WHERE i.game_id=?1 LIMIT 1",[id],|r|r.get(0)).unwrap();
+            assert!(url.starts_with(&format!("https://raw.githubusercontent.com/Utogu9/{repo}/main/")));
+            if source=="Nintendo - Switch" {assert!(found[0].game.description.is_some());assert!(found[0].game.developer.is_some());}
         }
     }
     #[test]

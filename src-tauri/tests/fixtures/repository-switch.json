@@ -1,0 +1,26 @@
+{
+  "schema_version": 2,
+  "system": "Nintendo Switch",
+  "games": {
+    "AAAAA": {
+      "metadata_id": "gametdb:AAAAA",
+      "entries": [{"name":"Switch Example","dat_name":"Switch Example (EN,ES)","release_date":"2017-03-03","developer":"Example developer","publisher":"Example publisher"}],
+      "images": {
+        "cover_front": {"path":"AAAAA/cover_front.webp","kind":"cover_front","sources":[{"provider":"gametdb","region":"US"}]},
+        "cover_front2": {"path":"AAAAA/cover_front2.webp","kind":"cover_front","sources":[{"provider":"gametdb","region":"JP"}]}
+      }
+    }
+  },
+  "metadata": {
+    "gametdb:AAAAA": {
+      "labels": {"en":"Switch Example"},
+      "descriptions": {"en":"An example game description.","es":"Descripción de ejemplo."},
+      "fields": {
+        "release_date": [{"value":{"time":"+2017-03-03T00:00:00Z","precision":11}}],
+        "developer": [{"value":"Example developer"}],
+        "publisher": [{"value":"Example publisher"}],
+        "max_players": [{"value":1}]
+      }
+    }
+  }
+}

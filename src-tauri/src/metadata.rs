@@ -138,6 +138,7 @@ impl MetadataJobs {
             personal_catalog: repository::personal(&root),
             platform_hint: Mutex::new(None),
             image_urls: Mutex::new(HashMap::new()),
+            repository_upgrade_attempted: AtomicBool::new(false),
             id: id.clone(),
             root,
             directory,
@@ -158,6 +159,7 @@ pub(super) struct ImportJob {
     personal_catalog: bool,
     platform_hint: Mutex<Option<String>>,
     image_urls: Mutex<HashMap<String,String>>,
+    repository_upgrade_attempted: AtomicBool,
     id: String,
     root: PathBuf,
     directory: PathBuf,
@@ -547,8 +549,19 @@ fn download(
     destination: &Path,
     limit: u64,
     job: &ImportJob,
-    mut progress: impl FnMut(u64, Option<u64>),
+    progress: impl FnMut(u64, Option<u64>),
 ) -> Result<()> {
+    download_file(client,url,destination,limit,job,false,progress).map(|_|())
+}
+fn download_file(
+    client: &reqwest::Client,
+    url: &str,
+    destination: &Path,
+    limit: u64,
+    job: &ImportJob,
+    optional: bool,
+    mut progress: impl FnMut(u64, Option<u64>),
+) -> Result<bool> {
     job.check()?;
     let outcome = tauri::async_runtime::block_on(async {
         // Register before checking the flag so cancellation wakes every worker,
@@ -557,11 +570,13 @@ fn download(
         tokio::pin!(cancellation);
         cancellation.as_mut().enable();
         job.check()?;
-        let mut response = tokio::select! {
-            value = client.get(url).timeout(Duration::from_secs(if limit <= MAX_IMAGE_BYTES { 60 } else { 900 })).send() => value.map_err(err)?.error_for_status().map_err(err)?,
+        let response = tokio::select! {
+            value = client.get(url).timeout(Duration::from_secs(if limit <= MAX_IMAGE_BYTES { 60 } else { 900 })).send() => value.map_err(err)?,
             _ = &mut cancellation => return Err(cancelled_message().to_string()),
         };
         job.check()?;
+        if optional && response.status()==reqwest::StatusCode::NOT_FOUND { return Ok(false); }
+        let mut response=response.error_for_status().map_err(err)?;
         let total = response.content_length();
         if total.is_some_and(|n| n > limit) {
             return Err(crate::i18n::text("msg.4b0d2e0f9e").into());
@@ -595,9 +610,9 @@ fn download(
         job.check()?;
         file.sync_all().map_err(err)?;
         progress(received, total);
-        Ok(())
+        Ok(true)
     });
-    if outcome.is_err() {
+    if !matches!(outcome,Ok(true)) {
         let _ = fs::remove_file(destination);
     }
     outcome
