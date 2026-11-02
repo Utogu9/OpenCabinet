@@ -93,8 +93,10 @@ Windows x64 y AppImage de Linux x86_64 con permiso de escritura; en desarrollo s
 puede consultar, pero no instalar actualizaciones. Linux conserva su configuración
 y biblioteca en las carpetas XDG del usuario, fuera del AppImage.
 
-El workflow `linux-check.yml` valida las ramas y pull requests sin publicar releases.
-Sus artefactos permiten probar Linux antes de crear una etiqueta. Ver [Linux](linux.md).
+El workflow `linux-check.yml` se ejecuta solo manualmente, desde Actions, sin publicar
+releases. Sus artefactos permiten probar Linux antes de crear una etiqueta. Las pruebas
+automáticas de Windows y Linux se ejecutan al publicar un tag de versión mediante el
+workflow de release. Ver [Linux](linux.md).
 
 Para compilar localmente los paquetes firmados en PowerShell:
 

@@ -117,7 +117,7 @@ npm run build -- --target x86_64-unknown-linux-gnu --bundles appimage \
   --config '{"bundle":{"createUpdaterArtifacts":false}}' -- --locked
 ```
 
-The Linux validation workflow also builds an unsigned test AppImage and runs
+The manually triggered Linux validation workflow builds an unsigned test AppImage and runs
 the application in WebKitGTK through `tauri-driver`, WebKitWebDriver and Xvfb.
 It uses a temporary XDG profile, never a personal library. The software renderer
 is enabled only for those headless CI tests, not in the distributed application.
