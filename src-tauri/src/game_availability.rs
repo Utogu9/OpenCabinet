@@ -8,7 +8,7 @@ pub struct Availability {
     pub missing_paths: Vec<String>,
 }
 
-fn inspect(conn: &Connection, game_id: i32) -> Result<Availability, String> {
+pub(crate) fn inspect(conn: &Connection, game_id: i32) -> Result<Availability, String> {
     let ids = crate::game_regions::expanded(conn, &[game_id])?;
     let mut missing_paths = Vec::new();
     let mut available = false;

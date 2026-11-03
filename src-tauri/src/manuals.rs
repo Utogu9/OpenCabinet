@@ -1,6 +1,7 @@
 //! PDF/CBZ manuals live inside the portable media collection, not under the game ID.
 use crate::{PendingImageCopies, media_library};
 use rusqlite::Connection;
+use rusqlite::OptionalExtension;
 use std::{
     fs,
     io::{Read, Write},
@@ -73,6 +74,20 @@ pub(crate) fn scan(collection: &Path) -> Result<Vec<PathBuf>> {
 fn existing_collection(conn: &Connection, root: &Path, id: i64) -> Result<Option<PathBuf>> {
     let dir: Option<String> = conn.query_row("SELECT c.directory FROM games g LEFT JOIN media_collections c ON c.id=g.media_collection_id WHERE g.id=?1", [id], |r| r.get(0)).map_err(err)?;
     dir.map(|d| media_library::directory(root, &d)).transpose()
+}
+
+pub(crate) fn preference(conn:&Connection,id:i32)->Result<Option<String>> {
+    crate::library_features::init(conn).map_err(err)?;
+    conn.query_row("SELECT filename FROM game_manual_preferences WHERE game_id=?1",[id],|r|r.get(0)).optional().map_err(err)
+}
+pub(crate) fn set_preferred(conn:&Connection,root:&Path,id:i32,source:&str)->Result<()> {
+    crate::library_features::init(conn).map_err(err)?;
+    if source.is_empty(){conn.execute("DELETE FROM game_manual_preferences WHERE game_id=?1",[id]).map_err(err)?;return Ok(());}
+    let collection=existing_collection(conn,root,id as i64)?.ok_or(crate::i18n::text("msg.a610277d50"))?;
+    let requested=Path::new(source);
+    let target=scan(&collection)?.into_iter().find(|path|path==requested||same_contents(requested,path).unwrap_or(false)).ok_or(crate::i18n::text("msg.52ae8b6cfe"))?;
+    conn.execute("INSERT INTO game_manual_preferences VALUES(?1,?2) ON CONFLICT(game_id) DO UPDATE SET filename=excluded.filename",(id,target.file_name().unwrap().to_string_lossy().as_ref())).map_err(err)?;
+    Ok(())
 }
 
 fn same_contents(a: &Path, b: &Path) -> Result<bool> {
@@ -211,10 +226,11 @@ pub async fn get_game_manuals(id: i64) -> Result<Vec<String>> {
     tauri::async_runtime::spawn_blocking(move || {
         let conn = crate::get_db_connection().map_err(err)?;
         let root = crate::data_directory().map_err(err)?;
-        let paths = match existing_collection(&conn, &root, id)? {
+        let mut paths = match existing_collection(&conn, &root, id)? {
             Some(collection) => scan(&collection)?,
             None => Vec::new(),
         };
+        if let Some(preferred)=preference(&conn,id as i32)? {paths.sort_by_key(|p|p.file_name().unwrap_or_default().to_string_lossy()!=preferred);}
         Ok(paths
             .into_iter()
             .map(|p| p.to_string_lossy().into_owned())

@@ -19,6 +19,7 @@ mod backups;
 mod game_availability;
 mod library_files;
 mod session_history;
+mod library_features;
 mod steam;
 mod epic;
 mod media_library;
@@ -49,8 +50,10 @@ mod branding;
 mod windows_fullscreen;
 use playtime::{PlayStatistics, PlayTracker};
 
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone, Default)]
 pub struct Game {
+    #[serde(default)]
+    pub personal: library_features::Personal,
     pub order_group: Option<game_order::Group>,
     pub box_3d: Option<platform_details::BoxSettings>,
     #[serde(default)]
@@ -106,6 +109,10 @@ pub struct Emulator {
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct GameDetails {
+    #[serde(default)]
+    personal: Option<library_features::Personal>,
+    #[serde(default)]
+    manual_preference: Option<String>,
     #[serde(default)]
     rom_path: Option<String>,
     #[serde(default)]
@@ -304,6 +311,7 @@ fn init_database(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>> {
 }
 
 fn init_game_metadata(conn: &Connection) -> rusqlite::Result<()> {
+    library_features::init(conn)?;
     linux_execution::init(conn)?;
     game_order::init(conn)?;
     game_box_settings::init(conn)?;
@@ -386,7 +394,7 @@ fn read_library_games(conn: &Connection, root: &Path, tracker: &PlayTracker) -> 
         .map_err(|e| e.to_string())?;
     let games_iter = stmt
         .query_map([], |row| {
-            Ok(Game { order_group:None, box_3d:None, regions:Vec::new(), default_region_id:None, execution: game_execution::ExecutionOptions { emulator_id: row.get(17)?, arguments: row.get(18)? , linux: None }, discs: Vec::new(),
+            Ok(Game { personal:Default::default(), order_group:None, box_3d:None, regions:Vec::new(), default_region_id:None, execution: game_execution::ExecutionOptions { emulator_id: row.get(17)?, arguments: row.get(18)? , linux: None }, discs: Vec::new(),
                 id: row.get(0)?,
                 title: row.get(1)?,
                 platform: row.get(2)?,
@@ -435,6 +443,7 @@ fn read_library_games(conn: &Connection, root: &Path, tracker: &PlayTracker) -> 
         games.push(game);
     }
     game_regions::assemble(conn, &mut games)?;
+    library_features::hydrate(conn,&mut games)?;
     Ok(games)
 }
 
@@ -729,6 +738,7 @@ fn save_game_details_in_transaction(conn: &Connection, details: GameDetails) -> 
     if affected == 0 {
         return Err(crate::i18n::text("msg.66087bc5c8").to_string());
     }
+    if let Some(ref personal) = details.personal { library_features::save(tx,details.id,personal)?; }
     if let Some(ref variables) = details.variables {
         entity_variables::save(tx, "game", details.id, variables)?;
     }
@@ -764,7 +774,7 @@ fn save_game_details_in_transaction(conn: &Connection, details: GameDetails) -> 
     }
     let mut game = tx.query_row(
         "SELECT id, title, platform, rom_path, cover_path, play_time, release_date, developer, publisher, genre, game_mode, max_players, description, last_played, play_time_seconds, session_count, launch_directly, emulator_override_id, arguments_override FROM games WHERE id = ?1",
-        [details.id], |row| Ok(Game { order_group:None, box_3d:None, regions:Vec::new(), default_region_id:None, execution: game_execution::ExecutionOptions { emulator_id: row.get(17)?, arguments: row.get(18)? , linux: None }, discs: Vec::new(),
+        [details.id], |row| Ok(Game { personal:Default::default(), order_group:None, box_3d:None, regions:Vec::new(), default_region_id:None, execution: game_execution::ExecutionOptions { emulator_id: row.get(17)?, arguments: row.get(18)? , linux: None }, discs: Vec::new(),
             id: row.get(0)?, title: row.get(1)?, platform: row.get(2)?,
             rom_path: row.get(3)?, cover_path: row.get(4)?, play_time: row.get(5)?,
             release_date: row.get(6)?, developer: row.get(7)?, publisher: row.get(8)?,
@@ -778,6 +788,7 @@ fn save_game_details_in_transaction(conn: &Connection, details: GameDetails) -> 
             epic_app_id: None,
         }),
     ).map_err(|e| e.to_string())?;
+    game.personal = library_features::read(tx, game_regions::owner(tx,game.id)?)?;
     game.execution.linux = linux_execution::read(tx, game.id)?;
     game.steam_app_id = steam::app_id(&game.rom_path);
     game.recomp = entity_variables::truth(entity_variables::read(tx,"game",details.id)?.get("recomp"));
@@ -860,9 +871,12 @@ fn save_game_with_media(conn: &mut Connection, mut details: GameDetails, root: &
             image.path = relative;
         }
     }
+    if let Some(preferred) = &details.manual_preference { manuals::set_preferred(&tx,root,details.id,preferred)?; }
+    let personal_changed=details.personal.is_some();
     let game_id = details.id;
     let mut game = save_game_details_in_transaction(&tx, details)?;
     media_library::sync_game(&tx, root, game_id as i64, &mut copied)?;
+    if personal_changed {for id in game_regions::expanded(&tx,&[game_id])?{if id!=game_id{media_library::sync_game(&tx,root,id as i64,&mut copied)?;}}}
     game.images = read_game_images(&tx, game_id)?;
     game.cover_path = game.images.iter().find(|i|i.kind=="cover").map(|i|i.path.clone());
     tx.commit().map_err(|e|e.to_string())?;
@@ -1885,7 +1899,7 @@ mod game_edit_tests {
     }
 
     fn details() -> GameDetails {
-        GameDetails { rom_path:None, order_group:None, box_3d:None, regions:None, variables: None, execution: None, discs: None,
+        GameDetails { personal:None, manual_preference:None, rom_path:None, order_group:None, box_3d:None, regions:None, variables: None, execution: None, discs: None,
             id: 1, title: "  New Title  ".into(), platform: "genesis".into(),
             release_date: Some("1992-11-24".into()),
             developer: Some("  Developer  ".into()), publisher: Some("Publisher".into()),
@@ -2651,6 +2665,9 @@ pub fn run() {
             storage::restart_for_data_move,
             storage::restart_app,
             get_games,
+            library_features::set_game_personal,
+            library_features::get_library_dashboard,
+            library_features::get_library_report,
             library_navigation::get_library_navigation,
             library_navigation::save_library_categories,
             media_library::get_media_library_status,
@@ -2709,6 +2726,10 @@ pub fn run() {
             metadata::match_metadata_games,
             metadata::search_metadata_games,
             metadata::stage_metadata_import,
+            metadata::resume::get_pending_imports,
+            metadata::resume::restore_metadata_import,
+            metadata::resume::discard_pending_import,
+            metadata::resume::pause_metadata_import,
             metadata::retry_metadata_images,
             metadata::end_metadata_import,
             metadata::download_editor_game_images,

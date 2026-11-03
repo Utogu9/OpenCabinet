@@ -25,7 +25,7 @@
     return activeValues(result);
   }
   function gameDefaults(game, platform) {
-    return { ...platform, pc: game.steam_app_id != null || game.epic_app_id ? "yes" : platform.pc ?? "no",
+    return { ...platform, ...(game.personal?{status:game.personal.status||"unplayed",favorite:game.personal.favorite?"yes":"no",rating:String(game.personal.rating||0)}:{}), pc: game.steam_app_id != null || game.epic_app_id ? "yes" : platform.pc ?? "no",
       steam: game.steam_app_id != null ? "yes" : "no", epic: game.epic_app_id ? "yes" : "no", recomp: game.recomp ? "yes" : "no" };
   }
   function gameValues(game, platform, context = {}) {
@@ -49,7 +49,7 @@
     return ({ gt: () => a > b, gte: () => a >= b, lt: () => a < b, lte: () => a <= b })[condition.operator]?.() ?? false;
   }
   function knownNames(context = {}) {
-    const names = new Set(["steam", "epic", "pc", "portatil", "consola", "recomp"]);
+    const names = new Set(["steam", "epic", "pc", "portatil", "consola", "recomp", "status", "favorite", "rating"]);
     for (const values of [...Object.values(context.games || {}), ...Object.values(context.platforms || {})]) {
       Object.entries(values).forEach(([name,value]) => { if (validName(name) && active(value)) names.add(name); });
     }

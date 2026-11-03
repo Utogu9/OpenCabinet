@@ -91,6 +91,10 @@ pub struct Manifest {
     statistics: Option<SavedStatistics>,
     #[serde(default)]
     box_3d: Option<crate::platform_details::BoxSettings>,
+    #[serde(default)]
+    personal: Option<crate::library_features::Personal>,
+    #[serde(default)]
+    preferred_manual: Option<String>,
 }
 #[derive(Clone, Debug, Serialize, Deserialize)]
 struct SavedStatistics {
@@ -155,6 +159,7 @@ pub struct RecoveryReport {
 }
 
 pub fn init_schema(conn: &Connection) -> Result<()> {
+    crate::library_features::init(conn).map_err(err)?;
     let columns: HashSet<String> = conn
         .prepare("PRAGMA table_info(games)")
         .map_err(err)?
@@ -333,6 +338,8 @@ pub fn sync_game(
             play_time_seconds: row.get(0)?, session_count: row.get(1)?, last_played: row.get(2)?,
         })).map_err(err)?),
         box_3d: crate::game_box_settings::read(conn,game_id as i32)?,
+        personal: Some(crate::library_features::read(conn,crate::game_regions::owner(conn,game_id as i32)?)?),
+        preferred_manual: crate::manuals::preference(conn,game_id as i32)?,
     };
     let body = serde_json::to_string_pretty(&manifest).map_err(err)?;
     conn.execute(
@@ -425,6 +432,8 @@ pub fn flush_logged(conn: &Connection, root: &Path) {
 }
 
 fn valid_manifest(manifest: &Manifest) -> Result<()> {
+    if let Some(personal)=&manifest.personal {crate::library_features::validate(personal)?;}
+    if manifest.preferred_manual.as_ref().is_some_and(|name|Path::new(name).file_name().is_none_or(|part|part!=name.as_str())||name.contains("..")){return Err(crate::i18n::text("msg.0ec2fc74f2").into());}
     if let Some(stats) = &manifest.statistics {
         if stats.play_time_seconds < 0 || stats.session_count < 0 { return Err(crate::i18n::text("msg.261256a65b").into()); }
     }
@@ -716,6 +725,14 @@ pub fn attach(conn: &Connection, root: &Path, game_id: i64, id: &str) -> Result<
         .map_err(err)?;
     let manifest: Manifest = serde_json::from_str(&body).map_err(err)?;
     let changed=conn.execute("UPDATE games SET media_collection_id=?1,launch\u{0062}ox_id=COALESCE(launch\u{0062}ox_id,?3) WHERE id=?2",params![id,game_id,manifest.catalog_id]).map_err(err)?;
+    if let Some(personal)=&manifest.personal {crate::library_features::save(conn,game_id as i32,personal)?;}
+    if let Some(name)=&manifest.preferred_manual {
+        if Path::new(name).file_name().is_some_and(|part|part==name.as_str()) {
+            let dir:String=conn.query_row("SELECT directory FROM media_collections WHERE id=?1",[id],|r|r.get(0)).map_err(err)?;
+            let path=directory(root,&dir)?.join("manuals").join(name);
+            if path.is_file(){crate::manuals::set_preferred(conn,root,game_id as i32,&path.to_string_lossy())?;}
+        }
+    }
     if let Some(source)=manifest.artwork_id {if crate::metadata::repository::match_id(conn,game_id,false).is_none(){crate::metadata::repository::record_match(conn,game_id,source)?;}}
     if changed == 0 {
         return Err(crate::i18n::text("msg.d73324547f").into());
@@ -1172,6 +1189,19 @@ mod tests {
             serde_json::json!({"id":id,"title":"Reviewed title","platform":"PS2","manuals":paths}),
         )
         .unwrap()
+    }
+    #[test]
+    fn preferred_manual_and_personal_data_survive_collection_recovery(){
+        let files=Sandbox::new();let mut conn=db();let rom=files.rom("Game.iso");let id=game(&conn,&rom,Some(77));
+        let first=pdf(&files.0.join("Guide.pdf"),"First");let second=pdf(&files.0.join("Guide2.pdf"),"Second");
+        let mut edit=manual_edit(id,vec![first,second.clone()]);edit.manual_preference=Some(second);
+        edit.personal=Some(crate::library_features::Personal{status:"completed".into(),favorite:true,rating:5,notes:"Personal notes".into()});
+        crate::save_game_with_media(&mut conn,edit,&files.0).unwrap();
+        assert_eq!(crate::manuals::preference(&conn,id as i32).unwrap().as_deref(),Some("Guide2.pdf"));
+        let(uuid,_)=collection(&conn,id);crate::delete_game_records(&mut conn,&[id as i32]).unwrap();
+        let restored=game(&conn,&rom,Some(77));attach(&conn,&files.0,restored,&uuid).unwrap();
+        assert_eq!(crate::manuals::preference(&conn,restored as i32).unwrap().as_deref(),Some("Guide2.pdf"));
+        assert_eq!(crate::library_features::read(&conn,restored as i32).unwrap().notes,"Personal notes");
     }
     #[test]
     fn repository_matches_recover_from_manifests_without_overwriting_legacy_references() {

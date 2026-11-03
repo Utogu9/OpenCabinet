@@ -317,7 +317,7 @@ test("Direct PC games allow arguments without emulators; stores retain client la
     await app.get("game-edit-tab-box").trigger("keydown", { key: "ArrowDown" });
     assert.equal(app.document.activeElement, app.get("game-edit-tab-variables"));
     await app.get("game-edit-tab-variables").trigger("keydown", { key: "ArrowDown" });
-    assert.equal(app.document.activeElement, app.get("game-edit-tab-details"));
+    assert.equal(app.document.activeElement, app.get("game-edit-tab-personal"));
     app.get("game-edit-custom-arguments").checked = true;
     app.get("game-edit-arguments").value = "--windowed";
     await app.save();

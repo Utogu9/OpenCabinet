@@ -62,7 +62,7 @@
   const sectionSelectors = {
     logo:['#details-logo-container'],identity:['#details-title','#details-platform'],media:['#details-gallery'],
     play:['#btn-play-game','.platform-play-actions'],summary:['.details-meta-grid'],
-    information:['#game-information','.details-info-box.platform-only'],description:['#game-description'],
+    information:['#game-information','.details-info-box.platform-only','#personal-game-information'],description:['#game-description'],
   };
   const fieldIds = ['details-release-date','details-developer','details-publisher','details-play-time','details-genre','details-game-mode','details-rom-file','details-last-played','details-max-players',
     'platform-total-games','platform-default-emulator','platform-last-game','platform-sessions','platform-total-time','platform-most-game'];

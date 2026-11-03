@@ -30,6 +30,9 @@
       <div class="menu-item-dropdown" id="menu-tools-dropdown">
         <button class="menu-title" id="btn-menu-tools"><span data-i18n="msg.ab21560c63"></span></button>
         <div class="dropdown-menu" id="dropdown-tools-menu">
+          <button class="dropdown-item" id="btn-library-dashboard" type="button"><span class="ui-icon" data-icon="history" aria-hidden="true"></span><span data-i18n="insights.title"></span></button>
+          <button class="dropdown-item" id="btn-library-report" type="button"><span class="ui-icon" data-icon="triangle-alert" aria-hidden="true"></span><span data-i18n="report.title"></span></button>
+          <button class="dropdown-item" id="btn-pending-imports" type="button"><span class="ui-icon" data-icon="download" aria-hidden="true"></span><span data-i18n="resume.title"></span></button>
           <button class="dropdown-item" id="btn-scan-roms">
             <span><span class="ui-icon" data-icon="folder-open" aria-hidden="true"></span></span> <span data-i18n="msg.4f57902244"></span>
           </button>
@@ -180,6 +183,12 @@
               <div class="playtime-with-history"><span class="meta-value" id="details-play-time"><span data-i18n="msg.ed28aee471"></span></span><button id="btn-session-history" type="button" class="game-only session-history-button" data-i18n-title="sessions.open" data-i18n-aria-label="sessions.open"><span class="ui-icon" data-icon="history" aria-hidden="true"></span></button></div>
             </div>
           </div>
+          <section class="details-info-box game-only personal-sidebar" id="personal-game-information" aria-labelledby="personal-sidebar-title">
+            <h3 id="personal-sidebar-title" data-i18n="personal.title"></h3>
+            <div class="personal-status-row"><label for="details-game-status" data-i18n="personal.status"></label><select id="details-game-status"></select><button type="button" id="details-favorite" class="media-preference-button" aria-pressed="false" data-i18n-title="personal.favorite" data-i18n-aria-label="personal.favorite"><span class="ui-icon" data-icon="star" aria-hidden="true"></span></button></div>
+            <div class="personal-notes-heading"><span data-i18n="personal.notes"></span><button type="button" id="btn-personal-notes" class="media-preference-button" data-i18n-title="personal.editNotes" data-i18n-aria-label="personal.editNotes"><span class="ui-icon" data-icon="pencil" aria-hidden="true"></span></button></div>
+            <p id="details-personal-notes" class="personal-notes"></p>
+          </section>
           <section class="details-info-box" id="game-information" aria-labelledby="details-info-title">
             <h3 id="details-info-title"><span data-i18n="msg.7263ec8c2d"></span></h3>
             <div class="meta-item">
@@ -395,8 +404,10 @@
               <button type="button" id="game-edit-tab-regions" role="tab" aria-controls="game-edit-panel-regions" aria-selected="false" tabindex="-1"><span data-i18n="msg.d4a0db1956"></span></button>
               <button type="button" id="game-edit-tab-box" role="tab" aria-controls="game-edit-panel-box" aria-selected="false" tabindex="-1"><span data-i18n="msg.72af42e083"></span></button>
               <button type="button" id="game-edit-tab-variables" role="tab" aria-controls="game-edit-panel-variables" aria-selected="false" tabindex="-1"><span data-i18n="msg.02db55bac5"></span></button>
+              <button type="button" id="game-edit-tab-personal" role="tab" aria-controls="game-edit-panel-personal" aria-selected="false" tabindex="-1" data-i18n="personal.title"></button>
             </nav>
             <div class="game-editor-panels" id="game-editor-panels">
+              <section id="game-edit-panel-personal" class="hidden" role="tabpanel" aria-labelledby="game-edit-tab-personal"><h3 data-i18n="personal.title"></h3><div id="game-personal-editor"></div></section>
           <section id="game-edit-panel-details" role="tabpanel" aria-labelledby="game-edit-tab-details">
           <div class="form-grid">
             <div class="form-group full-width">
@@ -1097,6 +1108,8 @@
     <div class="game-context-menu hidden" id="game-context-menu" role="menu" aria-label="" data-i18n-aria-label="msg.ab4a89881d">
       <button class="dropdown-item" id="context-play-game" type="button" role="menuitem" tabindex="-1"><span data-i18n="msg.67fa9628c4"></span></button>
       <button class="dropdown-item" id="context-edit-game" type="button" role="menuitem" tabindex="-1"><span data-i18n="msg.02f344eb6e"></span></button>
+      <button class="dropdown-item" id="context-game-status" type="button" role="menuitem" tabindex="-1"><span class="ui-icon" data-icon="circle-check" aria-hidden="true"></span><span data-i18n="personal.status"></span></button>
+      <button class="dropdown-item" id="context-game-notes" type="button" role="menuitem" tabindex="-1"><span class="ui-icon" data-icon="file-text" aria-hidden="true"></span><span data-i18n="personal.notes"></span></button>
       <button class="dropdown-item" id="context-session-history" type="button" role="menuitem" tabindex="-1"><span aria-hidden="true"><span class="ui-icon" data-icon="history" aria-hidden="true"></span></span> <span data-i18n="sessions.open"></span></button>
       <button class="dropdown-item" id="context-open-emulator" type="button" role="menuitem" tabindex="-1"><span data-i18n="msg.b3a8ed7ae3"></span></button>
       <button class="dropdown-item" id="context-open-game-files" type="button" role="menuitem" tabindex="-1"><span data-i18n="msg.339fbb2a97"></span></button>
@@ -1449,6 +1462,7 @@
     <script src="task-window.js"></script>
     <script src="game-discs.js"></script>
     <script src="library-tools.js"></script>
+    <script src="library-features.js"></script>
     <script src="game-regions.js"></script>
     <script src="game-order.js"></script>
     <script src="keyboard-navigation.js"></script>

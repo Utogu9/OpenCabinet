@@ -1,3 +1,4 @@
+let appFeatures = null;
 const { invoke } = window.__TAURI__.core;
 
 // Estado local
@@ -1140,7 +1141,7 @@ function createDetailsGameBox() {
         viewer.update(game, images, boxSettings);
       }).catch(error => console.error("No se pudo cargar la configuración de la caja 3D:", error));
     },
-    refreshManuals() { if(gameId!==null)manualCoverCache?.refresh(gameId);viewer.refreshManual?.(); },
+    refreshManuals() { if(gameId!==null)manualCoverCache?.refresh(gameId);manualPath=null;manualPaths=[];viewer.refreshManual?.(); },
     clear() { ++request; fullscreen.close(); gameId = null; manualPath = null; manualPaths = []; manualEligible = false; manualState = { status: "none" }; settingsPlatform = null; boxSettings = null; viewer.clear(); manualUI(); },
   };
 }
@@ -1432,6 +1433,8 @@ function setupGameContextMenu() {
   const play = document.getElementById("context-play-game");
   const edit = document.getElementById("context-edit-game");
   const history = document.getElementById("context-session-history");
+  const statusAction = document.getElementById("context-game-status"), notesAction = document.getElementById("context-game-notes");
+  for(const [button,focus] of [[statusAction,"status"],[notesAction,"notes"]]) button?.addEventListener("click",()=>{const game=allGames.find(game=>game.id===targetId);close(true);if(game)appFeatures?.editPersonal(game,focus);});
   const openEmulator = document.getElementById("context-open-emulator");
   const remove = document.getElementById("context-delete-games");
   const downloadImages = document.getElementById("context-download-images");
@@ -1474,6 +1477,7 @@ function setupGameContextMenu() {
     openEmulator.classList.toggle("hidden", multiple || !emulator);
     play.classList.toggle("hidden", multiple);
     edit.classList.toggle("hidden", multiple);
+    statusAction?.classList.toggle("hidden",multiple||!appFeatures);notesAction?.classList.toggle("hidden",multiple||!appFeatures);
     history.classList.toggle('hidden',multiple||!window.OpenCabinetLibraryTools);
     remove.classList.remove("hidden");
     downloadImages.classList.toggle("hidden", !multiple);
@@ -1487,7 +1491,7 @@ function setupGameContextMenu() {
     mergeRegions.classList.toggle("hidden", !canMerge);
     const canMergeRecomp=window.OpenCabinetRegions?.canMergeRecomp?.(mergeCandidates)&&mergeCandidates.every(g=>!g.is_running&&!launchingGames.has(g.id));
     mergeRecomp.classList.toggle('hidden',!canMergeRecomp);
-    items = multiple ? [remove, downloadImages, ...(canMergeDiscs ? [mergeDiscs] : []), ...(canMerge ? [mergeRegions] : []),...(canMergeRecomp?[mergeRecomp]:[])] : [play, edit, ...(window.OpenCabinetLibraryTools?[history]:[]), ...(emulator ? [openEmulator] : []), gameFiles, imageFolder, manualFolder, remove];
+    items = multiple ? [remove, downloadImages, ...(canMergeDiscs ? [mergeDiscs] : []), ...(canMerge ? [mergeRegions] : []),...(canMergeRecomp?[mergeRecomp]:[])] : [play, edit, ...(appFeatures?[statusAction,notesAction]:[]), ...(window.OpenCabinetLibraryTools?[history]:[]), ...(emulator ? [openEmulator] : []), gameFiles, imageFolder, manualFolder, remove];
     document.querySelectorAll(".dropdown-menu.show").forEach((dropdown) => dropdown.classList.remove("show"));
     document.querySelectorAll(".menu-item-dropdown.active").forEach((dropdown) => dropdown.classList.remove("active"));
     menu.classList.remove("hidden");
@@ -2045,6 +2049,7 @@ function showGameDetails(game) {
   if (publisherLabel) publisherLabel.textContent = globalThis.OpenCabinetI18n.t("msg.936a161c39");
 
   renderGameMedia(game);
+  appFeatures?.showGame(game);
 
   const titleEl = document.getElementById("details-title");
   if (titleEl) titleEl.textContent = game.title;
@@ -2890,9 +2895,9 @@ function setupGameEditor() {
   });
   let savedEditorState = null;
   function editorState() {
-    return JSON.stringify([[...form.querySelectorAll("input,select,textarea")].filter(input=>input.id!=='game-edit-source-select').map(input => [input.id, input.value, input.checked]), draftImages, draftManuals, discEditor?.value(), regionEditor?.value()]);
+    return JSON.stringify([[...form.querySelectorAll("input,select,textarea")].filter(input=>input.id!=='game-edit-source-select').map(input => [input.id, input.value, input.checked]), draftImages, draftManuals, draftPreferredManual, personalEditor?.value(), discEditor?.value(), regionEditor?.value()]);
   }
-  const editorTabs = ["details", "order", "execution", "history", "images", "manuals", "discs", "regions", "box", "variables"].map(name => ({
+  const editorTabs = ["details", "order", "execution", "history", "images", "manuals", "discs", "regions", "box", "variables", "personal"].map(name => ({
     name, tab: document.getElementById(`game-edit-tab-${name}`),
     panel: document.getElementById(name === "discs" ? "game-discs-section" : `game-edit-panel-${name}`),
   }));
@@ -3024,6 +3029,7 @@ function setupGameEditor() {
   let networkBusy = false;
   let closing = false;
   let draftImages = [];
+  let personalEditor = null, draftPreferredManual = "";
   let savedManuals = [], draftManuals = [];
   let editorManualData=null;
   const editorManualReader=window.OpenCabinetManualReader?.create({imageSource,onClose:()=>{editorManualData?.dispose();editorManualData=null;}});
@@ -3174,7 +3180,10 @@ function setupGameEditor() {
     draftImages.forEach((image) => {
       const previous = existing.get(image.path);
       if (previous) {
+        const preferred=previous.querySelector(".media-preference-button");preferred?.setAttribute("aria-pressed",String(draftImages.find(current=>current.kind===image.kind)?.path===image.path));
+        preferred?.classList.toggle("hidden",draftImages.filter(current=>current.kind===image.kind).length<2);
         previous.querySelector("select").value = image.kind;
+        list.appendChild(previous);
         return;
       }
       const item = document.createElement("div");
@@ -3214,7 +3223,10 @@ function setupGameEditor() {
         draftImages = draftImages.filter((current) => current.path !== image.path);
         renderImageEditor();
       });
-      item.append(thumbnail, fields, remove);
+      const preferred=document.createElement("button");preferred.type="button";preferred.className="media-preference-button";globalThis.OpenCabinetIcons.set(preferred,"star");
+      preferred.title=globalThis.OpenCabinetI18n.t("media.preferred");preferred.classList.toggle("hidden",draftImages.filter(current=>current.kind===image.kind).length<2);preferred.setAttribute("aria-label",preferred.title);preferred.setAttribute("aria-pressed",String(draftImages.find(current=>current.kind===image.kind)?.path===image.path));
+      preferred.addEventListener("click",()=>{if(saving||networkBusy||choosingImages||closing)return;draftImages=[...draftImages.filter(current=>current.path===image.path),...draftImages.filter(current=>current.path!==image.path)];renderImageEditor();});
+      item.append(thumbnail, fields, remove, preferred);
       list.appendChild(item);
     });
     panels.scrollTop = scrollTop;
@@ -3233,7 +3245,7 @@ function setupGameEditor() {
         action.textContent = pending ? globalThis.OpenCabinetI18n.t("msg.f039f4a8c9") : globalThis.OpenCabinetI18n.t("msg.74e094e879");
         action.addEventListener("click", async () => {
           if (saving || choosingImages || closing || networkBusy) return;
-          if (pending) { draftManuals = draftManuals.filter(p => p !== path); renderManuals(); }
+          if (pending) { draftManuals = draftManuals.filter(p => p !== path); if(draftPreferredManual===path)draftPreferredManual=savedManuals[0]||draftManuals[0]||"";renderManuals(); }
           else {
             try {
               if(path.toLowerCase().endsWith('.cbz')&&editorManualReader){
@@ -3247,7 +3259,10 @@ function setupGameEditor() {
             finally{choosingImages=false;metadataControls();}
           }
         });
-        row.append(name, action); list.appendChild(row);
+        const preferred=document.createElement("button");preferred.type="button";preferred.className="media-preference-button";
+        globalThis.OpenCabinetIcons.set(preferred,"star");preferred.title=globalThis.OpenCabinetI18n.t("media.preferred");preferred.setAttribute("aria-label",preferred.title);preferred.setAttribute("aria-pressed",String((draftPreferredManual||savedManuals[0]||draftManuals[0])===path));
+        preferred.addEventListener("click",()=>{if(saving||networkBusy||choosingImages||closing)return;draftPreferredManual=path;renderManuals();});
+        preferred.classList.toggle("hidden",savedManuals.length+draftManuals.length<2);row.append(name, action, preferred); list.appendChild(row);
       }
     }
     metadataControls();
@@ -3260,6 +3275,7 @@ function setupGameEditor() {
       const paths = await invoke("get_game_manuals", { id });
       if (id !== editingId || closing || version !== manualVersion) return;
       savedManuals = paths;
+      if(!draftPreferredManual)draftPreferredManual=paths[0]||"";
       draftManuals = draftManuals.filter(path => !paths.includes(path));
       renderManuals();
     } catch (error) {
@@ -3340,6 +3356,9 @@ function setupGameEditor() {
       if (override && editingId !== null) await downloader.release();
       if (!await loadPlatforms()) return;
       editingId = game.id;
+      const personalHost=document.getElementById("game-personal-editor");personalHost.replaceChildren();
+      personalEditor=appFeatures?.fields(personalHost,window.OpenCabinetFeatures.personal(group));
+      draftPreferredManual="";
       editingSourceGame=game;draftRomPath=null;
       regionEditor?.setGame(group, game.id);
       document.getElementById("game-edit-current-region").textContent = group.regions?.length
@@ -3447,6 +3466,8 @@ function setupGameEditor() {
     try {linuxExecution=editingDirectly?linuxEditor?.value(draftRomPath||editingSourceGame?.rom_path)??null:null;}
     catch(error){showEditorTab("execution");showToast(String(error),true);return;}
     const details = {
+      ...(personalEditor?{personal:personalEditor.value()}:{}),
+      ...(draftPreferredManual?{manualPreference:draftPreferredManual}:{}),
       ...(orderPatch !== undefined ? { orderGroup:orderPatch } : {}),
       ...(gameBox !== undefined ? { box3d: gameBox } : {}),
       variables,
@@ -5998,6 +6019,7 @@ window.addEventListener("DOMContentLoaded", async () => {
   appThemes = window.OpenCabinetThemes?.create({ document, window, invoke, confirm: confirmDeletion });
   void appThemes?.load();
   const languageReady = invoke("set_ui_language", { language: preferences.language }).catch(error => console.error(error));
+  setupLibraryFeatures();
   setupGameContextMenu();
   setupPlatformContextMenu();
   setupMenuBarAndModal();
@@ -6023,8 +6045,19 @@ window.addEventListener("DOMContentLoaded", async () => {
   await setupPlayStatistics();
   await loading;
   void appUpdates.check(true);
+  void invoke("get_pending_imports").then(rows=>{const button=document.getElementById("btn-pending-imports");if(rows.length){button?.classList.add("has-pending-imports");showToast(globalThis.OpenCabinetI18n.t("resume.notice",rows.length));}}).catch(console.error);
   // Image discovery is maintenance, not a prerequisite for showing the catalog.
   invoke("get_media_library_status").then(media => {
     if (media.warnings.length) showToast(globalThis.OpenCabinetI18n.t("msg.823deb5062", media.warnings.join(" · ")), true);
   }).catch(error => { console.error("No se pudo preparar la biblioteca de imágenes:", error); showToast(globalThis.OpenCabinetI18n.t("msg.e60a363ea4", error), true); });
 });
+
+function setupLibraryFeatures(){
+  if(!window.OpenCabinetFeatures)return;
+  function updatePersonal(id,personal){allGames=allGames.map(game=>game.id===id?{...game,personal,regions:(game.regions||[]).map(region=>({...region,game:{...region.game,personal}}))}:game);const selected=allGames.find(game=>game.id===selectedGameId);if(selected)appFeatures.showGame(selected);renderPlatformFilters();if(libraryGrouping==="categories")applyLibraryFilters();}
+  appFeatures=window.OpenCabinetFeatures.create({document,invoke,getGames:()=>allGames,onPersonal:updatePersonal,onError:error=>showToast(error,true),formatDuration:seconds=>formatPlayTime({play_time_seconds:seconds,session_count:0}).replace(/\s*\([^)]*\)$/,""),confirm:confirmDeletion,
+    onEdit:id=>{const game=allGames.find(game=>game.id===id);if(game){showGameDetails(game);document.getElementById("btn-edit-game").click();}},
+    onRelocate:async id=>{const game=allGames.find(game=>game.id===id);if(game)await relocateGame(game);},
+    onResume:async (row,finished)=>{if(finished){platformDetailsCache.clear();await loadGames();showToast(globalThis.OpenCabinetI18n.t("msg.0ff259b714"));return;}if(scanInProgress){showToast(globalThis.OpenCabinetI18n.t("resume.busy"),true);return;}return appFeatures.resume(row);}});
+  for(const [id,action]of [["btn-library-dashboard","dashboard"],["btn-library-report","report"],["btn-pending-imports","pending"]])document.getElementById(id)?.addEventListener("click",()=>{document.getElementById("dropdown-tools-menu")?.classList.remove("show");appFeatures[action]();});
+}

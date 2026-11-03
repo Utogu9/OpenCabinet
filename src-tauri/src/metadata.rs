@@ -23,6 +23,7 @@ const IMAGE_BASE: &str = crate::catalog_compat::IMAGE_BASE;
 pub mod platforms;
 pub mod repository;
 mod repository_metadata;
+pub(crate) mod resume;
 // Older catalogs merged distinct categories into "artwork" or "other".
 // Reindex once to recover the original types from the source XML.
 const CATALOG_MEDIA_VERSION: i64 = 2;
@@ -136,6 +137,7 @@ impl MetadataJobs {
         fs::create_dir_all(directory.parent().unwrap()).map_err(err)?;
         fs::create_dir(&directory).map_err(err)?;
         let job = Arc::new(ImportJob {
+            resume_directory: Mutex::new(None),
             personal_catalog: repository::personal(&root),
             platform_hint: Mutex::new(None),
             image_urls: Mutex::new(HashMap::new()),
@@ -157,6 +159,7 @@ impl MetadataJobs {
 }
 
 pub(super) struct ImportJob {
+    resume_directory: Mutex<Option<PathBuf>>,
     personal_catalog: bool,
     platform_hint: Mutex<Option<String>>,
     image_urls: Mutex<HashMap<String,String>>,
@@ -236,7 +239,8 @@ impl Drop for ImportJob {
     fn drop(&mut self) {
         // This absolute directory was created by start(), from a server-generated ID.
         // Never remove the catalog, the image library, or any user-supplied path.
-        let _ = fs::remove_dir_all(&self.directory);
+        let origin = self.resume_directory.lock().ok().and_then(|path|path.clone());
+        if origin.as_ref()!=Some(&self.directory) || !resume::keep(&self.directory) { let _ = fs::remove_dir_all(&self.directory); }
     }
 }
 
@@ -363,7 +367,7 @@ impl MediaOptions {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 struct CatalogImage {
     filename: String,
     kind: String,
@@ -371,6 +375,7 @@ struct CatalogImage {
     crc: String,
 }
 
+#[derive(Serialize, Deserialize)]
 struct PreparedGame {
     candidate: RomCandidate,
     metadata: Option<CatalogGame>,
@@ -378,6 +383,7 @@ struct PreparedGame {
     manuals: Vec<String>,
     media_collection_id: Option<String>,
 }
+#[derive(Serialize, Deserialize)]
 struct DownloadTask {
     game_index: usize,
     image: CatalogImage,
@@ -385,6 +391,7 @@ struct DownloadTask {
     failure: Option<String>,
     done: bool,
 }
+#[derive(Serialize, Deserialize)]
 struct StagedBatch {
     preview: ScanPreview,
     platform: String,
@@ -1311,8 +1318,9 @@ fn download_batch(
         .collect();
     let cursor = AtomicUsize::new(0);
     let mut processed = total - pending.len() as u64;
+    let mut checkpoint_at = Instant::now();
     progress(job.progress(phase, processed, Some(total), None));
-    std::thread::scope(|scope| {
+    std::thread::scope(|scope| -> Result<()> {
         let (sender, receiver) = std::sync::mpsc::channel();
         for _ in 0..IMAGE_DOWNLOAD_WORKERS.min(pending.len()) {
             let sender = sender.clone();
@@ -1326,15 +1334,18 @@ fn download_batch(
                 else {
                     break;
                 };
-                let result = download(
+                let result = repository::image_url(job,image_base,filename).and_then(|url| {
+                    resume::clear_marker(job,path)?;
+                    download(
                     client,
-                    &match repository::image_url(job,image_base,filename) {Ok(url)=>url,Err(error)=>{let _=sender.send((*index,Err(error)));continue;}},
+                    &url,
                     path,
                     if crate::manuals::supported(path) { MAX_MANUAL_BYTES } else { MAX_IMAGE_BYTES },
                     job,
                     |_, _| (),
-                )
-                .and_then(|_| validate_download(path));
+                )})
+                .and_then(|_| validate_download(path))
+                .and_then(|_| resume::mark_complete(job,path));
                 if sender.send((*index, result)).is_err() {
                     break;
                 }
@@ -1358,8 +1369,11 @@ fn download_batch(
                 let title = batch.games[task.game_index].candidate.title.clone();
                 progress(job.progress(phase, processed, Some(total), Some(title)));
             }
+            if checkpoint_at.elapsed() >= Duration::from_secs(1) {resume::checkpoint(job,batch)?;checkpoint_at=Instant::now();}
         }
-    }); // All workers have stopped before cancellation can clean up staging files.
+        Ok(())
+    })?; // All workers have stopped before cancellation can clean up staging files.
+    resume::checkpoint(job,batch)?;
     job.check()?;
     // Completion order must not change the carousel order, including on retries.
     for game in &mut batch.games {
@@ -1529,6 +1543,7 @@ pub(super) fn commit_import(
     job.check()?;
     tx.commit().map_err(err)?;
     *committed = true;
+    resume::finish(job);
     copied.0.clear();
     crate::media_library::flush_logged(conn,&job.root);
     *staged = None;
@@ -1798,6 +1813,7 @@ pub async fn stage_metadata_import(
         let platform_import = platforms::prepare_auto(&conn, &batch.platform, &source_platform)?;
         drop(conn);
         drop(catalog);
+        resume::begin(&job,&batch)?;
         let mut report = download_batch(&mut batch, &job, IMAGE_BASE, |progress| {
             let _ = on_progress.send(progress);
         })?;
@@ -2356,6 +2372,7 @@ pub async fn end_metadata_import(
         while job.busy.load(Ordering::Acquire) {
             std::thread::sleep(Duration::from_millis(25));
         }
+        resume::finish(&job);
         let mut state = jobs.0.lock().map_err(err)?;
         if state.as_ref().is_some_and(|(key, _)| key == &job_id) {
             *state = None;
@@ -3870,7 +3887,7 @@ mod tests {
         .unwrap();
         let source = &batch.tasks[0].path;
         fs::write(source, PNG).unwrap();
-        let details = crate::GameDetails { rom_path:None, order_group:None, box_3d:None, regions: None, variables: None, execution: None, discs: None,
+        let details = crate::GameDetails { personal:None, manual_preference:None, rom_path:None, order_group:None, box_3d:None, regions: None, variables: None, execution: None, discs: None,
             manuals: None,
             id,
             title: "Custom title".into(),

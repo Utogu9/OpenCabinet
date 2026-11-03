@@ -102,6 +102,7 @@ fn clean_staging(root: &Path, retroarch: bool, warnings: &mut Vec<String>) {
             if !operation_id(&id) || !ordinary_directory(&entry.path()) {
                 continue;
             }
+            if !retroarch && crate::metadata::resume::keep(&entry.path()) { continue; }
             // A core may live outside the portable data folder. The receipt
             // records the exact operation-specific .part before it is created.
             if retroarch {

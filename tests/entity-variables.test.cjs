@@ -134,3 +134,8 @@ test('New variable names are suggested from games and consoles without forcing a
   assert.ok(!app.suggestions.children.some(option=>option.value==='favorito'));
   name.value='mi_variable_nueva';assert.equal(app.editor.value().mi_variable_nueva,'yes');
 });
+test('Personal status, rating and favorites can be used by custom categories',()=>{
+  const values=vars.gameValues({id:1,platform:'PS2',personal:{status:'completed',favorite:true,rating:4}},{name:'PS2'});
+  assert.equal(values.status,'completed');assert.equal(values.favorite,'yes');assert.equal(values.rating,'4');
+  assert.ok(vars.knownNames().includes('status'));
+});
