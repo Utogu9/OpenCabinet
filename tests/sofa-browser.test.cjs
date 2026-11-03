@@ -436,6 +436,37 @@ test('Couch mode carousels, controller selectors, launch return and cleanup work
   await page.keyboard.press('Escape');await page.evaluate(()=>fixtureSofa.open());
   assert.equal(await page.locator('.sofa-card-art canvas.sofa-cover').count(),7,'Closing and reopening couch mode keeps the last console window warm');
   await page.keyboard.press('Escape');await page.evaluate(()=>fixture.retainedCache.dispose());
+  await page.evaluate(async()=>{
+    const base=fixtureGames[0],platforms=['Nintendo DS','Nintendo GameCube','Nintendo Wii','Sony PlayStation 2'];
+    fixtureGames=platforms.flatMap((platform,index)=>Array.from({length:12},(_,i)=>({...base,id:3000+index*100+i,title:`Rapid game ${i}`,platform,regions:null})));
+    const bitmap=document.createElement('canvas');bitmap.width=96;bitmap.height=136;bitmap.getContext('2d').fillRect(0,0,96,136);
+    fixtureOptions.getCoverPreview=()=>bitmap;fixtureOptions.loadCoverPreview=async()=>bitmap;fixtureOptions.retainArtwork=()=>{};
+    fixture.platformPreparations=[];fixture.libraryPrunes=0;
+    fixtureOptions.boxSettings=async game=>{fixture.platformPreparations.push(game.platform);return null;};
+    fixtureOptions.pruneArtwork=()=>fixture.libraryPrunes++;
+    await fixtureSofa.open();if(document.getElementById('sofa-mode').dataset.view!=='box')document.getElementById('sofa-view').click();
+    document.querySelector('.sofa-platform[data-platform="Nintendo DS"]').click();
+  });
+  await page.waitForFunction(()=>document.querySelectorAll('.sofa-card[data-box-ready="true"]').length===9);
+  const burst=await page.evaluate(()=>new Promise(resolve=>{
+    fixture.platformPreparations=[];const prunes=fixture.libraryPrunes,start=performance.now()+64;
+    fixturePad.axes=[0,0,0,0];fixturePad.buttons.forEach(button=>{button.pressed=false;button.value=0;});
+    // Hardware states advance independently of JS timers, so a blocked poll
+    // really can miss a tap instead of merely postponing a synthetic event.
+    Object.defineProperty(navigator,'getGamepads',{configurable:true,value:()=>{
+      const elapsed=performance.now()-start,pressed=elapsed>=0&&elapsed<450&&elapsed%150<70;
+      fixturePad.buttons[5]={pressed,value:Number(pressed)};return [fixturePad];
+    }});
+    setTimeout(()=>resolve({platform:document.querySelector('.sofa-platform[aria-pressed="true"]').dataset.platform,
+      focused:document.activeElement.dataset.platform,preparations:fixture.platformPreparations.slice(),prunes:fixture.libraryPrunes-prunes}),520);
+  }));
+  assert.equal(burst.platform,'Sony PlayStation 2','Three short controller presses switch exactly three consoles with 3D enabled');
+  assert.equal(burst.focused,burst.platform);
+  assert.deepEqual(burst.preparations,[],'Passing through consoles does not interrupt input with intermediate model preparation');
+  assert.equal(burst.prunes,0,'Changing consoles does not rebuild global library indexes or scan all media');
+  await page.waitForFunction(()=>document.querySelectorAll('.sofa-card[data-box-ready="true"]').length===9);
+  assert.equal(await page.evaluate(()=>fixture.platformPreparations.every(name=>name==='Sony PlayStation 2')),true,'Only the final console prepares its missing models');
+  await page.keyboard.press('Escape');
   assert.deepEqual(errors,[]);
   assert.deepEqual(graphicsErrors,[],'Texture upgrades and recycled models do not produce WebGL errors');
 });

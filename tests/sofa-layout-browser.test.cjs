@@ -91,4 +91,43 @@ test('Couch console scrolling stays centered and supports dragging without selec
   await page.evaluate(()=>sofa.open());await page.waitForTimeout(100);assertCentered(await layout());
   assert.equal(await page.locator('.sofa-platforms').evaluate(node=>node.classList.contains('is-dragging')),false,'Closing during a drag releases capture');
   await page.evaluate(()=>sofa.close());
+  // Native smooth scrolling must not lag behind held/rapid console input.
+  await page.emulateMedia({reducedMotion:'no-preference'});
+  await page.evaluate(async()=>{await sofa.open();document.querySelector('.sofa-platform[data-platform="Console 00"]').click();});
+  const rapid=await page.evaluate(async()=>{
+    const results=[],rail=document.querySelector('.sofa-platforms');
+    for(const key of ['ArrowRight','ArrowLeft'])for(let i=0;i<15;i++){
+      window.dispatchEvent(new KeyboardEvent('keydown',{key,repeat:i>0,bubbles:true,cancelable:true}));
+      await new Promise(resolve=>setTimeout(resolve,50));
+      const selected=rail.querySelector('[aria-pressed="true"]'),rect=selected.getBoundingClientRect(),bounds=rail.getBoundingClientRect();
+      results.push({name:selected.dataset.platform,focused:document.activeElement===selected,visible:rect.left>=bounds.left&&rect.right<=bounds.right});
+    }
+    sofa.refresh();const focusPreserved=document.activeElement===rail.querySelector('[aria-pressed="true"]'),stoppedAt=rail.scrollLeft;
+    await new Promise(resolve=>setTimeout(resolve,350));
+    return {results,focusPreserved,lateScroll:Math.abs(rail.scrollLeft-stoppedAt)};
+  });
+  assert.deepEqual(rapid.results.map(row=>row.name),[
+    ...Array.from({length:15},(_,i)=>`Console ${String(i+1).padStart(2,'0')}`),
+    ...Array.from({length:15},(_,i)=>`Console ${String(14-i).padStart(2,'0')}`),
+  ],'Every quick press advances exactly one console in either direction');
+  assert.ok(rapid.results.every(row=>row.focused&&row.visible),'The focused console stays visible during rapid navigation: '+JSON.stringify(rapid.results));
+  assert.equal(rapid.focusPreserved,true,'Refreshing the library preserves the focused console button');
+  assert.ok(rapid.lateScroll<1,'The console rail does not jump to catch up after navigation stops');
+  await page.evaluate(()=>document.querySelector('.sofa-platform[data-platform="Console 05"]').click());
+  await page.waitForTimeout(500);
+  for(const index of [6,7,8,7,6,5]){
+    const name=`Console ${String(index).padStart(2,'0')}`;
+    const box=await page.locator(`.sofa-platform[data-platform="${name}"]`).boundingBox();
+    await page.mouse.click(box.x+box.width/2,box.y+box.height/2);await page.waitForTimeout(50);
+    assert.equal(await selectedPlatform(),name,'Quick mouse clicks keep selecting the intended console');
+    assert.equal(await page.evaluate(()=>document.activeElement===document.querySelector('.sofa-platform[aria-pressed="true"]')),true);
+  }
+  const mouseStop=(await layout()).railScroll;await page.waitForTimeout(350);
+  assert.ok(Math.abs((await layout()).railScroll-mouseStop)<1,'Mouse navigation leaves no delayed catch-up scroll');
+  const console=page.locator('.sofa-platform[data-platform="Console 06"]'),target=await console.boundingBox();
+  const beforeClicks=(await layout()).railScroll;
+  for(let i=0;i<3;i++)await page.mouse.click(target.x+target.width/2,target.y+target.height/2,{delay:10});
+  assert.equal(await selectedPlatform(),'Console 06','Three clicks at the same position do not select consoles sliding under the pointer');
+  assert.ok(Math.abs((await layout()).railScroll-beforeClicks)<1,'Selecting a visible console with the mouse keeps its hit target stationary');
+  await page.evaluate(()=>sofa.close());
 });

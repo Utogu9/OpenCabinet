@@ -110,9 +110,11 @@
     let active = false, lease = null, opener = null, generation = 0, selectionVersion = 0;
     let platforms = [], games = [], platformName = null, gameId = null, zone = 'games', query = '';
     let boxMode = true, frame = null, previewTimer = null, previewGeneration = 0, previewWork = null;
+    let platformPreviewAt = 0;
     let busy = false, availability = null, watchedGame = null, wasRunning = false, pendingFocus = false;
     let lastPad = false, selectedKey = null, backgroundAbort = null, lastBoxSelection = null, lastPollTime = null;
     let railDrag = null, railDragged = false;
+    let lastRailNavigation = -Infinity, railScrollTarget = null;
     const remembered = new Map(), banks = new Map(), platformNodes = new Map(), padInput = createPadInput();
     let cardNodes = new Map(), spareCards = [], activeBank = null;
     try { boxMode = window.localStorage.getItem('opencabinet.sofaView') !== 'cover'; } catch {}
@@ -135,8 +137,17 @@
       // scrollIntoView also scrolls the dialog: its blurred backdrop extends
       // 50px beyond the viewport, allowing the whole screen to shift sideways.
       const item = node.getBoundingClientRect(), bounds = rail.getBoundingClientRect();
-      rail.scrollTo({ left: rail.scrollLeft + item.left + item.width / 2 - bounds.left - rail.clientLeft - rail.clientWidth / 2,
-        behavior: window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ? 'instant' : 'smooth' });
+      const target = Math.max(0, Math.min(rail.scrollWidth - rail.clientWidth,
+        rail.scrollLeft + item.left + item.width / 2 - bounds.left - rail.clientLeft - rail.clientWidth / 2));
+      const now = window.performance.now(), rapid = now - lastRailNavigation < 220;
+      lastRailNavigation = now;
+      // Repeated smooth-scroll requests restart the browser's easing curve and
+      // leave the selected console offscreen until input stops. During bursts,
+      // move directly to the current selection instead of accumulating lag.
+      if (railScrollTarget === target && (!rapid || Math.abs(rail.scrollLeft - target) < 1)) return;
+      railScrollTarget = target;
+      rail.scrollTo({ left: target,
+        behavior: rapid || window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ? 'instant' : 'smooth' });
     }
     function stopRailDrag(event) {
       if (!railDrag || (event && event.pointerId !== railDrag.id)) return;
@@ -202,6 +213,11 @@
     const observer = new window.MutationObserver(updateBoxVisibility);
     function preparePreviews() {
       if (!boxMode || watchedGame !== null) { pausePreview(); return; }
+      const wait = platformPreviewAt - window.performance.now();
+      if (wait > 0) {
+        if (previewTimer === null) previewTimer = setTimeout(() => { previewTimer = null; preparePreviews(); }, wait);
+        return;
+      }
       resumeBank(activeBank);
       if (previewTimer !== null || previewWork !== null) return;
       const token = previewGeneration;
@@ -468,10 +484,25 @@
       if (!games.length || busy) return;
       const index = games.findIndex(game => game.id === gameId); chooseGame(games[wrap(index + delta, games.length)].id, true);
     }
-    function changePlatform(name, focus = true) {
+    function changePlatform(name, focus = true, reveal = true) {
       if (!platforms.some(platform => platform.name === name)) return;
+      zone = 'platforms';
+      if (name === platformName) {
+        if (reveal) showPosition(platformNodes.get(name));
+        if (focus) focusCurrent();
+        return;
+      }
       if (gameId !== null) remembered.set(platformName, gameId);
-      platformName = name; zone = 'platforms'; refresh(); if (focus) focusCurrent();
+      const previous = platformNodes.get(platformName);
+      previous?.setAttribute('aria-pressed', 'false'); if (previous) previous.tabIndex = -1;
+      platformName = name;
+      const node = platformNodes.get(name); node.setAttribute('aria-pressed', 'true'); node.tabIndex = 0;
+      // Selection and focus respond immediately. Do not build/restore models
+      // for consoles the user is only passing through during a burst of input.
+      platformPreviewAt = window.performance.now() + 200;
+      stopPreviewQueue(); refreshGames();
+      if (reveal) showPosition(node);
+      renderCards(); refreshSelected(); if (focus) focusCurrent();
     }
     function movePlatform(delta) {
       if (!platforms.length || busy) return;
@@ -524,23 +555,27 @@
       }
       if (game.id === gameId) { subtitle.textContent = [game.platform, options.formatPlayTime(game)].join(' · '); status(); }
     }
+    function refreshGames() {
+      const source = options.games().filter(game => platformName === null || game.platform === platformName)
+        .filter(game => !query || game.title.toLocaleLowerCase().includes(query.toLocaleLowerCase()));
+      games = options.sortGames(source);
+      gameId = games.some(game => game.id === remembered.get(platformName)) ? remembered.get(platformName)
+        : games.some(game => game.id === gameId) ? gameId : games[0]?.id ?? null;
+    }
     function refresh() {
       if (!active) return;
       const library = options.games(); platforms = platformsFor(library, options.platforms());
       options.pruneArtwork?.(new Set(library.flatMap(coverPaths)), new Set(platforms.map(platform => platform.name)));
       if (!platforms.some(platform => platform.name === platformName)) platformName = null;
-      const source = library.filter(game => platformName === null || game.platform === platformName)
-        .filter(game => !query || game.title.toLocaleLowerCase().includes(query.toLocaleLowerCase()));
-      games = options.sortGames(source);
-      gameId = games.some(game => game.id === remembered.get(platformName)) ? remembered.get(platformName)
-        : games.some(game => game.id === gameId) ? gameId : games[0]?.id ?? null;
+      refreshGames();
       const names = new Set(platforms.map(platform => platform.name));
       for (const bank of banks.values()) if (bank !== activeBank && !names.has(bank.platform)) disposeBank(bank);
       for (const [name, node] of platformNodes) if (!names.has(name)) { node.remove(); platformNodes.delete(name); }
+      let platformIndex = 0;
       for (const platform of platforms) {
         let node = platformNodes.get(platform.name);
         if (!node) {
-          node = button('', () => changePlatform(platform.name), 'sofa-platform');
+          node = button('', event => changePlatform(platform.name, true, event.detail === 0), 'sofa-platform');
           node.dataset.platform = platform.name ?? ''; const art = element('span', 'sofa-platform-art', platform.name === null ? '◈' : '◉');
           node.append(art, element('span', 'sofa-platform-name', platform.name ?? t('sofa.all')),
             element('small', 'sofa-platform-count')); platformNodes.set(platform.name, node);
@@ -552,7 +587,11 @@
             image.src = options.imageSource(logo.path);
           }).catch(() => {});
         }
-        rail.append(node); node.setAttribute('aria-pressed', String(platform.name === platformName));
+        // Moving an existing focused button out and back into the rail loses
+        // native focus and can disturb an in-progress horizontal scroll.
+        const existing = rail.children[platformIndex++];
+        if (existing !== node) rail.insertBefore(node, existing || null);
+        node.setAttribute('aria-pressed', String(platform.name === platformName));
         node.tabIndex = platform.name === platformName ? 0 : -1;
         node.querySelector('small').textContent = String(platform.count);
       }
@@ -613,19 +652,20 @@
         lastPad = connected; hint.textContent = t(connected ? 'sofa.padHelp' : 'sofa.keyboardHelp');
         padStatus.textContent = t(connected ? 'sofa.padConnected' : 'sofa.padConnect');
       }
-      let rotating = false;
       if (document.visibilityState !== 'hidden' && document.hasFocus()) {
         const elapsed = lastPollTime === null ? 0 : Math.max(0, Math.min(50, now - lastPollTime));
         lastPollTime = now;
         for (const command of padInput.sample(pad, now)) action(command);
-        rotating = rotateSelected(pad, elapsed);
+        rotateSelected(pad, elapsed);
       } else { padInput.reset(); lastPollTime = null; }
       // Menu input must not wait for the 3D renderer's next animation frame.
-      if (active) frame = window.setTimeout(poll, document.hasFocus() ? rotating ? 16 : 32 : 150);
+      if (active) frame = window.setTimeout(poll, document.hasFocus() ? 16 : 150);
     }
     async function open(initial = {}) {
       if (active) return;
       opener = document.activeElement; active = true; const token = ++generation;
+      lastRailNavigation = -Infinity; railScrollTarget = null;
+      platformPreviewAt = 0;
       if (gameId === null) { gameId = initial.gameId ?? null; platformName = initial.platform ?? null; }
       zone = 'games'; query = ''; search.value = ''; lastPad = false; lastPollTime = null;
       hint.textContent = t('sofa.keyboardHelp'); padStatus.textContent = t('sofa.padConnect');
@@ -681,6 +721,7 @@
       if (event.clientY >= bounds.top + rail.clientTop + rail.clientHeight) return;
       event.preventDefault();
       rail.scrollTo({ left: rail.scrollLeft, behavior: 'instant' });
+      railScrollTarget = null;
       const target = event.target.closest('.sofa-platform') || rail;
       railDrag = { id: event.pointerId, target, x: event.clientX, left: rail.scrollLeft };
       target.setPointerCapture(event.pointerId);
