@@ -15,7 +15,7 @@ fn err(e: impl std::fmt::Display) -> String {
 pub(crate) fn supported(path: &Path) -> bool {
     path.extension().is_some_and(|e|e.eq_ignore_ascii_case("pdf")||e.eq_ignore_ascii_case("cbz"))
 }
-fn validate(path: &Path) -> Result<()> {
+pub(crate) fn validate(path: &Path) -> Result<()> {
     if !supported(path)||!path.is_file(){return Err(crate::i18n::text("msg.767a2ac791").into());}
     if path
         .extension()

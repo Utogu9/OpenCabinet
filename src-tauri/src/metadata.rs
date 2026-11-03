@@ -75,6 +75,7 @@ fn valid_download_image_kind(kind: &str) -> bool {
 const MAX_CATALOG_BYTES: u64 = 512 * 1024 * 1024;
 const MAX_XML_BYTES: u64 = 3 * 1024 * 1024 * 1024;
 const MAX_IMAGE_BYTES: u64 = 32 * 1024 * 1024;
+const MAX_MANUAL_BYTES: u64 = 512 * 1024 * 1024;
 const IMAGE_DOWNLOAD_WORKERS: usize = 4;
 fn cancelled_message() -> &'static str { crate::i18n::text("msg.3a8b27b791") }
 
@@ -305,6 +306,7 @@ pub struct MatchSelection {
 pub struct MediaOptions {
     selected_types: Option<Vec<String>>,
     download_all: bool,
+    manuals: bool,
     cover: usize,
     logo: usize,
     screenshot: usize,
@@ -373,6 +375,7 @@ struct PreparedGame {
     candidate: RomCandidate,
     metadata: Option<CatalogGame>,
     images: Vec<GameImage>,
+    manuals: Vec<String>,
     media_collection_id: Option<String>,
 }
 struct DownloadTask {
@@ -393,6 +396,8 @@ struct StagedBatch {
 pub struct ImportSummary {
     pub metadata_count: usize,
     pub image_count: usize,
+    #[serde(default)]
+    pub manual_count: usize,
     pub failed_image_count: usize,
 }
 
@@ -407,12 +412,14 @@ pub struct ImageFailure {
 pub struct DownloadReport {
     metadata_count: usize,
     image_count: usize,
+    manual_count: usize,
     failures: Vec<ImageFailure>,
 }
 
 #[derive(Serialize)]
 pub struct EditorImageReport {
     images: Vec<GameImage>,
+    manuals: Vec<String>,
     image_count: usize,
     available_count: usize,
     failures: Vec<ImageFailure>,
@@ -1157,7 +1164,25 @@ fn select_images(
             }
         }
     }
+    if options.manuals {
+        let mut seen = HashSet::new();
+        for manual in images.into_iter().filter(|image| image.kind == "manual" && safe_manual_name(&image.filename)) {
+            let key = if manual.crc.is_empty() || manual.crc == "0" { manual.filename.clone() } else { manual.crc.clone() };
+            if seen.insert(key) { selected.push(manual); }
+        }
+    }
     selected
+}
+
+fn safe_manual_name(filename: &str) -> bool {
+    !filename.is_empty() && !filename.starts_with('.') && !filename.contains("..")
+        && filename.chars().all(|ch| ch.is_ascii_alphanumeric() || "-_.".contains(ch))
+        && crate::manuals::supported(Path::new(filename))
+}
+
+fn validate_download(path: &Path) -> Result<()> {
+    if crate::manuals::supported(path) { crate::manuals::validate(path) }
+    else { super::image_extension(path).map(|_| ()) }
 }
 
 fn prepare_batch(
@@ -1220,6 +1245,7 @@ fn prepare_batch(
             candidate: candidate.clone(),
             metadata: None,
             images: Vec::new(),
+            manuals: Vec::new(),
             media_collection_id: None,
         };
         if !existing && candidate.existing_game_id.is_none() && seen.insert(candidate.rom_path.clone()) {
@@ -1274,6 +1300,7 @@ fn download_batch(
 ) -> Result<DownloadReport> {
     let client = http_client()?;
     let total = batch.tasks.len() as u64;
+    let phase = if batch.tasks.iter().any(|task| task.image.kind == "manual") { "media" } else { "images" };
     job.check()?;
     let pending: Vec<_> = batch
         .tasks
@@ -1284,7 +1311,7 @@ fn download_batch(
         .collect();
     let cursor = AtomicUsize::new(0);
     let mut processed = total - pending.len() as u64;
-    progress(job.progress("images", processed, Some(total), None));
+    progress(job.progress(phase, processed, Some(total), None));
     std::thread::scope(|scope| {
         let (sender, receiver) = std::sync::mpsc::channel();
         for _ in 0..IMAGE_DOWNLOAD_WORKERS.min(pending.len()) {
@@ -1303,11 +1330,11 @@ fn download_batch(
                     client,
                     &match repository::image_url(job,image_base,filename) {Ok(url)=>url,Err(error)=>{let _=sender.send((*index,Err(error)));continue;}},
                     path,
-                    MAX_IMAGE_BYTES,
+                    if crate::manuals::supported(path) { MAX_MANUAL_BYTES } else { MAX_IMAGE_BYTES },
                     job,
                     |_, _| (),
                 )
-                .and_then(|_| super::image_extension(path).map(|_| ()));
+                .and_then(|_| validate_download(path));
                 if sender.send((*index, result)).is_err() {
                     break;
                 }
@@ -1329,7 +1356,7 @@ fn download_batch(
             processed += 1;
             if job.check().is_ok() {
                 let title = batch.games[task.game_index].candidate.title.clone();
-                progress(job.progress("images", processed, Some(total), Some(title)));
+                progress(job.progress(phase, processed, Some(total), Some(title)));
             }
         }
     }); // All workers have stopped before cancellation can clean up staging files.
@@ -1337,8 +1364,13 @@ fn download_batch(
     // Completion order must not change the carousel order, including on retries.
     for game in &mut batch.games {
         game.images.clear();
+        game.manuals.clear();
     }
     for task in batch.tasks.iter().filter(|task| task.done) {
+        if task.image.kind == "manual" {
+            batch.games[task.game_index].manuals.push(task.path.to_string_lossy().into_owned());
+            continue;
+        }
         batch.games[task.game_index].images.push(GameImage {
             path: task.path.to_string_lossy().into_owned(),
             kind: task.image.kind.clone(),
@@ -1350,7 +1382,8 @@ fn download_batch(
 fn download_report(batch: &StagedBatch) -> DownloadReport {
     DownloadReport {
         metadata_count: batch.games.iter().filter(|g| g.metadata.is_some()).count(),
-        image_count: batch.tasks.iter().filter(|t| t.done).count(),
+        image_count: batch.tasks.iter().filter(|t| t.done && t.image.kind != "manual").count(),
+        manual_count: batch.tasks.iter().filter(|t| t.done && t.image.kind == "manual").count(),
         failures: batch
             .tasks
             .iter()
@@ -1475,7 +1508,9 @@ pub(super) fn commit_import(
             }
             summary.image_count += 1;
         }
+        crate::manuals::copy_into_collection(&tx, &job.root, id, &game.manuals, &mut copied)?;
         crate::media_library::sync_game(&tx,&job.root,id,&mut copied)?;
+        summary.manual_count += game.manuals.len();
         summary.failed_image_count += failures_per_game[index];
         if last_update.elapsed() >= Duration::from_millis(100) || index + 1 == total {
             progress(ScanProgress {
@@ -1815,15 +1850,20 @@ fn apply_catalog_titles(batch: &mut StagedBatch, enabled: bool) {
 fn apply_media_recovery(batch: &mut StagedBatch, conn: &Connection, root: &Path, selections: &[crate::media_library::RecoverySelection]) -> Result<()> {
     crate::media_library::validate_selections(&batch.preview,selections)?;
     let mut recovered_images = std::collections::HashSet::new();
+    let mut recovered_manuals = HashSet::new();
     for game in &mut batch.games {
         if let Some(id)=crate::media_library::selection_for(selections,&game.candidate.rom_path) {
             if !crate::media_library::collection_images(conn,root,&id)?.is_empty() {
                 recovered_images.insert(game.candidate.rom_path.clone());
             }
+            let directory: String = conn.query_row("SELECT directory FROM media_collections WHERE id=?1", [&id], |r| r.get(0)).map_err(err)?;
+            if !crate::manuals::scan(&crate::media_library::directory(root, &directory)?)?.is_empty() {
+                recovered_manuals.insert(game.candidate.rom_path.clone());
+            }
             game.media_collection_id=Some(id);
         }
     }
-    batch.tasks.retain(|task| !recovered_images.contains(&batch.games[task.game_index].candidate.rom_path));
+    batch.tasks.retain(|task| !(if task.image.kind == "manual" { &recovered_manuals } else { &recovered_images }).contains(&batch.games[task.game_index].candidate.rom_path));
     Ok(())
 }
 
@@ -1897,7 +1937,7 @@ fn prepare_editor_images(
     let additional;
     let options = if existing.is_some() && options.selected_types.is_some() {
         // Walk every candidate to find the requested number of NEW images.
-        additional = MediaOptions { download_all: true, ..options.clone() };
+        additional = MediaOptions { download_all: true, manuals: false, ..options.clone() };
         &additional
     } else if let Some(existing) = existing {
         let all = |count| if count > 0 { usize::MAX } else { 0 };
@@ -1934,6 +1974,7 @@ fn prepare_editor_images(
             candidate,
             metadata: None,
             images: Vec::new(),
+            manuals: Vec::new(),
             media_collection_id: None,
         }],
         tasks,
@@ -2104,6 +2145,7 @@ fn download_bulk_images(
 
 #[derive(Serialize, Default)]
 pub struct AvailableImageTypes {
+    manual_count: usize,
     counts: HashMap<String, usize>,
     matched_games: usize,
     skipped_games: usize,
@@ -2121,6 +2163,11 @@ fn available_image_types(catalog: &Connection, sources: &[i64], job: &ImportJob)
         // published under two categories, and either can be selected alone.
         let mut seen = HashSet::new();
         for image in images {
+            if image.kind == "manual" && safe_manual_name(&image.filename) {
+                let key = if image.crc.is_empty() || image.crc == "0" { image.filename } else { image.crc };
+                if seen.insert((image.kind, key)) { report.manual_count += 1; }
+                continue;
+            }
             if !valid_download_image_kind(&image.kind) || !safe_image_name(&image.filename) { continue; }
             let content = if image.crc.is_empty() || image.crc == "0" { image.filename } else { image.crc };
             if seen.insert((image.kind.clone(), content)) {
@@ -2186,6 +2233,7 @@ pub async fn download_bulk_game_images(
 fn editor_image_report(
     batch: &StagedBatch,
     existing_images: &[GameImage],
+    existing_manuals: &[String],
     job: &ImportJob,
 ) -> Result<EditorImageReport> {
     let mut images: Vec<GameImage> = Vec::new();
@@ -2202,6 +2250,7 @@ fn editor_image_report(
     }
     let report = download_report(batch);
     Ok(EditorImageReport {
+        manuals: batch.games[0].manuals.iter().filter(|path| !existing_manuals.iter().any(|saved| identical_images(Path::new(path), Path::new(saved)))).cloned().collect(),
         images,
         image_count: report.image_count,
         available_count: batch.tasks.len(),
@@ -2217,6 +2266,7 @@ pub async fn download_editor_game_images(
     source_platform: String,
     options: MediaOptions,
     existing_images: Vec<GameImage>,
+    existing_manuals: Option<Vec<String>>,
     on_progress: Channel<MetadataProgress>,
     jobs: tauri::State<'_, MetadataJobs>,
     app: tauri::AppHandle,
@@ -2225,7 +2275,7 @@ pub async fn download_editor_game_images(
     tauri::async_runtime::spawn_blocking(move || {
         let _busy = job.enter()?;
         options.validate()?;
-        if options.entries().iter().any(|(_, count)| *count > 0) {
+        if options.manuals || options.entries().iter().any(|(_, count)| *count > 0) {
             repository::prepare(&job, false, |progress| {
                 let _ = on_progress.send(progress);
             })?;
@@ -2246,7 +2296,7 @@ pub async fn download_editor_game_images(
         download_batch(&mut batch, &job, IMAGE_BASE, |progress| {
             let _ = on_progress.send(progress);
         })?;
-        let report = editor_image_report(&batch, &existing_images, &job)?;
+        let report = editor_image_report(&batch, &existing_images, &existing_manuals.unwrap_or_default(), &job)?;
         for image in &report.images {
             app.asset_protocol_scope()
                 .allow_file(&image.path)
@@ -2263,6 +2313,7 @@ pub async fn download_editor_game_images(
 pub async fn retry_editor_game_images(
     job_id: String,
     existing_images: Vec<GameImage>,
+    existing_manuals: Option<Vec<String>>,
     on_progress: Channel<MetadataProgress>,
     jobs: tauri::State<'_, MetadataJobs>,
     app: tauri::AppHandle,
@@ -2279,7 +2330,7 @@ pub async fn retry_editor_game_images(
         let result = download_batch(&mut batch, &job, IMAGE_BASE, |progress| {
             let _ = on_progress.send(progress);
         });
-        let report = result.and_then(|_| editor_image_report(&batch, &existing_images, &job));
+        let report = result.and_then(|_| editor_image_report(&batch, &existing_images, &existing_manuals.unwrap_or_default(), &job));
         *job.editor_batch.lock().map_err(err)? = Some(batch);
         let report = report?;
         for image in &report.images {
@@ -2465,6 +2516,80 @@ mod tests {
     fn count(conn: &Connection) -> i64 {
         conn.query_row("SELECT COUNT(*) FROM games", [], |r| r.get(0))
             .unwrap()
+    }
+
+    fn catalog_manuals(catalog: &Connection) {
+        let writer = Connection::open(catalog.path().unwrap()).unwrap();
+        writer.execute("INSERT INTO images VALUES(1,'manual.pdf','manual','World','pdf')",[]).unwrap();
+        writer.execute("INSERT INTO images VALUES(1,'manual2.cbz','manual','World','cbz')",[]).unwrap();
+    }
+
+    fn cbz_bytes() -> Vec<u8> {
+        let mut archive = zip::ZipWriter::new(std::io::Cursor::new(Vec::new()));
+        archive.start_file("0001.png", zip::write::SimpleFileOptions::default()).unwrap();
+        archive.write_all(PNG).unwrap();
+        archive.finish().unwrap().into_inner()
+    }
+
+    #[test]
+    fn downloads_pdf_and_cbz_before_import_and_commits_portable_manuals() {
+        let sandbox = Sandbox::new(); let mut conn = library(); let catalog = sandbox.catalog();
+        catalog_manuals(&catalog);
+        let mut batch = sandbox.batch(&conn,&catalog,1,MediaOptions{manuals:true,..Default::default()});
+        assert_eq!(batch.tasks.len(),2);
+        let server = MockServer::new(vec![("manual.pdf",vec![(200,b"%PDF-1.7\nGuide\n%%EOF".to_vec())]),("manual2.cbz",vec![(200,cbz_bytes())])],false);
+        let report = download_batch(&mut batch,&sandbox.job,&server.base,|_|()).unwrap();
+        assert_eq!(report.manual_count,2); assert_eq!(report.image_count,0); assert!(report.failures.is_empty());
+        assert_eq!(count(&conn),0); assert!(batch.games[0].images.is_empty());
+        // The editor filters out byte-identical manuals already saved or staged.
+        let existing = batch.games[0].manuals.clone();
+        assert!(editor_image_report(&batch,&[],&existing,&sandbox.job).unwrap().manuals.is_empty());
+        let preview = batch.preview.clone(); *sandbox.job.staged.lock().unwrap() = Some(batch);
+        let result = commit_import(&mut conn,&sandbox.job,preview,"My Genesis",|_|()).unwrap();
+        assert_eq!(result.enrichment.unwrap().manual_count,2);
+        let directory: String = conn.query_row("SELECT directory FROM media_collections",[],|r|r.get(0)).unwrap();
+        let collection = sandbox.root.join(directory);
+        let manuals = crate::manuals::scan(&collection).unwrap(); assert_eq!(manuals.len(),2);
+        assert!(manuals.iter().all(|path|path.starts_with(collection.join("manuals"))));
+        let manifest = fs::read_to_string(collection.join("manifest.json")).unwrap();
+        assert!(manifest.contains(".pdf") && manifest.contains(".cbz"));
+        assert_eq!(conn.query_row("SELECT COUNT(*) FROM game_images",[],|r|r.get::<_,i64>(0)).unwrap(),0);
+    }
+
+    #[test]
+    fn invalid_manual_downloads_can_be_retried_without_redownloading_successes() {
+        let sandbox = Sandbox::new(); let conn = library(); let catalog = sandbox.catalog(); catalog_manuals(&catalog);
+        let mut batch = sandbox.batch(&conn,&catalog,1,MediaOptions{manuals:true,..Default::default()});
+        let server = MockServer::new(vec![
+            ("manual.pdf",vec![(200,b"<html>Not a PDF</html>".to_vec()),(200,b"%PDF-1.7\nGuide\n%%EOF".to_vec())]),
+            ("manual2.cbz",vec![(200,cbz_bytes())]),
+        ],false);
+        let first = download_batch(&mut batch,&sandbox.job,&server.base,|_|()).unwrap();
+        assert_eq!(first.manual_count,1); assert_eq!(first.failures.len(),1); assert_eq!(first.failures[0].kind,"manual");
+        assert!(!batch.tasks.iter().find(|t|t.image.filename=="manual.pdf").unwrap().path.exists());
+        let second = download_batch(&mut batch,&sandbox.job,&server.base,|_|()).unwrap();
+        assert_eq!(second.manual_count,2); assert!(second.failures.is_empty());
+        assert_eq!(server.seen.lock().unwrap().iter().filter(|path|path.as_str()=="manual2.cbz").count(),1);
+        assert_eq!(count(&conn),0);
+        let invalid = sandbox.root.join("bad.cbz"); fs::write(&invalid,b"Not a ZIP").unwrap();
+        assert!(validate_download(&invalid).is_err());
+    }
+
+    #[test]
+    fn failed_or_cancelled_manual_imports_leave_no_library_files() {
+        for cancelled in [false,true] {
+            let sandbox = Sandbox::new(); let mut conn = library(); let catalog = sandbox.catalog(); catalog_manuals(&catalog);
+            let mut batch = sandbox.batch(&conn,&catalog,2,MediaOptions{manuals:true,..Default::default()});
+            for (index,game) in batch.games.iter_mut().enumerate() {
+                let manual = sandbox.job.directory.join(format!("guide{index}.pdf"));
+                fs::write(&manual,b"%PDF-1.7\nGuide\n%%EOF").unwrap();game.manuals.push(manual.to_string_lossy().into_owned());
+            }
+            if !cancelled {conn.execute_batch("CREATE TRIGGER fail_second_manual BEFORE INSERT ON games WHEN (SELECT COUNT(*) FROM games)>0 BEGIN SELECT RAISE(ABORT,'Test failure'); END;").unwrap();}
+            let preview = batch.preview.clone(); *sandbox.job.staged.lock().unwrap() = Some(batch);
+            if cancelled {sandbox.job.cancel().unwrap();}
+            assert!(commit_import(&mut conn,&sandbox.job,preview,"My Genesis",|_|()).is_err());
+            assert_eq!(count(&conn),0); assert!(files_in(&sandbox.root.join("images")).is_empty());
+        }
     }
 
     fn files_in(path: &Path) -> Vec<PathBuf> {
@@ -3318,7 +3443,8 @@ mod tests {
     #[test]
     fn recovered_manuals_do_not_prevent_downloading_new_images() {
         let sandbox=Sandbox::new(); let mut conn=library(); let catalog=sandbox.catalog();
-        let mut batch=sandbox.batch(&conn,&catalog,1,options());
+        catalog_manuals(&catalog);
+        let mut batch=sandbox.batch(&conn,&catalog,1,MediaOptions{manuals:true,..options()});
         crate::media_library::init_schema(&conn).unwrap();
         let candidate=&batch.preview.games[0];
         conn.execute("INSERT INTO games(title,platform,rom_path,launch\u{0062}ox_id) VALUES ('Title','My Genesis',?1,1)",[&candidate.rom_path]).unwrap();
@@ -3331,7 +3457,8 @@ mod tests {
         let count=batch.tasks.len(); assert!(count>0);
         let selection=crate::media_library::RecoverySelection{rom_path:candidate.rom_path.clone(),collection_id:Some(uuid.clone())};
         apply_media_recovery(&mut batch,&conn,&sandbox.root,&[selection]).unwrap();
-        assert_eq!(batch.tasks.len(),count); assert_eq!(batch.games[0].media_collection_id,Some(uuid));
+        assert_eq!(batch.tasks.len(),count-2); assert_eq!(batch.games[0].media_collection_id,Some(uuid));
+        assert!(batch.tasks.iter().all(|task|task.image.kind!="manual"));
     }
 
     #[test]
@@ -3677,14 +3804,14 @@ mod tests {
             path: old_image.to_string_lossy().into_owned(),
             kind: "cover".into(),
         }];
-        let report = editor_image_report(&batch, &existing, &sandbox.job).unwrap();
+        let report = editor_image_report(&batch, &existing, &[], &sandbox.job).unwrap();
         assert_eq!(report.image_count, 2);
         assert_eq!(report.images.len(), 1);
         assert_eq!(report.images[0].kind, "logo");
         let mut all = existing;
         all.extend(report.images);
         assert!(
-            editor_image_report(&batch, &all, &sandbox.job)
+            editor_image_report(&batch, &all, &[], &sandbox.job)
                 .unwrap()
                 .images
                 .is_empty()
@@ -4019,10 +4146,10 @@ mod tests {
         let sandbox = Sandbox::new(); let mut conn = library(); let catalog = sandbox.catalog();
         let preview = stage_platform_fixture(&sandbox, &conn, &catalog);
         let server = platform_server(true);
-        let mut first = DownloadReport { metadata_count: 1, image_count: 0, failures: vec![] };
+        let mut first = DownloadReport { metadata_count: 1, image_count: 0, manual_count: 0, failures: vec![] };
         platforms::download_auto_from(&sandbox.job, &mut first, |_| (), &server.base, &server.base).unwrap();
         assert_eq!(first.image_count, 1); assert_eq!(first.failures.len(), 1);
-        let mut retry = DownloadReport { metadata_count: 1, image_count: 0, failures: vec![] };
+        let mut retry = DownloadReport { metadata_count: 1, image_count: 0, manual_count: 0, failures: vec![] };
         platforms::download_auto_from(&sandbox.job, &mut retry, |_| (), &server.base, &server.base).unwrap();
         assert_eq!(retry.image_count, 2); assert!(retry.failures.is_empty());
         let seen = server.seen.lock().unwrap();
@@ -4041,7 +4168,7 @@ mod tests {
         let sandbox = Sandbox::new(); let mut conn = library(); let catalog = sandbox.catalog();
         crate::platform_details::init_schema(&conn).unwrap();
         let preview = stage_platform_fixture(&sandbox, &conn, &catalog); let server = platform_server(false);
-        let mut report = DownloadReport { metadata_count: 1, image_count: 0, failures: vec![] };
+        let mut report = DownloadReport { metadata_count: 1, image_count: 0, manual_count: 0, failures: vec![] };
         platforms::download_auto_from(&sandbox.job, &mut report, |_| (), &server.base, &server.base).unwrap();
         conn.execute_batch("CREATE TRIGGER reject_platform_image BEFORE INSERT ON platform_images BEGIN SELECT RAISE(ABORT,'Failure'); END;").unwrap();
         assert!(commit_import(&mut conn, &sandbox.job, preview, "My Genesis", |_| ()).is_err());
@@ -4054,7 +4181,7 @@ mod tests {
         let sandbox = Sandbox::new(); let mut conn = library(); let catalog = sandbox.catalog();
         let preview = stage_platform_fixture(&sandbox, &conn, &catalog);
         let server = MockServer::new(vec![("", vec![(503, b"Offline".to_vec())])], false);
-        let mut report = DownloadReport { metadata_count: 1, image_count: 0, failures: vec![] };
+        let mut report = DownloadReport { metadata_count: 1, image_count: 0, manual_count: 0, failures: vec![] };
         platforms::download_auto_from(&sandbox.job, &mut report, |_| (), &server.base, &server.base).unwrap();
         assert_eq!(report.failures.len(), 1);
         let result = commit_import(&mut conn, &sandbox.job, preview, "My Genesis", |_| ()).unwrap();

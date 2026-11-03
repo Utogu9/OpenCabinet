@@ -1400,6 +1400,7 @@ fn import_roms_with_media(
         skipped_count,
         total_found,
         enrichment: (recovered_count > 0).then_some(metadata::ImportSummary {
+            manual_count: 0,
             metadata_count: 0, image_count: recovered_count, failed_image_count: 0,
         }),
     })

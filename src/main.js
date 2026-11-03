@@ -2568,7 +2568,7 @@ function preferredMetadataMatch(games) {
     || (a.source_key < b.source_key ? -1 : a.source_key > b.source_key ? 1 : 0))[0].id;
 }
 
-function setupGameImageDownloader({ getGame, getImages, onImages, onBusy, onSource = () => {}, onState = () => {} }) {
+function setupGameImageDownloader({ getGame, getImages, onImages, onBusy, getManuals = () => [], onManuals = () => {}, onSource = () => {}, onState = () => {} }) {
   const panel = document.getElementById("editor-artwork-panel");
   const platform = document.getElementById("editor-artwork-platform");
   const query = document.getElementById("editor-artwork-query");
@@ -2583,7 +2583,7 @@ function setupGameImageDownloader({ getGame, getImages, onImages, onBusy, onSour
   const downloadAll = document.getElementById("editor-artwork-download-all");
   const typeChoices = new Map();
   const typesBox = document.getElementById("editor-artwork-options");
-  let typesReady = false, downloadStarted = false;
+  let typesReady = false, downloadStarted = false, manualCount = 0, mode = "images";
   let alive = false, busy = false, generation = 0, operation = 0, artworkOpened = false;
   let jobId = null, initializing = null, catalog = null, savedPlatform = null, preferredId = null;
   let candidates = [], retryAvailable = false;
@@ -2592,17 +2592,18 @@ function setupGameImageDownloader({ getGame, getImages, onImages, onBusy, onSour
     downloadAll.disabled = busy;
     panel.setAttribute("aria-busy", String(busy));
     panel.querySelectorAll("input, select, button").forEach((element) => { element.disabled = busy; });
-    download.disabled = busy || !typesReady || !quantities.size || !result.value || !platform.value || !jobId;
+    download.disabled = busy || !typesReady || (mode === "manuals" ? !manualCount : !quantities.size) || !result.value || !platform.value || !jobId;
     retry.disabled = busy || !retryAvailable;
     const personal = !!catalog?.source && catalog.source !== "OpenCabinet-BDD";
     update.disabled = busy || !jobId || !catalog || personal;
     update.classList.toggle("hidden", personal);
-    onState({ visible: artworkOpened && !panel.classList.contains("hidden") && !downloadStarted, disabled: download.disabled || downloadStarted });
+    onState({ mode, visible: artworkOpened && !panel.classList.contains("hidden") && !downloadStarted, disabled: download.disabled || downloadStarted });
   }
   function setBusy(value) { busy = value; onBusy(value); controls(); }
   function clearResults() {
     downloadStarted = false;
-    typesReady = false;
+    typesReady = false; manualCount = 0;
+    document.getElementById("editor-artwork-manual-status").textContent = "";
     renderImageTypeChoices(typesBox, {}, quantities, typeChoices, "game-artwork-form");
     candidates = []; result.replaceChildren(); result.value = "";
     retryAvailable = false; retry.classList.add("hidden");
@@ -2623,7 +2624,7 @@ function setupGameImageDownloader({ getGame, getImages, onImages, onBusy, onSour
   function channel(current, phase) {
     const bar = document.getElementById("editor-artwork-progress-bar");
     const label = document.getElementById("editor-artwork-progress-label");
-    const labels = { catalog: globalThis.OpenCabinetI18n.t("msg.201d1effb2"), indexing: globalThis.OpenCabinetI18n.t("msg.e8a203706e"), availability: globalThis.OpenCabinetI18n.t("msg.c3212ba929"), images: globalThis.OpenCabinetI18n.t("msg.4163100e15") };
+    const labels = { catalog: globalThis.OpenCabinetI18n.t("msg.201d1effb2"), indexing: globalThis.OpenCabinetI18n.t("msg.e8a203706e"), availability: globalThis.OpenCabinetI18n.t("msg.c3212ba929"), media: globalThis.OpenCabinetI18n.t("manuals.mediaProgress"), images: globalThis.OpenCabinetI18n.t(mode === "manuals" ? "manuals.progress" : "msg.4163100e15") };
     const display = (update) => {
       if (!current()) return;
       progress.classList.remove("hidden");
@@ -2703,26 +2704,31 @@ function setupGameImageDownloader({ getGame, getImages, onImages, onBusy, onSour
       onProgress: channel(current, "availability") });
     if (!current()) return;
     renderImageTypeChoices(typesBox, available.counts, quantities, typeChoices, "game-artwork-form");
+    manualCount = available.manual_count || 0;
+    document.getElementById("editor-artwork-manual-status").textContent = globalThis.OpenCabinetI18n.t(manualCount ? "manuals.available" : "manuals.none", manualCount);
     typesReady = true;
   }
   function readOptions() {
+    if (mode === "manuals") return { selected_types: [], manuals: true };
     const options = selectedImageTypes(quantities, document.getElementById("editor-artwork-download-all").checked);
     if (!typesReady || !options.selected_types.length) throw new Error(globalThis.OpenCabinetI18n.t("msg.b4b5b08bc1"));
     return options;
   }
   function acceptReport(report) {
     onImages(report.images);
+    onManuals(report.manuals || []);
     retryAvailable = report.failures.length > 0;
     retry.classList.toggle("hidden", !retryAvailable);
     const failures = document.getElementById("editor-artwork-failures"); failures.replaceChildren();
     report.failures.forEach((failure) => {
       const item = document.createElement("li");
-      item.textContent = `${GAME_IMAGE_TYPES.find(([kind]) => kind === failure.kind)?.[1] || failure.kind}: ${failure.message}`;
+      item.textContent = `${failure.kind === "manual" ? globalThis.OpenCabinetI18n.t("msg.8c12270c3c") : GAME_IMAGE_TYPES.find(([kind]) => kind === failure.kind)?.[1] || failure.kind}: ${failure.message}`;
       failures.appendChild(item);
     });
     message.textContent = report.images.length ? globalThis.OpenCabinetI18n.t("msg.aeaec5ec89", report.images.length)
       : report.available_count === 0 ? globalThis.OpenCabinetI18n.t("msg.3343bae758")
       : report.image_count > 0 ? globalThis.OpenCabinetI18n.t("msg.7bb4ed64e0") : globalThis.OpenCabinetI18n.t("msg.b8d9cfc95a");
+    if (mode === "manuals") message.textContent = globalThis.OpenCabinetI18n.t(report.manuals?.length ? "manuals.draft" : report.failures.length ? "manuals.failed" : report.available_count ? "manuals.unchanged" : "manuals.none", report.manuals?.length || 0);
     if (retryAvailable) message.textContent += globalThis.OpenCabinetI18n.t("msg.38c9837941", report.failures.length);
     if (!report.available_count) query.focus();
   }
@@ -2749,17 +2755,17 @@ function setupGameImageDownloader({ getGame, getImages, onImages, onBusy, onSour
       const options = readOptions(); retryAvailable = false; retry.classList.add("hidden");
       downloadStarted = true; controls();
       const report = await invoke("download_editor_game_images", { jobId, gameId: getGame().id, sourceId: selected.id,
-        sourcePlatform: platform.value, options, existingImages: getImages(), onProgress: channel(current, "images") });
-      if (current()) { acceptReport(report); if (report.images.length) onSource(selected.id); }
+        sourcePlatform: platform.value, options, existingImages: getImages(), existingManuals: getManuals(), onProgress: channel(current, "images") });
+      if (current()) { acceptReport(report); if (report.images.length || report.manuals?.length) onSource(selected.id); }
     });
   }
   download.addEventListener("click", downloadSelected);
   retry.addEventListener("click", () => perform(async (current) => {
-    const report = await invoke("retry_editor_game_images", { jobId, existingImages: getImages(), onProgress: channel(current, "images") });
+    const report = await invoke("retry_editor_game_images", { jobId, existingImages: getImages(), existingManuals: getManuals(), onProgress: channel(current, "images") });
     if (current()) {
       acceptReport(report);
       const selected = candidates.find(game => String(game.id) === result.value);
-      if (report.images.length && selected) onSource(selected.id);
+      if ((report.images.length || report.manuals?.length) && selected) onSource(selected.id);
     }
   }));
 
@@ -2797,8 +2803,18 @@ function setupGameImageDownloader({ getGame, getImages, onImages, onBusy, onSour
       if (artworkOpened) void perform(loadTypes);
       else controls();
     },
-    async open() {
+    async open(nextMode = "images") {
       if (busy) return;
+      const sameMode = mode === nextMode; mode = nextMode;
+      const host = document.getElementById(mode === "manuals" ? "game-edit-panel-manuals" : "game-edit-panel-images");
+      if (mode === "images" && host.insertBefore) host.insertBefore(panel, document.getElementById("game-image-list"));
+      else host.appendChild(panel);
+      panel.setAttribute("aria-label", globalThis.OpenCabinetI18n.t(mode === "manuals" ? "manuals.download" : "msg.9a11051043"));
+      document.getElementById("editor-artwork-image-fieldset").classList.toggle("hidden", mode === "manuals");
+      document.getElementById("editor-artwork-manual-status").classList.toggle("hidden", mode !== "manuals");
+      download.textContent = globalThis.OpenCabinetI18n.t(mode === "manuals" ? "manuals.download" : "msg.488a8c208f");
+      document.getElementById("editor-artwork-draft-help").textContent = globalThis.OpenCabinetI18n.t(mode === "manuals" ? "manuals.help" : "msg.043733e212");
+      if (artworkOpened && !sameMode) { panel.classList.remove("hidden"); controls(); return perform(loadTypes); }
       if (artworkOpened) { panel.classList.toggle("hidden"); controls(); return; }
       artworkOpened = true;
       alive = true; ++generation; clearResults(); platform.replaceChildren(); platform.value = "";
@@ -2835,7 +2851,8 @@ function setupGameEditor() {
   const downloadButton = document.getElementById("btn-download-game-edit");
   let activeEditorTab = "details", artworkState = { visible: false, disabled: true };
   function updateEditorActions() {
-    const downloading = activeEditorTab === "images" && artworkState.visible;
+    const downloading = activeEditorTab === (artworkState.mode || "images") && artworkState.visible;
+    downloadButton.textContent = globalThis.OpenCabinetI18n.t(artworkState.mode === "manuals" ? "manuals.download" : "msg.488a8c208f");
     downloadButton.classList.toggle("hidden", !downloading);
     downloadButton.disabled = artworkState.disabled || networkBusy || saving || choosingImages || closing;
     saveButton.classList.toggle("primary-btn", !downloading);
@@ -3023,6 +3040,7 @@ function setupGameEditor() {
     updateEditorActions();
     const disabled = saving || choosingImages || closing || networkBusy;
     document.getElementById("btn-add-game-manuals").disabled = disabled;
+    document.getElementById("btn-download-game-manuals").disabled = disabled;
     document.getElementById("btn-open-game-manuals").disabled = disabled;
     document.getElementById("btn-refresh-game-manuals").disabled = disabled;
     document.getElementById("game-manual-list").querySelectorAll("button").forEach(button => { button.disabled = disabled; });
@@ -3046,6 +3064,8 @@ function setupGameEditor() {
   const downloadImages = document.getElementById("btn-download-game-images");
   const downloader = setupGameImageDownloader({
     onState: state => { artworkState = state; updateEditorActions(); },
+    getManuals: () => [...savedManuals, ...draftManuals],
+    onManuals: paths => { paths.forEach(path => { if (!savedManuals.includes(path) && !draftManuals.includes(path)) draftManuals.push(path); }); renderManuals(); },
     onSource: id => { draftCatalogId = id; },
     getGame: () => ({ id: editingId, title: document.getElementById("game-edit-name").value.trim(), platform: platformSelect.value }),
     getImages: () => draftImages.map((image) => ({ ...image })),
@@ -3065,6 +3085,9 @@ function setupGameEditor() {
   });
   downloadImages.addEventListener("click", () => {
     if (!saving && !choosingImages && !closing && editingId !== null) return downloader.open();
+  });
+  document.getElementById("btn-download-game-manuals").addEventListener("click", () => {
+    if (!saving && !choosingImages && !closing && editingId !== null) return downloader.open("manuals");
   });
   downloadButton.addEventListener("click", () => {
     if (!saving && !choosingImages && !closing && editingId !== null) return downloader.download();
@@ -4757,7 +4780,7 @@ function updateMetadataProgress(progress) {
   document.getElementById("scan-progress-container").classList.remove("hidden");
   document.getElementById("scan-current-file").textContent = progress.current_file || "";
   const labels = { catalog: globalThis.OpenCabinetI18n.t("msg.9693bec541"), indexing: globalThis.OpenCabinetI18n.t("msg.a637cd3b06"),
-    matching: globalThis.OpenCabinetI18n.t("msg.6b4a0ba88b"), availability: globalThis.OpenCabinetI18n.t("msg.c3212ba929"), images: globalThis.OpenCabinetI18n.t("msg.4163100e15") };
+    matching: globalThis.OpenCabinetI18n.t("msg.6b4a0ba88b"), availability: globalThis.OpenCabinetI18n.t("msg.c3212ba929"), media: globalThis.OpenCabinetI18n.t("manuals.mediaProgress"), images: globalThis.OpenCabinetI18n.t("msg.4163100e15") };
   label.textContent = labels[progress.phase] || globalThis.OpenCabinetI18n.t("msg.018ac3b312");
   if (progress.total) {
     bar.value = Math.min(100, Math.floor(progress.processed / progress.total * 100));
@@ -4831,7 +4854,7 @@ function createImportProgressTask() {
     },
     update(progress) {
       if (finished) return;
-      const labels = { discovering: globalThis.OpenCabinetI18n.t("msg.7477b3f234"), catalog: globalThis.OpenCabinetI18n.t("msg.7252c7d8d3"), indexing: globalThis.OpenCabinetI18n.t("msg.be5d99978e"), matching: globalThis.OpenCabinetI18n.t("msg.b66e6720fc"), availability: globalThis.OpenCabinetI18n.t("msg.57d1e9615b"), images: globalThis.OpenCabinetI18n.t("msg.98b857dbca"), platform_images: globalThis.OpenCabinetI18n.t("msg.de1a70e800"), importing: globalThis.OpenCabinetI18n.t("msg.aaeb0d8568") };
+      const labels = { discovering: globalThis.OpenCabinetI18n.t("msg.7477b3f234"), catalog: globalThis.OpenCabinetI18n.t("msg.7252c7d8d3"), indexing: globalThis.OpenCabinetI18n.t("msg.be5d99978e"), matching: globalThis.OpenCabinetI18n.t("msg.b66e6720fc"), availability: globalThis.OpenCabinetI18n.t("msg.57d1e9615b"), media: globalThis.OpenCabinetI18n.t("manuals.mediaProgress"), images: globalThis.OpenCabinetI18n.t("msg.98b857dbca"), platform_images: globalThis.OpenCabinetI18n.t("msg.de1a70e800"), importing: globalThis.OpenCabinetI18n.t("msg.aaeb0d8568") };
       label.textContent = labels[progress.phase] || globalThis.OpenCabinetI18n.t("msg.4b315006c9");
       title.textContent = progress.phase === "availability" ? globalThis.OpenCabinetI18n.t("msg.98a8680784") : progress.phase === "matching" ? globalThis.OpenCabinetI18n.t("msg.619f08a5bf") : progress.phase === "discovering" ? (importMode === "steam" ? globalThis.OpenCabinetI18n.t("msg.634d5b79bb") : importMode === "epic" ? globalThis.OpenCabinetI18n.t("msg.7401493d36") : globalThis.OpenCabinetI18n.t("msg.05a1314198")) : globalThis.OpenCabinetI18n.t("msg.461a09faea");
       if (progress.total) bar.value = Math.min(100, Math.floor(progress.processed / progress.total * 100));
@@ -4846,7 +4869,7 @@ function createImportProgressTask() {
     },
     review(report, onRetry, onContinue) {
       if (finished) return;
-      label.textContent = globalThis.OpenCabinetI18n.t("msg.1e478b34a7", report.image_count, report.failures.length);
+      label.textContent = globalThis.OpenCabinetI18n.t("msg.1e478b34a7", report.image_count, report.failures.length) + (report.manual_count ? " · " + globalThis.OpenCabinetI18n.t("manuals.downloaded", report.manual_count) : "");
       counts.textContent = globalThis.OpenCabinetI18n.t("msg.9009d1e9c1");
       retry.classList.remove("hidden"); proceed.classList.remove("hidden");
       retry.onclick = onRetry; proceed.onclick = onContinue;
@@ -5044,6 +5067,8 @@ function reviewMetadataImport(preview, platform, task, operation=null) {
   const typesStatus = document.getElementById("lb-media-status");
   const mediaInputs = new Map();
   document.getElementById("lb-download-all").checked = false;
+  document.getElementById("lb-download-manuals").checked = false;
+  document.getElementById("lb-manual-status").textContent = "";
   const typeChoices = new Map();
   optionsBox.replaceChildren();
   optionsBox.textContent = globalThis.OpenCabinetI18n.t("msg.f9601e5e50");
@@ -5326,6 +5351,7 @@ function reviewMetadataImport(preview, platform, task, operation=null) {
       if (!alive || token !== availabilityVersion) return;
       const sourceIds = [...new Set(snapshot.filter(row => !recovery.has(row.rom_path)).map(row => row.selected_id).filter(id => id !== null))];
       if (!sourceIds.length) {
+        document.getElementById("lb-manual-status").textContent = "";
         renderImageTypeChoices(optionsBox, {}, mediaInputs, typeChoices);
         typesStatus.textContent = snapshot.some(row => recovery.has(row.rom_path)) ? globalThis.OpenCabinetI18n.t("msg.e1c3079c85") : globalThis.OpenCabinetI18n.t("msg.fe094e7b3b");
         optionsBox.setAttribute("aria-busy", "false");
@@ -5348,22 +5374,23 @@ function reviewMetadataImport(preview, platform, task, operation=null) {
       finally { analysing = false; }
       if (!alive || token !== availabilityVersion) return;
       renderImageTypeChoices(optionsBox, available.counts, mediaInputs, typeChoices);
+      document.getElementById("lb-manual-status").textContent = globalThis.OpenCabinetI18n.t(available.manual_count ? "manuals.available" : "manuals.none", available.manual_count || 0);
       const count = Object.values(available.counts).filter(value => value > 0).length;
       typesStatus.textContent = count ? globalThis.OpenCabinetI18n.t("msg.032bfcb683", count) : globalThis.OpenCabinetI18n.t("msg.97b98fb8bd");
       optionsBox.setAttribute("aria-busy", "false");
       typesReady = true; typesDirty = false;
     }
-    function readOptions() { return selectedImageTypes(mediaInputs, document.getElementById("lb-download-all").checked); }
+    function readOptions() { return { ...selectedImageTypes(mediaInputs, document.getElementById("lb-download-all").checked), manuals: document.getElementById("lb-download-manuals").checked }; }
 
     async function showReport(result) {
       report = result;
       if (!result.failures.length) { await close({ jobId, mediaSelections: recovery.selections() }, true); return; }
       reportBox.classList.remove("hidden");
-      document.getElementById("lb-download-summary").textContent = globalThis.OpenCabinetI18n.t("msg.10ef6e5568", result.metadata_count, result.image_count, result.failures.length);
+      document.getElementById("lb-download-summary").textContent = globalThis.OpenCabinetI18n.t("msg.10ef6e5568", result.metadata_count, result.image_count, result.failures.length, result.manual_count || 0);
       const failures = document.getElementById("lb-download-failures"); failures.replaceChildren();
       result.failures.forEach((failure) => {
         const item = document.createElement("li");
-        const name = GAME_IMAGE_TYPES.find(([kind]) => kind === failure.kind)?.[1] || failure.kind;
+        const name = failure.kind === "manual" ? globalThis.OpenCabinetI18n.t("msg.8c12270c3c") : GAME_IMAGE_TYPES.find(([kind]) => kind === failure.kind)?.[1] || failure.kind;
         item.textContent = `${failure.title} · ${name}: ${failure.message}`; failures.appendChild(item);
       });
       if (detached) task.review(result, () => retry.onclick?.(), () => proceed.onclick?.());
@@ -5602,7 +5629,7 @@ async function handleExecuteScan() {
       : await invoke("import_scanned_roms", { preview, platform, jobId: metadataJobId, mediaSelections, onProgress: progressChannel() });
 
     acceptProgress = false;
-    task.finish(globalThis.OpenCabinetI18n.t("msg.0ff259b714"), globalThis.OpenCabinetI18n.t("msg.b7ea33c270", res.added_count, res.attached_count ? globalThis.OpenCabinetI18n.t("msg.dd792678e4", res.attached_count) : "", res.enrichment ? globalThis.OpenCabinetI18n.t("msg.c46ba08eb4", res.enrichment.image_count) : ""));
+    task.finish(globalThis.OpenCabinetI18n.t("msg.0ff259b714"), globalThis.OpenCabinetI18n.t("msg.b7ea33c270", res.added_count, res.attached_count ? globalThis.OpenCabinetI18n.t("msg.dd792678e4", res.attached_count) : "", res.enrichment ? globalThis.OpenCabinetI18n.t("msg.c46ba08eb4", res.enrichment.image_count) + (res.enrichment.manual_count ? " · " + globalThis.OpenCabinetI18n.t("manuals.downloaded", res.enrichment.manual_count) : "") : ""));
     updateScanProgress({ phase: "done", processed: res.total_found, total: res.total_found, ...res });
     resultContainer.classList.remove("hidden");
     const summary = document.createElement("div");
@@ -5621,7 +5648,7 @@ async function handleExecuteScan() {
     resultContainer.appendChild(summary);
     if (res.enrichment) {
       const line = document.createElement("p");
-      line.textContent = globalThis.OpenCabinetI18n.t("msg.fe936fd488", res.enrichment.metadata_count, res.enrichment.image_count, res.enrichment.failed_image_count);
+      line.textContent = globalThis.OpenCabinetI18n.t("msg.fe936fd488", res.enrichment.metadata_count, res.enrichment.image_count, res.enrichment.failed_image_count) + (res.enrichment.manual_count ? " · " + globalThis.OpenCabinetI18n.t("manuals.downloaded", res.enrichment.manual_count) : "");
       summary.appendChild(line);
     }
 

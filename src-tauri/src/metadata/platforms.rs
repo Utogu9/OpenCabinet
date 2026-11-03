@@ -304,6 +304,7 @@ fn prepare_with_counts(
                 },
                 metadata: None,
                 images: vec![],
+                manuals: vec![],
             }],
             tasks,
         },
@@ -584,7 +585,7 @@ pub async fn download_platform_images(
             value.phase = "platform_images";
             on_progress.send(value).ok();
         })?;
-        let mut report = editor_image_report(&batch, &existing_images, &job)?;
+        let mut report = editor_image_report(&batch, &existing_images, &[], &job)?;
         // Keep distinct catalog identities even when their bytes coincide,
         // and re-adopt old copies whose managed names lost that identity.
         for image in &batch.games[0].images {

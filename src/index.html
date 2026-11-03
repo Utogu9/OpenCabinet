@@ -510,13 +510,14 @@
                 <label for="editor-artwork-result"><span data-i18n="msg.07806a6d17"></span></label>
                 <select id="editor-artwork-result" form="game-artwork-form"></select>
               </div>
-              <fieldset class="metadata-media-fieldset">
+              <fieldset class="metadata-media-fieldset" id="editor-artwork-image-fieldset">
                 <legend><span data-i18n="msg.8e982793de"></span></legend>
                 <p class="help-text"><span data-i18n="msg.679f296e28"></span></p>
                 <label class="preference-toggle"><input id="editor-artwork-download-all" type="checkbox" form="game-artwork-form" /><span><span data-i18n="msg.f84de4576f"></span></span></label>
                 <div id="editor-artwork-options" class="metadata-media-options"></div>
               </fieldset>
-              <p class="help-text"><span data-i18n="msg.043733e212"></span></p>
+              <p id="editor-artwork-manual-status" class="help-text hidden" role="status"></p>
+              <p class="help-text" id="editor-artwork-draft-help"><span data-i18n="msg.043733e212"></span></p>
               <div id="editor-artwork-progress" class="hidden" role="status">
                 <p id="editor-artwork-progress-label"></p>
                 <progress id="editor-artwork-progress-bar" max="100"></progress>
@@ -534,6 +535,7 @@
             <h3 id="game-manuals-title"><span data-i18n="msg.8c12270c3c"></span></h3>
             <div class="image-add-controls">
               <button class="browse-btn" id="btn-add-game-manuals" type="button"><span data-i18n="msg.dd0eff6b0e"></span></button>
+              <button class="browse-btn" id="btn-download-game-manuals" type="button"><span data-i18n="manuals.download"></span></button>
               <button class="secondary-btn" id="btn-open-game-manuals" type="button"><span data-i18n="msg.e123765ce5"></span></button>
               <button class="secondary-btn" id="btn-refresh-game-manuals" type="button"><span data-i18n="msg.b3af2e2f2f"></span></button>
             </div>
@@ -1035,6 +1037,8 @@
               <p id="lb-media-status" class="help-text" role="status" aria-live="polite"></p>
               <label class="preference-toggle"><input id="lb-download-all" type="checkbox" /><span><span data-i18n="msg.f84de4576f"></span></span></label>
               <div id="lb-media-options" class="metadata-media-options"></div>
+              <label class="preference-toggle"><input id="lb-download-manuals" type="checkbox" /><span data-i18n="manuals.import"></span></label>
+              <p id="lb-manual-status" class="help-text" role="status"></p>
             </fieldset>
             <p id="lb-message" role="status" class="metadata-message"></p>
             <ul id="lb-match-list" class="metadata-match-list" aria-label="" data-i18n-aria-label="msg.29f08cdf60"></ul>

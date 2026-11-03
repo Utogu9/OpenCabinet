@@ -205,6 +205,54 @@ function mediaApp(options = {}) {
   };
 }
 
+test("Manual downloads support PDF and CBZ drafts, a manual-only catalog and the editor footer", async () => {
+  const paths = ['C:/temp/manual.pdf', 'C:/temp/manual2.cbz'];
+  const app = mediaApp({ handlers: {
+    get_metadata_image_types: () => ({ counts: {}, manual_count: 2 }),
+    download_editor_game_images: () => ({ images: [], manuals: paths, image_count: 0, available_count: 2, failures: [] }),
+  } });
+  await app.open(); await app.get('game-edit-tab-manuals').trigger('click');
+  await app.get('btn-download-game-manuals').trigger('click');
+  assert.equal(app.get('editor-artwork-panel').parentNode, app.get('game-edit-panel-manuals'));
+  assert.equal(app.get('editor-artwork-image-fieldset').classList.contains('hidden'), true);
+  assert.equal(app.get('btn-editor-artwork-download').disabled, false);
+  assert.equal(app.get('btn-download-game-edit').classList.contains('hidden'), false);
+  assert.equal(app.get('btn-download-game-edit').textContent, 'Descargar manuales');
+  assert.match(app.get('editor-artwork-manual-status').textContent, /2.*PDF.*CBZ/);
+  await app.get('btn-download-game-edit').trigger('click');
+  const request = app.calls.find(call => call.command === 'download_editor_game_images');
+  assert.deepEqual(request.args.options, { selected_types: [], manuals: true });
+  assert.deepEqual(request.args.existingManuals, []);
+  assert.equal(app.calls.some(call => call.command === 'update_game'), false);
+  assert.equal(app.get('game-manual-list').children.length, 2);
+  await app.save();
+  assert.deepEqual(app.calls.find(call => call.command === 'update_game').args.details.manuals, paths);
+});
+
+test("Manual search can change matches, retry failures and switch back to image downloads", async () => {
+  let selection = 42;
+  const app = mediaApp({ handlers: {
+    get_metadata_image_types: ({sourceIds}) => ({ counts: {cover: 1}, manual_count: sourceIds[0] === 87 ? 1 : 0 }),
+    search_metadata_games: () => [42,87].map(id => ({id, title: 'Example', exact: id === 42, platform: 'Super Nintendo Entertainment System'})),
+    download_editor_game_images: args => {selection = args.sourceId;return {images:[],manuals:[],image_count:0,available_count:1,failures:[{kind:'manual',message:'Offline'}]};},
+    retry_editor_game_images: () => ({images:[],manuals:['C:/temp/guide.pdf'],image_count:0,available_count:1,failures:[]}),
+  } });
+  await app.open(); await app.get('btn-download-game-manuals').trigger('click');
+  assert.equal(app.get('btn-editor-artwork-download').disabled, true);
+  app.get('editor-artwork-result').value = '87'; await app.get('editor-artwork-result').trigger('change');
+  await app.get('btn-editor-artwork-download').trigger('click');
+  assert.equal(selection,87);
+  assert.equal(app.get('btn-editor-artwork-retry').classList.contains('hidden'),false);
+  await app.get('btn-editor-artwork-retry').trigger('click');
+  assert.equal(app.get('game-manual-list').children.length,1);
+  await app.get('btn-download-game-images').trigger('click');
+  assert.equal(app.get('editor-artwork-panel').parentNode,app.get('game-edit-panel-images'));
+  assert.equal(app.get('editor-artwork-image-fieldset').classList.contains('hidden'),false);
+  await app.get('btn-cancel-game-edit').trigger('click');
+  assert.equal(app.calls.some(call=>call.command==='update_game'),false);
+  assert.equal(app.calls.at(-1).command,'end_metadata_import');
+});
+
 test("Editor categories show one panel, preserve drafts and reset to Details on reopening", async () => {
   const app = mediaApp(); await app.open();
   const panel = name => app.get(name === "discs" ? "game-discs-section" : `game-edit-panel-${name}`);

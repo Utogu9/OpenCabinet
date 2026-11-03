@@ -7,8 +7,8 @@ const ROOT_URL: &str = "https://api.github.com/repos/Utogu9/OpenCabinet-BDD/cont
 const RAW_URL: &str = "https://raw.githubusercontent.com/Utogu9/OpenCabinet-BDD/main/";
 const CONFIG: &str = "metadata/source.json";
 const MIN_REPOSITORY_ID: i64 = 1_000_000_000_000;
-// Reindex once to include labels ignored by earlier repository readers.
-const REPOSITORY_GAME_VERSION: i64 = 2;
+// Reindex once to include downloadable PDF/CBZ manuals.
+const REPOSITORY_GAME_VERSION: i64 = 3;
 
 #[derive(Default, Serialize, Deserialize)]
 struct Settings {
@@ -608,17 +608,20 @@ fn insert_platform(
             .map_err(err)?;
         }
         for (image_kind, image) in game.images {
-            let Some(kind) = kind(if image.kind.is_empty() {
-                &image_kind
+            let manual = crate::manuals::supported(Path::new(&image.path));
+            let kind = if manual {
+                Some("manual".to_string())
             } else {
-                &image.kind
-            }) else {
+                kind(if image.kind.is_empty() { &image_kind } else { &image.kind })
+            };
+            let Some(kind) = kind else {
                 continue;
             };
             if !valid_relative(&image.path) || !image.path.starts_with(&format!("{serial}/")) {
                 continue;
             }
-            let filename = format!("repo-{}.webp", -token(&format!("{source}/{}", image.path)));
+            let extension = if manual { Path::new(&image.path).extension().unwrap().to_str().unwrap().to_ascii_lowercase() } else { "webp".into() };
+            let filename = format!("repo-{}.{extension}", -token(&format!("{source}/{}", image.path)));
             let url = format!("{raw}{}", url_path(&image.path));
             let names = image
                 .sources
@@ -929,6 +932,27 @@ pub(crate) fn retained_console_filename(path: &Path) -> Option<String> {
 mod tests {
     use super::*;
     const SUBMODULES: &str = include_str!("../../tests/fixtures/repository-submodules.json");
+    #[test]
+    fn repository_indexes_pdf_and_cbz_as_manuals_separately_from_artwork() {
+        let sandbox = Sandbox::new();
+        let mut conn = sandbox.catalog();
+        let mut fixture: serde_json::Value = serde_json::from_str(FIXTURE).unwrap();
+        let images = fixture["games"]["SLUS-12345"]["images"].as_object_mut().unwrap();
+        images.insert("manual".into(), serde_json::json!({"kind":"manual","path":"SLUS-12345/manual.pdf","sha256":"pdf"}));
+        images.insert("manual2".into(), serde_json::json!({"kind":"manual","path":"SLUS-12345/manual2.cbz","sha256":"cbz"}));
+        images.insert("manual3".into(), serde_json::json!({"kind":"manual","path":"../manual.pdf"}));
+        let file = sandbox.job.directory.join("manuals.json");
+        fs::write(&file, serde_json::to_vec(&fixture).unwrap()).unwrap();
+        insert_platform(&mut conn, &sandbox.job, "Sony - PlayStation 2", &file, |_| ()).unwrap();
+        let id = token("Sony - PlayStation 2/SLUS-12345");
+        let available = available_image_types(&conn, &[id], &sandbox.job).unwrap();
+        assert_eq!(available.manual_count, 2);
+        assert!(!available.counts.contains_key("manual"));
+        let manuals: Vec<(String,String)> = conn.prepare("SELECT filename,url FROM images JOIN image_urls USING(filename) WHERE game_id=?1 AND kind='manual' ORDER BY url")
+            .unwrap().query_map([id],|row|Ok((row.get(0)?,row.get(1)?))).unwrap().collect::<rusqlite::Result<_>>().unwrap();
+        assert_eq!(manuals.len(),2);
+        assert!(manuals.iter().all(|(file,url)|safe_manual_name(file) && (url.ends_with("manual.pdf") || url.ends_with("manual2.cbz"))));
+    }
     const FIXTURE: &str = r#"{"schema_version":2,"system":"Sony - PlayStation 2","games":{
       "SLUS-12345":{"entries":[{"name":"Example Game (USA)"}],"images":{
         "cover_front":{"kind":"cover_front","path":"SLUS-12345/cover_front.webp","sha256":"a","sources":[{"dat_name":"Example Game (USA)"}]},

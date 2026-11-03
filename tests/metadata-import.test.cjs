@@ -99,6 +99,22 @@ function importer(options = {}) {
     commands: () => calls.map((call) => call.command) };
 }
 
+test("Import can download only PDF/CBZ manuals without selecting any image types", async () => {
+  const app = importer({ handlers: {
+    get_metadata_image_types: () => ({ counts: {}, manual_count: 2 }),
+    stage_metadata_import: () => ({metadata_count:1,image_count:0,manual_count:2,failures:[]}),
+  } });
+  const pending = app.start(); await turn();
+  assert.match(app.get('lb-manual-status').textContent,/2.*PDF.*CBZ/);
+  assert.equal(app.get('lb-download-manuals').checked,false);
+  app.get('lb-download-manuals').checked = true;
+  await app.get('btn-lb-import').click(); await pending;
+  const request = app.calls.find(call => call.command === 'stage_metadata_import');
+  assert.equal(request.args.options.manuals,true);
+  assert.deepEqual(Array.from(request.args.options.selected_types),[]);
+  assert.equal(app.loaded(),1);
+});
+
 test("A single game searches automatically but can still be imported without enrichment", async () => {
   const app = importer(); const pending = app.start(); await turn();
   assert.deepEqual(app.commands(), ["scan_roms_folder", "find_media_collections", "start_metadata_import", "match_metadata_games", "find_media_collections", "get_metadata_image_types"]);

@@ -5,6 +5,18 @@ en la carpeta `manuals` de su colección. Los originales elegidos en el editor
 se copian al guardar. Los CBZ mantienen su extensión y participan en los mismos
 manifiestos, copias de seguridad y recuperación de colecciones que los PDF.
 
+También se pueden descargar desde OpenCabinet-BDD cuando el juego tenga manuales
+publicados. **Editar juego → Manuales → Descargar manuales** permite buscar o
+cambiar la coincidencia y agregar los PDF y CBZ al borrador. Hay que guardar los
+cambios para conservarlos. Los archivos idénticos a manuales existentes se omiten.
+
+Durante la importación, la casilla **Descargar manuales (PDF / CBZ)** aparece debajo
+de los tipos de imagen. Es independiente de las imágenes y permite importar solo
+manuales. La descarga comparte el progreso, la cancelación y el reintento de
+archivos fallidos; los archivos se incorporan al guardar la importación, nunca
+como imágenes del carrusel. Al recuperar una colección que ya conserva manuales,
+se reutilizan los existentes sin volver a descargarlos.
+
 Un CBZ es un ZIP de imágenes. OpenCabinet admite páginas JPEG, PNG, WebP, BMP,
 GIF y AVIF, con los formatos que puede decodificar el WebView. Ordena los nombres
 de archivos y subcarpetas con orden numérico: `1`, `2`, `10`. Ignora directorios,
