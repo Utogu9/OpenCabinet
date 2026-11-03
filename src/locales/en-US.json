@@ -1700,6 +1700,12 @@
     "resume.progress": "Downloading {0} / {1}",
     "resume.ready": "{0} images and {1} manuals ready. You can finish the import or retry failed downloads.",
     "resume.notice": "{0} interrupted imports can be resumed from Tools > Pending downloads.",
-    "resume.busy": "Finish or cancel the active import first."
+    "resume.busy": "Finish or cancel the active import first.",
+    "personal.favorites": "Favorites",
+    "personal.notFavorites": "Not favorites",
+    "personal.ratingValue": "{0} / 5",
+    "personal.currentRating": "Your rating: {0} / 5",
+    "personal.setRating": "Rate {0} out of 5",
+    "personal.clearRating": "Clear your rating"
   }
 }

@@ -73,6 +73,19 @@ test('Time and session buckets use exact boundaries; numeric sorting is descendi
   assert.deepEqual(games.slice().sort((a,b)=>model.compareGames(a,b,'sessions')).map(g=>g.id),[5,4,3,2,1]);
   assert.equal(model.values(game(6,'PC',{play_time:120,play_time_seconds:undefined}),'hours')[0],'1–5 h');
 });
+test('Personal rating groups sort five to one before unrated games, independently of title',()=>{
+  const games=[game(1,'PS2'),game(2,'PS2',{personal:{rating:4}}),game(3,'Dreamcast',{personal:{rating:5}}),game(4,'PS1',{personal:{rating:4}}),game(5,'PS1',{personal:{rating:1}})];
+  const groups=model.groups(games,'rating');
+  assert.deepEqual(plain(groups.map(group=>group.label)),['5 / 5','4 / 5','1 / 5','Sin valorar']);
+  assert.deepEqual([...groups[1].ids],[2,4]);assert.deepEqual(games.slice().sort((a,b)=>model.compareGames(a,b,'rating')).map(game=>game.id),[3,2,4,5,1]);
+  assert.ok(model.modes.some(([mode])=>mode==='rating'));
+});
+test('Favorites grouping separates saved favorites from nonfavorites and older games',()=>{
+  const games=[game(1,'PS2'),game(2,'PS2',{personal:{favorite:true}}),game(3,'Dreamcast',{personal:{favorite:false}})];
+  const groups=model.groups(games,'favorites');assert.deepEqual(plain(groups.map(group=>group.label)),['Favoritos','No favoritos']);
+  assert.deepEqual([...groups[0].ids],[2]);assert.deepEqual([...groups[1].ids],[1,3]);
+  assert.deepEqual(games.slice().sort((a,b)=>model.compareGames(a,b,'favorites')).map(game=>game.id),[2,1,3]);
+});
 
 test('Deleting a category reparents children and never mutates the original configuration', () => {
   const original = [category('root',null),category('middle','root'),category('leaf','middle')];

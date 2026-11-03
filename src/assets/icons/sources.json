@@ -2,6 +2,9 @@
   "project": "Lucide",
   "source": "https://github.com/lucide-icons/lucide",
   "revision": "f12b0de177fbc2a6795e99be065887e72b237123",
+  "local_variants": {
+    "star-filled": { "derived_from": "star", "changes": "Filled path for selected stars." }
+  },
   "icons": [
     "joystick",
     "gamepad-2",

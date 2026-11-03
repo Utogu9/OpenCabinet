@@ -41,6 +41,32 @@ test('Sidebar status and favorites retain notes and surface save failures',async
   const failure=app({set_game_personal:()=>{throw Error('Cannot write');}});failure.feature.showGame(failure.games[0]);await failure.document.getElementById('details-game-status').onchange();
   assert.match(failure.errors[0],/Cannot write/);assert.equal(failure.document.getElementById('details-game-status').disabled,false);
 });
+test('The personal editor favorite star toggles a pressed state and saves its value',async()=>{
+  const fixture=app();await fixture.feature.editPersonal(fixture.games[0]);
+  const favorite=fixture.find(node=>node.tag==='button'&&node.attributes['aria-label']==='Favorito');
+  assert.equal(favorite.attributes['aria-pressed'],'false');favorite.onclick();assert.equal(favorite.attributes['aria-pressed'],'true');
+  await fixture.find(node=>node.tag==='form').onsubmit({preventDefault(){}});
+  assert.equal(fixture.changes[0].personal.favorite,true);
+});
+test('The logo rating fills all stars through the chosen value, preserves notes and can be cleared',async()=>{
+  const fixture=app();fixture.feature.showGame(fixture.games[0]);
+  const stars=fixture.document.getElementById('details-personal-rating').children;
+  assert.equal(stars.length,5);assert.equal(stars.filter(star=>star.attributes['data-filled']==='true').length,3);
+  await stars[3].onclick();assert.equal(fixture.changes.at(-1).personal.rating,4);assert.equal(fixture.changes.at(-1).personal.notes,'Existing');
+  assert.equal(stars.filter(star=>star.attributes['data-filled']==='true').length,4);
+  assert.equal(stars[3].attributes['aria-checked'],'true');assert.equal(stars[3].tabIndex,0);
+  await stars[3].onclick();assert.equal(fixture.changes.at(-1).personal.rating,0);
+  assert.equal(stars.filter(star=>star.attributes['data-filled']==='true').length,0);
+});
+test('Logo rating supports keyboard controls and retains the saved value on errors',async()=>{
+  const fixture=app();fixture.feature.showGame(fixture.games[0]);const stars=fixture.document.getElementById('details-personal-rating').children;
+  let prevented=false;await stars[2].onkeydown({key:'ArrowRight',preventDefault(){prevented=true;}});
+  assert.equal(prevented,true);assert.equal(fixture.changes.at(-1).personal.rating,4);assert.equal(stars[3].focused,true);
+  await stars[3].onkeydown({key:'End',preventDefault(){}});assert.equal(fixture.changes.at(-1).personal.rating,5);
+  const failure=app({set_game_personal:()=>{throw Error('Cannot save rating');}});failure.feature.showGame(failure.games[0]);
+  const failedStars=failure.document.getElementById('details-personal-rating').children;await failedStars[4].onclick();
+  assert.equal(failedStars.filter(star=>star.attributes['data-filled']==='true').length,3);assert.equal(failedStars[4].disabled,false);assert.match(failure.errors[0],/Cannot save rating/);
+});
 test('Dashboard switches chart groups and distinguishes recorded sessions from legacy totals',async()=>{
   const fixture=app({get_library_dashboard:()=>({total_games:5,seconds:100,sessions:4,recorded_seconds:30,statuses:{completed:2},platforms:[{name:'PS2',seconds:100,games:5,sessions:4}],months:[{name:'2026-10',seconds:30,games:1,sessions:1}],regions:[],top_games:[]})});
   await fixture.feature.dashboard();assert.ok(fixture.all().some(node=>node.textContent==='PS2'));

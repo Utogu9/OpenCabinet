@@ -18,6 +18,11 @@ are independent from downloaded catalog metadata. Custom category conditions can
 use `status`, `favorite` and `rating`; status codes are `unplayed`, `planned`,
 `playing`, `completed` and `abandoned`.
 
+The five stars below the game logo, beside Edit and Delete, save a rating directly.
+Clicking the selected rating again clears it. **Group by → Your rating / Favorites**
+filters the library using these saved personal values. Selected favorite and
+default-media stars are filled; unselected stars remain outlined.
+
 When several images share a type, the editor offers a small star to choose the
 default. This preserves the image type and updates its order, which is used by
 the grid, gallery and box viewers. Manuals have the same choice when more than

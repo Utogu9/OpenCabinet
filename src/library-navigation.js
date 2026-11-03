@@ -3,6 +3,7 @@
   const modes = [
     ["platform", globalThis.OpenCabinetI18n.t("msg.9f52c41426")], ["categories", globalThis.OpenCabinetI18n.t("msg.7ef4eab73e")], ["developer", globalThis.OpenCabinetI18n.t("msg.38ba62181c")],
     ["publisher", globalThis.OpenCabinetI18n.t("msg.936a161c39")], ["manufacturer", globalThis.OpenCabinetI18n.t("msg.b79530ac7c")], ["date", globalThis.OpenCabinetI18n.t("msg.31b614ced2")],
+    ["rating", globalThis.OpenCabinetI18n.t("personal.rating")], ["favorites", globalThis.OpenCabinetI18n.t("personal.favorites")],
     ["year", globalThis.OpenCabinetI18n.t("msg.4538cdea32")], ["hours", globalThis.OpenCabinetI18n.t("msg.a28c7c72ce")], ["sessions", globalThis.OpenCabinetI18n.t("msg.28c60e4793")],
   ];
   const rules = [["platforms", globalThis.OpenCabinetI18n.t("msg.c9c69cf5a8")], ["consoles", globalThis.OpenCabinetI18n.t("msg.c7c3e075a4")],
@@ -12,6 +13,8 @@
   const alphabetic = (a, b) => a.localeCompare(b, globalThis.OpenCabinetI18n.locale, { numeric: true, sensitivity: "base" });
   const compact = value => key(value).replace(/[^a-z0-9]/g, "");
   const seconds = game => Math.max(0, Number(game.play_time_seconds ?? Number(game.play_time || 0) * 60) || 0);
+  const rating = game => Math.max(0,Math.min(5,Number(game.personal?.rating)||0));
+  const favorite = game => game.personal?.favorite === true;
   const pc = game => game.steam_app_id != null || Boolean(game.epic_app_id) || /^(pc|windows|pcgames|pcwindows|microsoftwindows|windowsgames|linux|macos|applemacintosh|msdos|dos)$/.test(compact(game.platform));
   const handheld = name => /game\s*boy|game\s*gear|game\s*&\s*watch|lynx|wonderswan|neo\s*geo\s*pocket|psp|playstation\s*(portable|vita)|\bps\s*vita\b|nintendo\s*(ds|3ds|2ds|switch)|virtual\s*boy|\bnds\b|\b3ds\b/i.test(name || "");
   function defaults() {
@@ -32,6 +35,8 @@
   function bucket(value, thresholds, labels) { return labels[thresholds.findIndex(n => value < n)] || labels.at(-1); }
   function values(game, mode, manufacturers = {}) {
     if (mode === "platform") return [game.platform];
+    if (mode === "rating") return [rating(game) ? globalThis.OpenCabinetI18n.t("personal.ratingValue",rating(game)) : globalThis.OpenCabinetI18n.t("personal.unrated")];
+    if (mode === "favorites") return [globalThis.OpenCabinetI18n.t(favorite(game)?"personal.favorites":"personal.notFavorites")];
     if (mode === "manufacturer") return [manufacturer(game, manufacturers)];
     if (mode === "developer" || mode === "publisher") {
       const names = String(game[mode] || "").split(/[;\n]/).map(s => s.trim()).filter(Boolean);
@@ -49,7 +54,9 @@
   }
   function compareGames(a, b, mode) {
     let diff = 0;
-    if (mode === "hours") diff = seconds(b) - seconds(a);
+    if (mode === "rating") diff = rating(b)-rating(a);
+    else if (mode === "favorites") diff = Number(favorite(b))-Number(favorite(a));
+    else if (mode === "hours") diff = seconds(b) - seconds(a);
     else if (mode === "sessions") diff = (b.session_count || 0) - (a.session_count || 0);
     else if (mode === "date" || mode === "year") diff = (b.release_date || "").localeCompare(a.release_date || "");
     return diff || alphabetic(a.title, b.title) || a.id - b.id;
@@ -124,9 +131,9 @@
       grouped.get(id).ids.add(game.id);
     }
     const result = [...grouped.values()];
-    if (mode === "hours" || mode === "sessions") {
+    if (["hours","sessions","rating","favorites"].includes(mode)) {
       // Order buckets by their largest value, with unplayed games last.
-      const score = group => Math.max(...games.filter(g => group.ids.has(g.id)).map(g => mode === "hours" ? seconds(g) : g.session_count || 0));
+      const score = group => Math.max(...games.filter(g => group.ids.has(g.id)).map(g => mode === "hours" ? seconds(g) : mode === "rating" ? rating(g) : mode === "favorites" ? Number(favorite(g)) : g.session_count || 0));
       return result.sort((a, b) => score(b) - score(a));
     }
     return result.sort((a, b) => mode === "year" || mode === "date"

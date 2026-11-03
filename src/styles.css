@@ -464,6 +464,7 @@ body.resizing-details * {
 }
 
 .details-content:not(.platform-details) .platform-only { display: none; }
+.details-content.platform-details .game-only { display: none; }
 .details-content.platform-details #btn-edit-game,
 .details-content.platform-details #btn-delete-game,
 .details-content.platform-details #btn-play-game,
@@ -575,6 +576,12 @@ body.resizing-details * {
 .logo-delete-button {
   left: calc(50% + 22px);
 }
+.details-logo-actions { position: absolute; bottom: 10px; left: 50%; transform: translateX(-50%); display: flex; align-items: center; justify-content: center; gap: 8px; width: max-content; max-width: calc(100% - 20px); }
+.details-logo-actions .logo-edit-button { position: static; transform: none; padding: 5px 7px; }
+.personal-rating { display: flex; align-items: center; gap: 1px; margin-right: 8px; }
+.personal-rating-star { display: inline-flex; align-items: center; justify-content: center; width: 23px; height: 28px; padding: 3px; border: 0; border-radius: 4px; background: transparent; color: var(--text-main); opacity: .45; cursor: pointer; }
+.personal-rating-star[data-filled="true"], .personal-rating-star:hover, .personal-rating-star:focus-visible { opacity: 1; }
+.personal-rating-star:hover { background: var(--card-hover-bg); }
 
 .logo-edit-button:hover,
 .logo-edit-button:focus-visible {
@@ -1505,6 +1512,8 @@ html[data-os="linux"] .game-box-model .game-box-face { will-change: transform; }
 .media-preference-button { display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; width: 28px; height: 28px; padding: 5px; border: 0; border-radius: 5px; background: transparent; color: var(--text-muted); opacity: .55; cursor: pointer; }
 .media-preference-button:hover, .media-preference-button[aria-pressed="true"] { color: var(--text-main); opacity: 1; background: var(--card-hover-bg); }
 .media-preference-button[aria-pressed="true"] .ui-icon { filter: drop-shadow(0 0 3px var(--accent-color)); }
+.media-preference-button[aria-pressed="true"] .ui-icon[data-icon="star"],
+.personal-rating-star[data-filled="true"] .ui-icon[data-icon="star"] { --ui-icon: url("assets/icons/star-filled.svg"); }
 .personal-status-row, .personal-notes-heading { display: flex; align-items: center; gap: 10px; }
 .personal-status-row select { flex: 1; min-width: 0; }
 .personal-notes-heading { justify-content: space-between; margin-top: 12px; color: var(--text-muted); font-size: .85rem; }

@@ -1700,6 +1700,12 @@
     "resume.progress": "Descargando {0} / {1}",
     "resume.ready": "{0} imágenes y {1} manuales listos. Podés finalizar la importación o reintentar las descargas fallidas.",
     "resume.notice": "Hay {0} importaciones interrumpidas en Herramientas > Descargas pendientes.",
-    "resume.busy": "Primero terminá o cancelá la importación activa."
+    "resume.busy": "Primero terminá o cancelá la importación activa.",
+    "personal.favorites": "Favoritos",
+    "personal.notFavorites": "No favoritos",
+    "personal.ratingValue": "{0} / 5",
+    "personal.currentRating": "Tu valoración: {0} / 5",
+    "personal.setRating": "Valorar con {0} de 5 estrellas",
+    "personal.clearRating": "Quitar tu valoración"
   }
 }

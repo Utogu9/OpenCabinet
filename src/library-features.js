@@ -4,6 +4,7 @@
   const t=(key,...args)=>root.OpenCabinetI18n.t(key,...args);
   const personal=game=>({status:'unplayed',favorite:false,rating:0,notes:'',...game?.personal,status:game?.personal?.status||'unplayed'});
   function create({document,invoke,getGames,onPersonal,onEdit,onRelocate,onResume,formatDuration,confirm,onError=()=>{}}){
+    const savingGames=new Set();let displayedGameId=null;
     const el=(tag,text,cls)=>{const node=document.createElement(tag);if(text!==undefined)node.textContent=text;if(cls)node.className=cls;return node;};
     const button=(label,action,cls='secondary-btn')=>{const node=el('button',label,cls);node.type='button';node.onclick=action;return node;};
     function dialog(title){
@@ -15,13 +16,14 @@
     function fields(host,value){
       const status=el('select');status.setAttribute('aria-label',t('personal.status'));
       for(const name of statuses){const option=el('option',t('personal.'+name));option.value=name;status.appendChild(option);}status.value=value.status||'unplayed';
-      const favorite=el('input');favorite.type='checkbox';favorite.checked=!!value.favorite;
+      const favorite=button('',()=>{favorite.checked=!favorite.checked;favorite.setAttribute('aria-pressed',String(favorite.checked));},'media-preference-button');
+      favorite.checked=!!value.favorite;favorite.setAttribute('aria-pressed',String(favorite.checked));favorite.setAttribute('aria-label',t('personal.favorite'));root.OpenCabinetIcons.set(favorite,'star');
       const rating=el('select');rating.setAttribute('aria-label',t('personal.rating'));
       for(let i=0;i<=5;i++){const option=el('option',i?'★'.repeat(i):t('personal.unrated'));option.value=String(i);rating.appendChild(option);}rating.value=String(value.rating||0);
       const notes=el('textarea');notes.rows=8;notes.maxLength=100000;notes.value=value.notes||'';notes.setAttribute('aria-label',t('personal.notes'));
       const group=(label,control)=>{const field=el('label',undefined,'form-group');field.append(el('span',label),control);return field;};
       const row=el('div',undefined,'form-grid');row.append(group(t('personal.status'),status),group(t('personal.rating'),rating));
-      const check=el('label',undefined,'preference-toggle');check.append(favorite,el('span',t('personal.favorite')));
+      const check=el('div',undefined,'preference-toggle');check.append(favorite,el('span',t('personal.favorite')));
       host.append(row,check,group(t('personal.notes'),notes));
       return {status,notes,value:()=>({status:status.value,favorite:favorite.checked,rating:Number(rating.value),notes:notes.value})};
     }
@@ -36,10 +38,21 @@
     }
     function showGame(game){
       const select=document.getElementById('details-game-status'),notes=document.getElementById('details-personal-notes'),favorite=document.getElementById('details-favorite');
-      if(!select)return;const value=personal(game);select.replaceChildren();
+      if(!select)return;displayedGameId=game.id;const value=personal(game);select.replaceChildren();
       for(const name of statuses){const option=el('option',t('personal.'+name));option.value=name;select.appendChild(option);}select.value=value.status;
       notes.textContent=value.notes||t('personal.noNotes');favorite.setAttribute('aria-pressed',String(value.favorite));favorite.classList.toggle('is-favorite',value.favorite);
-      const set=async patch=>{select.disabled=favorite.disabled=true;try{const updated=await invoke('set_game_personal',{gameId:game.id,personal:{...personal(getGames().find(item=>item.id===game.id)||game),...patch}});onPersonal(game.id,updated);}catch(reason){onError(String(reason));}finally{select.disabled=favorite.disabled=false;}};
+      const ratingHost=document.getElementById('details-personal-rating');
+      if(ratingHost&&ratingHost.children.length!==5){ratingHost.replaceChildren();for(let i=1;i<=5;i++){const star=button('',()=>{},'personal-rating-star');root.OpenCabinetIcons.set(star,'star');star.setAttribute('role','radio');ratingHost.appendChild(star);}}
+      const stars=Array.from(ratingHost?.children||[]);
+      const controls=()=>{select.disabled=favorite.disabled=savingGames.has(game.id);stars.forEach(star=>star.disabled=savingGames.has(game.id));};
+      const set=async patch=>{if(savingGames.has(game.id))return;savingGames.add(game.id);controls();try{const updated=await invoke('set_game_personal',{gameId:game.id,personal:{...personal(getGames().find(item=>item.id===game.id)||game),...patch}});onPersonal(game.id,updated);}catch(reason){onError(String(reason));}finally{savingGames.delete(game.id);if(displayedGameId===game.id)showGame(getGames().find(item=>item.id===game.id)||game);}};
+      ratingHost?.setAttribute('aria-label',t('personal.rating'));ratingHost?.setAttribute('title',t('personal.currentRating',value.rating));
+      stars.forEach((star,index)=>{
+        const score=index+1;star.setAttribute('data-filled',String(score<=value.rating));star.setAttribute('aria-checked',String(score===value.rating));star.tabIndex=score===(value.rating||1)?0:-1;
+        star.title=t(score===value.rating?'personal.clearRating':'personal.setRating',score);star.setAttribute('aria-label',star.title);
+        star.onclick=()=>set({rating:score===value.rating?0:score});
+        star.onkeydown=event=>{let score;if(event.key==='ArrowRight'||event.key==='ArrowUp')score=Math.min(5,index+2);else if(event.key==='ArrowLeft'||event.key==='ArrowDown')score=Math.max(1,index);else if(event.key==='Home')score=1;else if(event.key==='End')score=5;else if(event.key==='Delete'||event.key==='Backspace')score=0;else return;event.preventDefault();stars[Math.max(0,score-1)].focus();return set({rating:score});};
+      });controls();
       select.onchange=()=>set({status:select.value});favorite.onclick=()=>set({favorite:!personal(getGames().find(item=>item.id===game.id)||game).favorite});
       document.getElementById('btn-personal-notes').onclick=()=>editPersonal(getGames().find(item=>item.id===game.id)||game,'notes');
     }

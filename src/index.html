@@ -88,6 +88,8 @@
             <option value="year" data-i18n="msg.4538cdea32"></option>
             <option value="hours" data-i18n="msg.a28c7c72ce"></option>
             <option value="sessions" data-i18n="msg.28c60e4793"></option>
+            <option value="rating" data-i18n="personal.rating"></option>
+            <option value="favorites" data-i18n="personal.favorites"></option>
           </select>
         </div>
         <nav class="platform-list" id="platform-list" aria-label="" data-i18n-aria-label="msg.9f52c41426"></nav>
@@ -115,8 +117,11 @@
         </div>
         <div class="details-content hidden" id="details-content">
           <div class="details-logo-container" id="details-logo-container">
+            <div class="details-logo-actions game-only">
+              <div id="details-personal-rating" class="personal-rating" role="radiogroup" data-i18n-aria-label="personal.rating"></div>
             <button class="logo-edit-button" id="btn-edit-game" type="button" aria-label="" data-i18n-aria-label="msg.ab5c261bc2" title="" data-i18n-title="msg.ab5c261bc2"><span class="ui-icon" data-icon="pencil" aria-hidden="true"></span></button>
             <button class="logo-edit-button logo-delete-button" id="btn-delete-game" type="button" aria-label="" data-i18n-aria-label="msg.88a7099673" title="" data-i18n-title="msg.88a7099673"><span class="ui-icon" data-icon="trash-2" aria-hidden="true"></span></button>
+            </div>
             <button class="logo-edit-button platform-only" id="btn-edit-platform-details" type="button" aria-label="" data-i18n-aria-label="msg.2d1d5f9ba1" title="" data-i18n-title="msg.e86e413389"><span class="ui-icon" data-icon="pencil" aria-hidden="true"></span></button>
           </div>
           <h2 class="details-title" id="details-title"></h2>

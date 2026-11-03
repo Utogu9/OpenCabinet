@@ -6054,7 +6054,7 @@ window.addEventListener("DOMContentLoaded", async () => {
 
 function setupLibraryFeatures(){
   if(!window.OpenCabinetFeatures)return;
-  function updatePersonal(id,personal){allGames=allGames.map(game=>game.id===id?{...game,personal,regions:(game.regions||[]).map(region=>({...region,game:{...region.game,personal}}))}:game);const selected=allGames.find(game=>game.id===selectedGameId);if(selected)appFeatures.showGame(selected);renderPlatformFilters();if(libraryGrouping==="categories")applyLibraryFilters();}
+  function updatePersonal(id,personal){allGames=allGames.map(game=>game.id===id?{...game,personal,regions:(game.regions||[]).map(region=>({...region,game:{...region.game,personal}}))}:game);const selected=allGames.find(game=>game.id===selectedGameId);if(selected)appFeatures.showGame(selected);renderPlatformFilters();if(["categories","rating","favorites"].includes(libraryGrouping))applyLibraryFilters();}
   appFeatures=window.OpenCabinetFeatures.create({document,invoke,getGames:()=>allGames,onPersonal:updatePersonal,onError:error=>showToast(error,true),formatDuration:seconds=>formatPlayTime({play_time_seconds:seconds,session_count:0}).replace(/\s*\([^)]*\)$/,""),confirm:confirmDeletion,
     onEdit:id=>{const game=allGames.find(game=>game.id===id);if(game){showGameDetails(game);document.getElementById("btn-edit-game").click();}},
     onRelocate:async id=>{const game=allGames.find(game=>game.id===id);if(game)await relocateGame(game);},
