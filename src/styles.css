@@ -579,9 +579,14 @@ body.resizing-details * {
 .details-logo-actions { position: absolute; bottom: 10px; left: 50%; transform: translateX(-50%); display: flex; align-items: center; justify-content: center; gap: 8px; width: max-content; max-width: calc(100% - 20px); }
 .details-logo-actions .logo-edit-button { position: static; transform: none; padding: 5px 7px; }
 .personal-rating { display: flex; align-items: center; gap: 1px; margin-right: 8px; }
-.personal-rating-star { display: inline-flex; align-items: center; justify-content: center; width: 23px; height: 28px; padding: 3px; border: 0; border-radius: 4px; background: transparent; color: var(--text-main); opacity: .45; cursor: pointer; }
+.personal-rating-star { display: inline-flex; align-items: center; justify-content: center; width: 23px; height: 28px; padding: 3px; border: 0; border-radius: 4px; background: transparent; color: var(--text-main); opacity: .45; cursor: pointer; transition: opacity .14s ease, background-color .14s ease; }
 .personal-rating-star[data-filled="true"], .personal-rating-star:hover, .personal-rating-star:focus-visible { opacity: 1; }
 .personal-rating-star:hover { background: var(--card-hover-bg); }
+.personal-rating-star .ui-icon { transition: transform .14s ease; }
+.personal-rating-star:hover:not(:disabled) .ui-icon { transform: scale(1.15); }
+@media (prefers-reduced-motion: reduce) {
+  .personal-rating-star, .personal-rating-star .ui-icon { transition: none; }
+}
 
 .logo-edit-button:hover,
 .logo-edit-button:focus-visible {

@@ -47,10 +47,13 @@
       const controls=()=>{select.disabled=favorite.disabled=savingGames.has(game.id);stars.forEach(star=>star.disabled=savingGames.has(game.id));};
       const set=async patch=>{if(savingGames.has(game.id))return;savingGames.add(game.id);controls();try{const updated=await invoke('set_game_personal',{gameId:game.id,personal:{...personal(getGames().find(item=>item.id===game.id)||game),...patch}});onPersonal(game.id,updated);}catch(reason){onError(String(reason));}finally{savingGames.delete(game.id);if(displayedGameId===game.id)showGame(getGames().find(item=>item.id===game.id)||game);}};
       ratingHost?.setAttribute('aria-label',t('personal.rating'));ratingHost?.setAttribute('title',t('personal.currentRating',value.rating));
+      const previewRating=score=>stars.forEach((star,index)=>star.setAttribute('data-filled',String(index<score)));
+      if(ratingHost)ratingHost.onmouseleave=()=>previewRating(value.rating);
       stars.forEach((star,index)=>{
         const score=index+1;star.setAttribute('data-filled',String(score<=value.rating));star.setAttribute('aria-checked',String(score===value.rating));star.tabIndex=score===(value.rating||1)?0:-1;
         star.title=t(score===value.rating?'personal.clearRating':'personal.setRating',score);star.setAttribute('aria-label',star.title);
         star.onclick=()=>set({rating:score===value.rating?0:score});
+        star.onmouseenter=()=>{if(!savingGames.has(game.id))previewRating(score);};
         star.onkeydown=event=>{let score;if(event.key==='ArrowRight'||event.key==='ArrowUp')score=Math.min(5,index+2);else if(event.key==='ArrowLeft'||event.key==='ArrowDown')score=Math.max(1,index);else if(event.key==='Home')score=1;else if(event.key==='End')score=5;else if(event.key==='Delete'||event.key==='Backspace')score=0;else return;event.preventDefault();stars[Math.max(0,score-1)].focus();return set({rating:score});};
       });controls();
       select.onchange=()=>set({status:select.value});favorite.onclick=()=>set({favorite:!personal(getGames().find(item=>item.id===game.id)||game).favorite});

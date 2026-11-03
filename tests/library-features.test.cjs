@@ -67,6 +67,19 @@ test('Logo rating supports keyboard controls and retains the saved value on erro
   const failedStars=failure.document.getElementById('details-personal-rating').children;await failedStars[4].onclick();
   assert.equal(failedStars.filter(star=>star.attributes['data-filled']==='true').length,3);assert.equal(failedStars[4].disabled,false);assert.match(failure.errors[0],/Cannot save rating/);
 });
+
+test('Hovering a rating previews the whole score without saving and restores it when leaving',async()=>{
+  const fixture=app();fixture.feature.showGame(fixture.games[0]);
+  const host=fixture.document.getElementById('details-personal-rating'),stars=host.children;
+  const filled=()=>stars.filter(star=>star.attributes['data-filled']==='true').length;
+  stars[1].onmouseenter();assert.equal(filled(),2);
+  assert.equal(stars[2].attributes['aria-checked'],'true');
+  stars[4].onmouseenter();assert.equal(filled(),5);
+  assert.equal(fixture.calls.length,0);host.onmouseleave();assert.equal(filled(),3);
+  stars[3].onmouseenter();await stars[3].onclick();assert.equal(fixture.games[0].personal.rating,4);
+  stars[0].onmouseenter();assert.equal(filled(),1);host.onmouseleave();assert.equal(filled(),4);
+  fixture.feature.showGame({id:2,personal:{rating:1}});host.onmouseleave();assert.equal(filled(),1);
+});
 test('Dashboard switches chart groups and distinguishes recorded sessions from legacy totals',async()=>{
   const fixture=app({get_library_dashboard:()=>({total_games:5,seconds:100,sessions:4,recorded_seconds:30,statuses:{completed:2},platforms:[{name:'PS2',seconds:100,games:5,sessions:4}],months:[{name:'2026-10',seconds:30,games:1,sessions:1}],regions:[],top_games:[]})});
   await fixture.feature.dashboard();assert.ok(fixture.all().some(node=>node.textContent==='PS2'));
