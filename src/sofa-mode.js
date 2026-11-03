@@ -212,7 +212,7 @@
         // Read the current carousel, not a snapshot from an earlier key press.
         // Throttle model work without postponing it until navigation stops.
         const node = [...cardNodes.values()].filter(node => node._renderedBoxKey !== node._boxKey)
-          .sort((a, b) => Math.abs(Number(a.style.getPropertyValue('--offset'))) - Math.abs(Number(b.style.getPropertyValue('--offset'))))[0];
+          .sort((a, b) => Math.abs(a._offset) - Math.abs(b._offset))[0];
         if (!node) return;
         const id = Number(node.dataset.gameId), item = games.find(game => game.id === id), key = node._boxKey;
         const work = previewWork = {};
@@ -247,11 +247,12 @@
       const fallback = element('span', 'sofa-cover-fallback', game.title); container.append(fallback);
       if (!path) return;
       let preview = null, previewWidth = 0, image = null, timer = null, fadeTimer = null, selected = false;
+      let artworkWidth = 0, artworkHeight = 0;
       // Reuse bounded thumbnails on both platforms. Box-mode navigation must
       // not also decode an original 2D cover for every briefly visited game.
       const cached = options.preferCachedArtwork || typeof options.loadCoverPreview === 'function';
       function fitArtwork() {
-        const width = container.clientWidth, height = container.clientHeight;
+        const width = artworkWidth, height = artworkHeight;
         if (!width || !height) return;
         for (const node of [preview, image]) {
           const sourceWidth = node?.naturalWidth || node?.width, sourceHeight = node?.naturalHeight || node?.height;
@@ -260,7 +261,10 @@
           node.style.width = `${sourceWidth * scale}px`; node.style.height = `${sourceHeight * scale}px`;
         }
       }
-      const sizeObserver = new window.ResizeObserver(fitArtwork); sizeObserver.observe(container);
+      const sizeObserver = new window.ResizeObserver(entries => {
+        artworkWidth = entries[0].contentRect.width; artworkHeight = entries[0].contentRect.height;
+        fitArtwork();
+      }); sizeObserver.observe(container);
       function showPreview(bitmap) {
         if (signal.aborted || !bitmap?.width || !bitmap?.height || bitmap.width <= previewWidth) return;
         try {
@@ -368,10 +372,10 @@
           }
           node.dataset.gameId = item.id; node._abort = new AbortController();
           const art = node.querySelector('.sofa-card-art'); art.replaceChildren();
-          node._selectArtwork = drawCover(art, item, node._abort.signal);
+          node._selectArtwork = boxMode ? null : drawCover(art, item, node._abort.signal);
           node.setAttribute('aria-label', item.title); if (!node.isConnected) cards.append(node); cardNodes.set(item.id, node);
-          node._artKey = artKey;
-        } else if (node._artKey !== artKey) {
+          node._artKey = boxMode ? null : artKey;
+        } else if (!boxMode && node._artKey !== artKey) {
           node._abort.abort(); node._abort = new AbortController();
           const art = node.querySelector('.sofa-card-art'); art.replaceChildren();
           node._selectArtwork = drawCover(art, item, node._abort.signal); node._artKey = artKey; node.setAttribute('aria-label', item.title);
@@ -385,9 +389,15 @@
         // The first neighbors leave space for the enlarged center; subsequent
         // neighbors sit closer together, especially as they become smaller.
         const position = offset === 0 ? 0 : Math.sign(offset) * (1.2 + (distance - 1) * .76);
-        node.style.setProperty('--offset', offset); node.style.setProperty('--position', position); node.style.setProperty('--scale', scale);
-        node.style.setProperty('--turn', `${boxMode || offset === 0 ? 0 : offset > 0 ? -24 : 24}deg`);
-        node.style.setProperty('--cover-width-scale', offset === 0 ? 1 : 1 / Math.cos(24 * Math.PI / 180));
+        node._offset = offset; node._scale = scale;
+        // Inherited custom properties on the card invalidate every surface of
+        // its 3D model on every key repeat. Only the outer transform moves.
+        node.style.transform = `translateX(calc(-50% + ${position} * clamp(190px, 24vw, 360px))) translateY(-50%) scale(${scale})`;
+        if (!boxMode) {
+          const art = node.querySelector('.sofa-card-art');
+          art.style.setProperty('--turn', `${offset === 0 ? 0 : offset > 0 ? -24 : 24}deg`);
+          art.style.setProperty('--cover-width-scale', offset === 0 ? 1 : 1 / Math.cos(24 * Math.PI / 180));
+        }
         node.style.zIndex = String(boxMode && offset === 0 ? 20 : 10 - Math.abs(offset)); node.classList.toggle('is-selected', offset === 0);
         node.tabIndex = offset === 0 ? 0 : -1; node.setAttribute('aria-current', String(offset === 0));
         node._selectArtwork?.(offset === 0);

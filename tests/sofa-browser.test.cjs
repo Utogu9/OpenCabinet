@@ -99,7 +99,7 @@ test('Couch mode carousels, controller selectors, launch return and cleanup work
   assert.equal(await page.evaluate(()=>fixture.rotatedCard.querySelector('.game-box-model').style.transform),neutral,'Another dialog pauses rotation');
   await page.evaluate(()=>{fixturePad.axes=[0,0,0,0];document.getElementById('rotation-overlay').close();document.getElementById('rotation-overlay').remove();});
   await page.locator('.sofa-card.is-selected').focus();
-  assert.equal(await page.locator('.sofa-card.is-selected').evaluate(node=>Number(node.style.getPropertyValue('--scale'))),1.2);
+  assert.equal(await page.locator('.sofa-card.is-selected').evaluate(node=>node._scale),1.2);
   assert.equal(await page.evaluate(()=>fixture.liveViewers),4,'Every visible game has its own 3D viewer');
   const created=await page.evaluate(()=>fixture.createdViewers);
   await page.keyboard.press('ArrowRight');await page.waitForTimeout(350);
@@ -119,12 +119,12 @@ test('Couch mode carousels, controller selectors, launch return and cleanup work
   await page.waitForTimeout(300);
   const proportions=await page.locator('.sofa-card:not(.is-selected) .sofa-cover').evaluateAll(images=>images.filter(image=>!image.hidden).map(image=>{
     const rect=image.getBoundingClientRect(),card=image.closest('.sofa-card');
-    return {ratio:rect.width/rect.height,original:(image.naturalWidth||image.width)/(image.naturalHeight||image.height),scale:Number(card.style.getPropertyValue('--scale'))};
+    return {ratio:rect.width/rect.height,original:(image.naturalWidth||image.width)/(image.naturalHeight||image.height),scale:card._scale};
   }));
   assert.ok(proportions.length>0&&proportions.every(image=>Math.abs(image.ratio/image.original-1)<.05&&image.scale<=.74),
     'Smaller neighboring covers retain their aspect ratio while turning toward the selected game: '+JSON.stringify(proportions));
   const positions=await page.locator('.sofa-card').evaluateAll(nodes=>nodes.map(node=>{
-    const rect=node.getBoundingClientRect();return {offset:Number(node.style.getPropertyValue('--offset')),center:rect.x+rect.width/2};
+    const rect=node.getBoundingClientRect();return {offset:node._offset,center:rect.x+rect.width/2};
   }));
   const centerAt=offset=>positions.find(card=>card.offset===offset).center;
   assert.ok(centerAt(1)-centerAt(0)>(centerAt(2)-centerAt(1))*1.4,'Nearest neighbors leave more space around the selection than farther neighbors');
@@ -204,7 +204,7 @@ test('Couch mode carousels, controller selectors, launch return and cleanup work
   assert.equal(await page.evaluate(()=>fixture.liveViewers),0,'Late settings responses cannot recreate boxes after switching to covers');
   await page.click('#sofa-view');
   await page.waitForFunction(()=>fixture.liveViewers===9);
-  assert.deepEqual(await page.locator('.sofa-card').evaluateAll(nodes=>nodes.map(node=>Number(node.style.getPropertyValue('--offset'))).sort((a,b)=>a-b)),[-4,-3,-2,-1,0,1,2,3,4]);
+  assert.deepEqual(await page.locator('.sofa-card').evaluateAll(nodes=>nodes.map(node=>node._offset).sort((a,b)=>a-b)),[-4,-3,-2,-1,0,1,2,3,4]);
   await page.keyboard.press('ArrowRight');await page.waitForTimeout(400);
   assert.equal(await page.evaluate(()=>fixture.liveViewers),9,'Incoming games reuse the fixed viewer pool');
   const poolSize=await page.evaluate(()=>fixture.createdViewers);
