@@ -378,7 +378,9 @@ export async function createViewer(host, options={}) {
     manualMeshes.forEach(mesh=>mesh.visible=true);assign('manualBack',null);
   }
   function ensureManualBack() {
-    if(!manual||!openTarget||manualBackTask||materials.manualBack.map)return;
+    // Carousel materials keep a blank map to avoid shader recompilation. It
+    // is only a placeholder, not an already loaded reverse of the booklet.
+    if(!manual||!openTarget||manualBackTask||(materials.manualBack.map&&materials.manualBack.map!==blankTextures.get('manualBack')))return;
     const data=manual,token=revision;
     if(!data.back&&typeof data.loadBack!=='function')return;
     const task=Promise.resolve().then(()=>data.back||data.loadBack()).then(canvas=>{

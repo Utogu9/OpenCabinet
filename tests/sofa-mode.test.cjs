@@ -67,3 +67,14 @@ test('Stick input has a dead zone and controlled repeat; directional pad and unm
   assert.deepEqual(input.sample(pad([14]),450),['left']);
   assert.deepEqual(input.sample({...pad([0]),mapping:''},460),[]);
 });
+
+test('Startup artwork warms the first nine sorted games of every console in round-robin order',()=>{
+  const {startupArtwork}=vm.runInThisContext('(function(module){'+fs.readFileSync('src/sofa-mode.js','utf8')+';return module.exports;})({exports:{}})');
+  const games=['B','A'].flatMap(platform=>Array.from({length:12},(_,i)=>({id:i,platform,title:String(11-i).padStart(2,'0')})));
+  const jobs=startupArtwork(games,items=>[...items].sort((a,b)=>a.title.localeCompare(b.title)),game=>[`${game.platform}/${game.title}`]);
+  assert.equal(jobs.length,18);
+  assert.deepEqual(jobs.slice(0,4),[{platform:'B',path:'B/00'},{platform:'A',path:'A/00'},{platform:'B',path:'B/01'},{platform:'A',path:'A/01'}]);
+  assert.equal(jobs.at(-1).path,'A/08');
+  assert.deepEqual(startupArtwork([],items=>items,()=>[]),[]);
+  assert.equal(startupArtwork([{platform:'A'},{platform:'A'}],items=>items,()=>['shared','shared']).length,1);
+});

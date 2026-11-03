@@ -25,6 +25,24 @@
     const strength = Math.min(1, (length - deadZone) / (1 - deadZone));
     return [x / length * strength, y / length * strength];
   }
+  function startupArtwork(games, sortGames, pathsFor, count = 9) {
+    const groups = new Map();
+    for (const game of games) {
+      if (!groups.has(game.platform)) groups.set(game.platform, []);
+      groups.get(game.platform).push(game);
+    }
+    const windows = [...groups].map(([platform, items]) => ({ platform, games: sortGames(items).slice(0, count) }));
+    const jobs = [], seen = new Set();
+    // Round-robin consoles: each gets its first cover before the next row.
+    for (let i = 0; i < count; i++) for (const group of windows) {
+      const game = group.games[i];
+      if (game) for (const path of pathsFor(game)) {
+        const key = JSON.stringify([group.platform, path]);
+        if (!seen.has(key)) { seen.add(key); jobs.push({ platform: group.platform, path }); }
+      }
+    }
+    return jobs;
+  }
   function createPadInput() {
     let identity = null, held = new Set(), direction = null, nextRepeat = 0;
     return {
@@ -111,6 +129,36 @@
     let platforms = [], games = [], platformName = null, gameId = null, zone = 'games', query = '';
     let boxMode = true, frame = null, previewTimer = null, previewGeneration = 0, previewWork = null;
     let platformPreviewAt = 0;
+    let warmTimer = null, warmAbort = null, lastInteraction = 0;
+    const warmedPaths = new Map(), visiblePaths = new Map();
+    function retainPaths(platform) {
+      options.retainArtwork?.(platform, [...new Set([...(warmedPaths.get(platform) || []), ...(visiblePaths.get(platform) || [])])]);
+    }
+    function warmStartupArtwork() {
+      const controller = warmAbort = new AbortController();
+      const jobs = startupArtwork(options.games(), options.sortGames, coverPaths);
+      let index = 0;
+      const current = () => active && !controller.signal.aborted;
+      async function next() {
+        warmTimer = null;
+        if (!current() || index >= jobs.length) return;
+        // Yield to navigation, model construction and modal actions. Only one
+        // thumbnail decode runs at a time; originals/PDFs/models stay on demand.
+        if (!document.hasFocus() || watchedGame !== null || busy || window.performance.now() - lastInteraction < 350 || previewWork || previewTimer !== null || topDialog() !== dialog) {
+          warmTimer = window.setTimeout(next, 150); return;
+        }
+        const { platform, path } = jobs[index++];
+        try {
+          const image = options.getCoverPreview?.(path) || await options.loadCoverPreview?.(path, controller.signal);
+          if (image && current()) {
+            if (!warmedPaths.has(platform)) warmedPaths.set(platform, new Set());
+            warmedPaths.get(platform).add(path); retainPaths(platform);
+          }
+        } catch { /* Missing thumbnails must not stop other consoles. */ }
+        if (current()) warmTimer = window.setTimeout(next, 80);
+      }
+      warmTimer = window.setTimeout(next, 500);
+    }
     let busy = false, availability = null, watchedGame = null, wasRunning = false, pendingFocus = false;
     let lastPad = false, selectedKey = null, backgroundAbort = null, lastBoxSelection = null, lastPollTime = null;
     let railDrag = null, railDragged = false;
@@ -383,7 +431,8 @@
       const index = games.findIndex(game => game.id === gameId);
       const visible = carousel(games, Math.max(0, index), boxMode ? 4 : 3);
       const retained = carousel(games, Math.max(0, index), 4).sort((a, b) => Math.abs(a.offset) - Math.abs(b.offset));
-      options.retainArtwork?.(platformName, [...new Set(retained.flatMap(({ item }) => coverPaths(item)))]);
+      visiblePaths.set(platformName, retained.flatMap(({ item }) => coverPaths(item)));
+      retainPaths(platformName);
       if (lastBoxSelection !== gameId) {
         for (const id of [lastBoxSelection, gameId]) {
           const node = cardNodes.get(id);
@@ -656,6 +705,7 @@
       }
     }
     function action(name) {
+      lastInteraction = window.performance.now();
       if (!active) return;
       if(readingManual()) {
         if(['back','exit','manual'].includes(name))manualReader.close();
@@ -731,6 +781,7 @@
       hint.textContent = t('sofa.keyboardHelp'); padStatus.textContent = t('sofa.padConnect');
       view.textContent = t(boxMode ? 'sofa.coverView' : 'sofa.boxView'); view.setAttribute('aria-pressed', String(boxMode));
       dialog.showModal(); refresh(); focusCurrent();
+      lastInteraction = window.performance.now(); warmStartupArtwork();
       padInput.reset(); frame = window.setTimeout(poll, 0);
       const entry = controller?.acquire(() => { if (token === generation) close(); }); lease = entry;
       try {
@@ -744,6 +795,8 @@
       closeBoxMenu();closeManual();
       stopRailDrag(); railDragged = false;
       active = false; ++generation; ++selectionVersion;
+      warmAbort?.abort(); warmAbort = null; window.clearTimeout(warmTimer); warmTimer = null;
+      warmedPaths.clear(); visiblePaths.clear();
       backgroundAbort?.abort(); backgroundAbort = null;
       watchedGame = null; wasRunning = false; pendingFocus = false; selectedKey = null;
       window.clearTimeout(frame); padInput.reset(); stopPreviewQueue();
@@ -808,10 +861,11 @@
     rail.addEventListener('dragstart', event => event.preventDefault());
     search.addEventListener('input', () => { query = search.value.trim(); refresh(); });
     window.addEventListener('blur', () => { padInput.reset(); lastPollTime = null; stopRailDrag(); });
+    for (const event of ['pointerdown', 'pointermove', 'keydown', 'wheel']) dialog.addEventListener(event, () => { lastInteraction = window.performance.now(); }, { passive: true });
     window.addEventListener('beforeunload', () => { close(); observer.disconnect(); }, { once: true });
     return { open, close, refresh, updateStatistics, get active() { return active; } };
   }
-  const api = { create, createPadInput, rightStick, carousel, platformsFor, wrap };
+  const api = { create, createPadInput, rightStick, carousel, platformsFor, wrap, startupArtwork };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.OpenCabinetSofa = api;
 })(globalThis);

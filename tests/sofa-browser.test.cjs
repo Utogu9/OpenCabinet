@@ -469,9 +469,9 @@ test('Couch mode carousels, controller selectors, launch return and cleanup work
   await page.keyboard.press('Escape');
   await page.evaluate(async()=>{
     fixtureGames=[{...fixtureGames[0],id:9000,title:'Manual fixture',platform:'Sony PlayStation 2',regions:null}];
-    fixture.manualLoads=0;
+    fixture.manualLoads=0;fixture.manualBackLoads=0;
     const canvas=()=>{const c=document.createElement('canvas');c.width=300;c.height=450;const ctx=c.getContext('2d');ctx.fillStyle='#b45d32';ctx.fillRect(0,0,300,450);return c;};
-    fixtureOptions.loadManual=async()=>{fixture.manualLoads++;return {path:'fixture.pdf',platform:'Sony PlayStation 2',front:canvas(),pageCount:6,aspectRatio:2/3,dispose(){}};};
+    fixtureOptions.loadManual=async()=>{fixture.manualLoads++;return {path:'fixture.pdf',platform:'Sony PlayStation 2',front:canvas(),loadBack:async()=>{fixture.manualBackLoads++;return canvas();},pageCount:6,aspectRatio:2/3,dispose(){}};};
     OpenCabinetManualPDF.open=async()=>({pageCount:6,layout:'original',aspectRatio:2/3,renderPage:async()=>canvas(),release(c){c.width=c.height=0;},dispose(){}});
     await fixtureSofa.open();
   });
@@ -507,12 +507,31 @@ test('Couch mode carousels, controller selectors, launch return and cleanup work
   await page.keyboard.press('Escape');
   await page.evaluate(async()=>{fixtureGames=[{...fixtureGames[0],id:9001,platform:'Sega Dreamcast'}];await fixtureSofa.open();});
   await page.waitForFunction(()=>document.querySelector('.sofa-preview')._debug?.renderer.info.render.calls>0);
+  const backsBefore=await page.evaluate(()=>fixture.manualBackLoads);
   await press(11);
   await page.waitForFunction(()=>document.querySelector('.sofa-card.is-selected')._manualState?.status==='ready');
+  await page.waitForFunction(before=>fixture.manualBackLoads>before,backsBefore);
+  await page.waitForFunction(()=>document.querySelector('.sofa-preview')._debug.materials.manualBack.map?.image?.width===300);
   assert.equal(await page.evaluate(()=>document.querySelector('.sofa-card.is-selected')._viewer.isOpen),true,'R3 also opens Three.js cases');
   await press(10);await page.waitForSelector('.manual-reader-dialog[open]');
   await press(1);await page.waitForSelector('.manual-reader-dialog',{state:'detached'});
   assert.equal(await page.evaluate(()=>fixtureSofa.active),true,'The WebGL booklet returns to its open case');
+  await page.keyboard.press('Escape');
+  await page.evaluate(async()=>{
+    const source=fixtureGames[0];
+    fixture.warmReservations=new Map();
+    fixtureGames=['Console A','Console B','Console C'].flatMap((platform,p)=>Array.from({length:12},(_,i)=>({...source,id:10000+p*100+i,title:String(i).padStart(2,'0'),platform,images:[{kind:'cover',path:`warm-${p}-${i}`}]})));
+    fixtureOptions.retainArtwork=(platform,paths)=>fixture.warmReservations.set(platform,paths);
+    fixtureOptions.getCoverPreview=()=>null;
+    const canvas=document.createElement('canvas');canvas.width=10;canvas.height=10;
+    fixtureOptions.loadCoverPreview=async()=>canvas;
+    // Covers need no model construction. Console B/C are never visited.
+    localStorage.setItem('opencabinet.sofaView','cover');
+    fixtureSofa=OpenCabinetSofa.create(fixtureOptions);
+    await fixtureSofa.open({platform:'Console A'});
+  });
+  await page.waitForFunction(()=>['Console B','Console C'].every(platform=>fixture.warmReservations.get(platform)?.length===9));
+  assert.deepEqual(await page.evaluate(()=>fixture.warmReservations.get('Console B')),Array.from({length:9},(_,i)=>`warm-1-${i}`),'Unvisited consoles get their first nine thumbnails without selecting them');
   await page.keyboard.press('Escape');
   assert.deepEqual(errors,[]);
   assert.deepEqual(graphicsErrors,[],'Texture upgrades and recycled models do not produce WebGL errors');

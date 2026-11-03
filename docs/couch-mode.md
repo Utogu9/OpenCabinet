@@ -8,10 +8,16 @@ The bottom carousel contains platforms with games and their downloaded logos.
 Platforms without a logo show their names. **All** combines the library. The game
 carousel respects alphabetical and custom series ordering, and remembers the
 selected game for each platform while switching between platforms.
+On entry, the first nine games of every platform also warm their cached cover
+and full-cover previews in the background. Consoles are visited round-robin,
+one thumbnail at a time, yielding during navigation and model preparation.
+Closing couch mode cancels the remaining queue. This does not preload originals,
+manuals or additional 3D renderers.
 The last nine games around that selection keep their cover and full-cover
 previews decoded in RAM for each visited platform, including **All**. Switching
 platforms or closing couch mode does not discard these reservations. Moving
-within a platform replaces its reserved window; removed games or changed image
+within a platform replaces its reserved window while retaining the startup
+previews; removed games or changed image
 paths release obsolete reservations. These per-platform minimums can exceed
 the general RAM LRU limit. Disk caching still supplies images after restarting
 the application.
