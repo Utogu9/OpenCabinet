@@ -24,12 +24,11 @@ dialog.sofa-mode[open] { display: grid; grid-template-rows: auto minmax(170px, 1
 .sofa-card[hidden], .sofa-spare[hidden] { display: none; }
 .sofa-mode .sofa-card:focus-visible, .sofa-mode .sofa-preview:focus-visible,
 .sofa-mode .sofa-platform:focus-visible { outline: none; }
-.sofa-card::before { content: ''; position: absolute; inset: 4% -5%; z-index: -1; pointer-events: none; opacity: 0; background: radial-gradient(ellipse, color-mix(in srgb, var(--accent-color) 60%, transparent), color-mix(in srgb, var(--accent-color) 38%, transparent) 43%, color-mix(in srgb, var(--accent-color) 14%, transparent) 62%, transparent 78%); transition: opacity .15s ease; }
+.sofa-card::before { content: ''; position: absolute; left: 14%; bottom: 5%; width: 72%; height: 14%; border-radius: 50%; z-index: -1; pointer-events: none; opacity: 0; background: radial-gradient(ellipse closest-side, color-mix(in srgb, var(--accent-color) 90%, transparent), color-mix(in srgb, var(--accent-color) 55%, transparent) 35%, color-mix(in srgb, var(--accent-color) 18%, transparent) 68%, transparent 100%); transition: opacity .15s ease; }
 .sofa-card:focus-within::before { opacity: 1; }
 .sofa-mode[data-view="box"] .sofa-card { width: clamp(210px, 32vw, 490px); }
 .sofa-mode[data-view="box"] .sofa-deck { overflow: visible; z-index: 1; }
 .sofa-mode[data-view="box"] .sofa-preview { overflow: visible; }
-.sofa-mode[data-view="box"] .sofa-card::before { inset: auto; left: 14%; bottom: 5%; width: 72%; height: 14%; border-radius: 50%; background: radial-gradient(ellipse closest-side, color-mix(in srgb, var(--accent-color) 90%, transparent), color-mix(in srgb, var(--accent-color) 55%, transparent) 35%, color-mix(in srgb, var(--accent-color) 18%, transparent) 68%, transparent 100%); }
 .sofa-mode[data-view="box"] .sofa-card:focus-within .sofa-preview::after { opacity: 0; }
 .sofa-mode[data-view="cover"] .sofa-deck { perspective: none; }
 .sofa-mode[data-view="cover"] .sofa-card { transform: translateX(calc(-50% + var(--position) * clamp(190px, 24vw, 360px))) translateY(-50%) scale(var(--scale)); }
@@ -46,6 +45,9 @@ dialog.sofa-mode[open] { display: grid; grid-template-rows: auto minmax(170px, 1
 .sofa-cover-fallback[hidden] { display: none; }
 .sofa-preview.game-box-stage { position: absolute; inset: 0; width: 100%; height: 100%; min-height: 0; border: 0; border-radius: 0; background: transparent; box-shadow: none; }
 .sofa-card:not([data-has-box="true"]) .sofa-preview { visibility: hidden; pointer-events: none; }
+/* Loaded print textures set their own visibility; hide the entire retained
+   viewer so they cannot paint over covers after switching display modes. */
+.sofa-mode[data-view="cover"] .sofa-preview { display: none; }
 .sofa-mode[data-view="box"] .sofa-card-art { visibility: hidden; }
 .sofa-box-placeholder { display: none; }
 .sofa-mode[data-view="box"] .sofa-card:not([data-has-box="true"]) .sofa-box-placeholder { display: block; position: absolute; left: 50%; top: 50%; height: 78%; aspect-ratio: var(--box-aspect, .71); background: var(--box-color, #353b46); border: 1px solid #ffffff18; border-radius: 3px; transform: translate(-50%, -50%) rotateX(-9deg) rotateY(28deg); transform-style: preserve-3d; }

@@ -111,6 +111,8 @@ test('Couch mode carousels, controller selectors, launch return and cleanup work
   fs.mkdirSync('target',{recursive:true});await page.screenshot({path:'target/sofa-boxes.png'});
   await page.click('#sofa-view');assert.equal(await page.locator('#sofa-view').getAttribute('aria-pressed'),'false');
   assert.equal(await page.locator('.sofa-preview:visible').count(),0);
+  assert.equal(await page.locator('.sofa-preview .game-box-wrap-texture.loaded:visible, .sofa-preview img.loaded:visible').count(),0,
+    'Loaded 3D textures cannot override the hidden viewer and overlap the 2D covers');
   assert.equal(await page.evaluate(()=>fixture.liveViewers),4,'Switching to covers pauses the prepared 3D viewers without discarding them');
   const appearance=await page.locator('.sofa-card').evaluateAll(nodes=>nodes.map(node=>({opacity:getComputedStyle(node).opacity,filter:getComputedStyle(node).filter})));
   assert.ok(appearance.every(card=>card.opacity==='1'&&card.filter==='none'),'All covers keep full opacity and brightness');
