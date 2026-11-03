@@ -781,7 +781,8 @@ function renderGameLogo(game, images) {
   // Actualizar otros datos del panel no debe reiniciar la animación del logo.
   if (key === logoPanelKey) return;
   logoPanelKey = key;
-  // Conservar el mismo botón y sus eventos al renovar el logo y el fondo.
+  // Keep the complete action row, including rating controls and their events.
+  const actions = Array.from(container.children).find(child => child.classList?.contains("details-logo-actions"));
   const editButton = document.getElementById("btn-edit-game");
   const deleteButton = document.getElementById("btn-delete-game");
   const platformEditButton = document.getElementById("btn-edit-platform-details");
@@ -819,8 +820,11 @@ function renderGameLogo(game, images) {
     showTitle();
   }
   container.appendChild(foreground);
-  container.appendChild(editButton);
-  container.appendChild(deleteButton);
+  if (actions) container.appendChild(actions);
+  else {
+    container.appendChild(editButton);
+    container.appendChild(deleteButton);
+  }
   if (platformEditButton) container.appendChild(platformEditButton);
 }
 

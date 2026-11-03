@@ -1203,6 +1203,24 @@ test("Logo panel uses a screenshot backdrop and animates once the logo loads", (
   app.evaluate("renderGameMedia({ ...allGames[0], id: 2 })");
   assert.notEqual(container.children[1], foreground);
 });
+test("Updating the logo preserves the complete rating and action row across games and platforms",async()=>{
+  const app=mediaApp(),container=app.get('details-logo-container');
+  const actions=app.document.createElement('div');actions.classList.add('details-logo-actions');
+  const rating=app.get('details-personal-rating'),star=app.document.createElement('button');let clicks=0;
+  star.addEventListener('click',()=>{clicks++;});rating.appendChild(star);
+  actions.append(rating,app.get('btn-edit-game'),app.get('btn-delete-game'));container.appendChild(actions);
+  for(const code of [
+    'renderGameMedia(allGames[0])',
+    'renderGameMedia({...allGames[0],id:2,title:"Other game"})',
+    'renderGameMedia({id:"platform:1",title:"Console",platform:"Console",is_platform:true,images:[]})',
+    'renderGameMedia(allGames[0])',
+  ]){
+    app.evaluate(code);assert.ok(container.contains(actions));assert.ok(container.contains(rating));
+    assert.equal(app.get('btn-edit-game').parentNode,actions);assert.equal(app.get('btn-delete-game').parentNode,actions);
+    assert.equal(rating.children[0],star);
+  }
+  await star.trigger('click');assert.equal(clicks,1);
+});
 
 test("Missing or broken logos show the title without removing the panel", () => {
   const app = mediaApp();
