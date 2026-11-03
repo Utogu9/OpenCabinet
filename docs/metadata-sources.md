@@ -6,6 +6,9 @@ el `catalog.json` de las plataformas necesarias. Cada catálogo queda indexado e
 SQLite para reutilizarlo sin nuevas descargas. El botón de actualizar catálogo
 renueva el índice e invalida las plataformas preparadas; estas vuelven a
 descargarse cuando se necesitan.
+El botón pequeño de actualizar está disponible en el importador y en las opciones
+de descarga de imágenes de los editores de juegos y consolas. Conserva los tipos
+de imagen elegidos y los cambios sin guardar mientras vuelve a consultar el catálogo.
 
 Las plataformas pueden ser carpetas o submódulos de GitHub. En ambos casos se
 usan los catálogos y las imágenes de la rama `main` del repositorio correspondiente;

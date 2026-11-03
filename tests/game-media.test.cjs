@@ -57,7 +57,7 @@ function mediaApp(options = {}) {
       if (["game-image-list", "game-manual-list"].includes(this.id) || this.dataset.imagePath) return descendants(this);
       if (this.id === "editor-artwork-panel") {
         const controls = ["editor-artwork-platform", "editor-artwork-query", "editor-artwork-result", "btn-editor-artwork-search",
-          "btn-editor-artwork-download", "btn-editor-artwork-retry"].map(get);
+          "btn-editor-artwork-download", "btn-editor-artwork-retry", "btn-editor-artwork-update"].map(get);
         return controls.filter((control) => tags.includes(control.tag)).concat(descendants(get("editor-artwork-options")));
       }
       return [...elements.values()];
@@ -845,6 +845,50 @@ test("The editor can prepare the shared catalog on first use", async () => {
   assert.equal(app.get("editor-artwork-result").value, "42");
   assert.equal(app.calls.some((call) => call.command === "prepare_metadata_catalog"), true);
   await app.get("btn-cancel-game-edit").trigger("click");
+});
+
+test('Refreshing editor artwork reloads the catalog and types while preserving the chosen match, query and image draft', async()=>{
+  let finish,updated=false;
+  const app=mediaApp({handlers:{
+    prepare_metadata_catalog:()=>new Promise(resolve=>{finish=summary=>{updated=true;resolve(summary);};}),
+    search_metadata_games:()=>[{id:42,title:'Test Game',platform:'Super Nintendo Entertainment System',exact:true},
+      {id:77,title:'Manual choice',platform:'Super Nintendo Entertainment System',exact:false}],
+    get_metadata_image_types:()=>({counts:updated?{cover:5,logo:2,disc:4,spine:1}:{cover:1,logo:1,disc:1}}),
+  }});
+  await app.open();await app.get('btn-download-game-images').trigger('click');
+  app.get('editor-artwork-result').value='77';await app.get('editor-artwork-result').trigger('change');
+  app.quantity('disc').checked=false;app.get('editor-artwork-query').value='My search';app.get('editor-artwork-download-all').checked=true;
+  const draft=app.get('game-image-list').children.length;
+  const loading=app.get('btn-editor-artwork-update').trigger('click');await new Promise(resolve=>setImmediate(resolve));
+  assert.equal(app.get('btn-editor-artwork-update').disabled,true);assert.equal(app.get('btn-editor-artwork-download').disabled,true);
+  await app.get('btn-editor-artwork-update').trigger('click');assert.equal(app.calls.filter(call=>call.command==='prepare_metadata_catalog').length,1);
+  finish({source:'OpenCabinet-BDD',game_count:200,downloaded_at:'2026-11-03',platforms:['Super Nintendo Entertainment System','Nintendo - Switch']});await loading;
+  assert.equal(app.calls.find(call=>call.command==='prepare_metadata_catalog').args.refresh,true);
+  assert.equal(app.get('editor-artwork-result').value,'77');assert.equal(app.get('editor-artwork-query').value,'My search');
+  assert.equal(app.quantity('disc').checked,false);assert.ok(app.quantity('spine'));assert.equal(app.get('editor-artwork-download-all').checked,true);
+  assert.equal(app.get('game-image-list').children.length,draft);assert.equal(app.calls.some(call=>call.command==='update_game'),false);
+  assert.match(app.get('editor-artwork-catalog').textContent,/200/);assert.equal(app.evaluate('metadataCatalogSummary.game_count'),200);
+  assert.equal((await app.evaluate('warmImportCatalog()')).game_count,200);assert.equal(app.get('btn-editor-artwork-download').disabled,false);
+});
+
+test('Editor catalog refresh errors allow retry, and late responses cannot repopulate a closed editor',async()=>{
+  let finish,fail=true;
+  const app=mediaApp({handlers:{prepare_metadata_catalog:()=>fail?Promise.reject(new Error('Offline')):new Promise(resolve=>{finish=resolve;})}});
+  await app.open();await app.get('btn-download-game-images').trigger('click');
+  await app.get('btn-editor-artwork-update').trigger('click');assert.match(app.get('editor-artwork-message').textContent,/Offline/);
+  assert.equal(app.get('editor-artwork-result').value,'42');assert.equal(app.get('btn-editor-artwork-update').disabled,false);
+  fail=false;const loading=app.get('btn-editor-artwork-update').trigger('click');await new Promise(resolve=>setImmediate(resolve));
+  const searches=app.calls.filter(call=>call.command==='search_metadata_games').length;
+  await app.get('btn-cancel-game-edit').trigger('click');
+  finish({source:'OpenCabinet-BDD',game_count:999,downloaded_at:'late',platforms:['Late platform']});await loading;
+  assert.equal(app.calls.filter(call=>call.command==='search_metadata_games').length,searches);
+  assert.equal(app.get('editor-artwork-panel').classList.contains('hidden'),true);assert.equal(app.get('editor-artwork-result').children.length,0);
+});
+
+test('Personal catalogs do not expose the repository refresh action in the game editor',async()=>{
+  const app=mediaApp({handlers:{start_metadata_import:()=>({job_id:'personal',source_platform:'Super Nintendo Entertainment System',catalog:{source:'Personal catalog',platforms:['Super Nintendo Entertainment System'],game_count:1,downloaded_at:'today'}})}});
+  await app.open();await app.get('btn-download-game-images').trigger('click');
+  assert.equal(app.get('btn-editor-artwork-update').classList.contains('hidden'),true);assert.equal(app.get('btn-editor-artwork-update').disabled,true);
 });
 
 test("Details open in 3D, retain Photos for the same game and reset the mode on another selection", async () => {

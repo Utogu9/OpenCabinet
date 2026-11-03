@@ -299,6 +299,43 @@ test('Console downloads use the selected platform, stay in a draft, and clean st
   }
 });
 
+test('Console catalog refresh preserves platform, types and drafts and updates image counts',async()=>{
+  let finish,updated=false;
+  const ui=app({prepare_metadata_catalog:()=>new Promise(resolve=>{finish=summary=>{updated=true;resolve(summary);};}),
+    get_platform_image_types:()=>updated?{logo:4,screenshot:8,other:2}:{logo:1,screenshot:3,other:5}});
+  await ui.evaluate('openPlatformDetailsEditor(allPlatforms[0])');await ui.get('btn-platform-lb-search').onclick();
+  const checks=()=>ui.get('platform-lb-options').children.map(field=>field.children[1]);
+  checks().find(input=>input.name==='screenshot').checked=false;
+  ui.get('platform-lb-download-all').checked=true;ui.get('platform-developer').value='My draft developer';
+  const count=ui.get('platform-image-list').children.length;
+  const pending=ui.get('btn-platform-lb-update').onclick();await turn();
+  assert.equal(ui.get('btn-platform-lb-update').disabled,true);assert.equal(ui.get('btn-platform-lb-download').disabled,true);
+  await ui.get('btn-platform-lb-update').onclick();assert.equal(ui.calls.filter(call=>call.command==='prepare_metadata_catalog').length,1);
+  finish({source:'OpenCabinet-BDD',platforms:['Super Nintendo Entertainment System','Nintendo - Switch'],game_count:20,downloaded_at:'today'});await pending;
+  assert.equal(ui.calls.find(call=>call.command==='prepare_metadata_catalog').args.refresh,true);
+  assert.equal(ui.get('platform-lb-source').value,'Super Nintendo Entertainment System');assert.equal(checks().find(input=>input.name==='screenshot').checked,false);
+  assert.match(ui.get('platform-lb-options').children[0].children[0].textContent,/4/);
+  assert.equal(ui.get('platform-lb-download-all').checked,true);assert.equal(ui.get('platform-developer').value,'My draft developer');
+  assert.equal(ui.get('platform-image-list').children.length,count);assert.equal(ui.get('btn-platform-lb-download').disabled,false);
+  assert.equal(ui.calls.some(call=>call.command==='save_platform_details'),false);
+  await ui.get('btn-platform-lb-search').onclick();assert.equal(ui.get('platform-lb-source').children.some(option=>option.value==='Nintendo - Switch'),true);
+});
+
+test('Console refresh can retry after errors, ignores cancellation and is hidden for personal catalogs',async()=>{
+  let fail=true,finish;
+  const ui=app({prepare_metadata_catalog:()=>fail?Promise.reject(new Error('Offline')):new Promise(resolve=>{finish=resolve;})});
+  await ui.evaluate('openPlatformDetailsEditor(allPlatforms[0])');await ui.get('btn-platform-lb-search').onclick();
+  await ui.get('btn-platform-lb-update').onclick();assert.match(ui.get('platform-lb-message').textContent,/Offline/);
+  assert.equal(ui.get('btn-platform-lb-update').disabled,false);fail=false;
+  const pending=ui.get('btn-platform-lb-update').onclick();await turn();await ui.get('btn-cancel-platform-details').onclick();
+  const types=ui.calls.filter(call=>call.command==='get_platform_image_types').length;
+  finish({source:'OpenCabinet-BDD',platforms:['Late platform']});await pending;
+  assert.equal(ui.get('platform-details-dialog').open,false);assert.equal(ui.calls.filter(call=>call.command==='get_platform_image_types').length,types);
+  const personal=app({start_metadata_import:()=>({job_id:'personal',source_platform:'SNES',catalog:{source:'Personal catalog',platforms:['SNES']}})});
+  await personal.evaluate('openPlatformDetailsEditor(allPlatforms[0])');await personal.get('btn-platform-lb-search').onclick();
+  assert.equal(personal.get('btn-platform-lb-update').classList.contains('hidden'),true);assert.equal(personal.get('btn-platform-lb-update').disabled,true);
+});
+
 test('Console artwork lists available types as checkboxes and supports downloading every alternate logo', async () => {
   const ui=app();await ui.evaluate('openPlatformDetailsEditor(allPlatforms[0])');
   await ui.get('btn-platform-lb-search').onclick();

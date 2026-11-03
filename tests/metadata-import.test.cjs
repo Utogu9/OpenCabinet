@@ -417,6 +417,32 @@ test("Automatic preparation waits for an explicit platform equivalence, then sea
   await app.get("btn-lb-cancel").click(); await pending;
 });
 
+test('Updating the import catalog waits for in-flight image analysis before refreshing and matching again',async()=>{
+  const waiting=deferred();let reads=0;
+  const app=importer({handlers:{get_metadata_image_types:()=>++reads===1?waiting.promise:{counts:{cover:8,disc:2}}}});
+  const pending=app.start();await turn();assert.equal(reads,1);
+  const updating=app.get('btn-lb-update').click();await turn();
+  assert.equal(app.calls.filter(call=>call.command==='prepare_metadata_catalog').length,0);
+  assert.equal(app.get('btn-lb-update').disabled,true);
+  waiting.resolve({counts:{cover:1}});await updating;
+  assert.equal(app.calls.find(call=>call.command==='prepare_metadata_catalog').args.refresh,true);
+  assert.equal(app.calls.filter(call=>call.command==='match_metadata_games').length,2);
+  assert.equal(reads,2);assert.ok(app.media('disc'));assert.equal(app.get('btn-lb-import').disabled,false);
+  await app.get('btn-lb-cancel').click();await pending;
+});
+
+test('A late catalog warmup cannot replace a refreshed catalog or its remembered preload',async()=>{
+  const waiting=deferred();
+  const summary={source:'OpenCabinet-BDD',game_count:987,downloaded_at:'new',platforms:['Sega Genesis','Nintendo - Switch']};
+  const app=importer({handlers:{preload_metadata_catalog:()=>waiting.promise,prepare_metadata_catalog:()=>summary}});
+  app.evaluate('void warmImportCatalog()');const pending=app.start();await turn();await app.get('btn-lb-update').click();
+  waiting.resolve({...app.catalog,game_count:1});await turn();
+  assert.equal(app.evaluate('metadataCatalogSummary.game_count'),987);
+  assert.equal((await app.evaluate('warmImportCatalog()')).game_count,987);
+  assert.match(app.get('lb-catalog-status').textContent,/987/);
+  await app.get('btn-lb-cancel').click();await pending;
+});
+
 test("A warm catalog is displayed immediately and matching does not wait for local recovery", async()=>{
   const waiting=deferred();
   const app=importer({handlers:{find_media_collections:()=>waiting.promise}});

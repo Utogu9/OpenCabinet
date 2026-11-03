@@ -322,7 +322,10 @@
           <h3 id="platform-images-title"><span data-i18n="msg.1a6acdfd76"></span></h3>
           <div class="image-add-controls"><select id="platform-image-kind" aria-label="" data-i18n-aria-label="msg.bff41f6d57"><option value="logo" data-i18n="msg.d707dc2f19"></option><option value="screenshot" data-i18n="msg.e0236ea3bc"></option><option value="artwork" data-i18n="msg.3dbb2d3239"></option><option value="other" data-i18n="msg.371008571b"></option></select><button class="secondary-btn" id="btn-add-platform-images" type="button"><span data-i18n="msg.4ebca1adca"></span></button></div>
           <section class="platform-download-panel" aria-label="" data-i18n-aria-label="msg.9a11051043">
-            <button class="secondary-btn" id="btn-platform-lb-search" type="button"><span data-i18n="msg.01cd2f796a"></span></button>
+            <div class="metadata-catalog-bar">
+              <button class="secondary-btn" id="btn-platform-lb-search" type="button"><span data-i18n="msg.01cd2f796a"></span></button>
+              <button class="secondary-btn catalog-refresh-btn" id="btn-platform-lb-update" type="button" disabled data-i18n-title="msg.368a0125f2" data-i18n-aria-label="msg.368a0125f2"><span class="ui-icon" data-icon="rotate-ccw" aria-hidden="true"></span></button>
+            </div>
             <label for="platform-lb-source"><span data-i18n="msg.8f7fb99d79"></span></label><select id="platform-lb-source" aria-label="" data-i18n-aria-label="msg.8f7fb99d79"></select>
             <button class="secondary-btn" id="btn-platform-lb-metadata" type="button" disabled><span data-i18n="msg.2acc658bfe"></span></button>
             <div class="platform-download-options" id="platform-lb-options"></div>
@@ -488,7 +491,10 @@
             </div>
             <p class="help-text"><span data-i18n="msg.e7ef1be3cc"></span></p>
             <section id="editor-artwork-panel" class="editor-artwork-panel hidden" aria-label="" data-i18n-aria-label="msg.9a11051043">
-              <p class="help-text" id="editor-artwork-catalog"></p>
+              <div class="metadata-catalog-bar">
+                <p class="help-text" id="editor-artwork-catalog"></p>
+                <button class="secondary-btn catalog-refresh-btn" id="btn-editor-artwork-update" type="button" disabled data-i18n-title="msg.368a0125f2" data-i18n-aria-label="msg.368a0125f2"><span class="ui-icon" data-icon="rotate-ccw" aria-hidden="true"></span></button>
+              </div>
               <div class="form-group">
                 <label for="editor-artwork-platform"><span data-i18n="msg.6c44f65078"></span></label>
                 <select id="editor-artwork-platform" form="game-artwork-form"></select>
@@ -1014,7 +1020,7 @@
             </fieldset>
             <div class="metadata-catalog-bar">
               <p id="lb-catalog-status" class="help-text"><span data-i18n="msg.840085b1e9"></span></p>
-              <button type="button" class="secondary-btn" id="btn-lb-update" disabled><span data-i18n="msg.368a0125f2"></span></button>
+              <button type="button" class="secondary-btn catalog-refresh-btn" id="btn-lb-update" disabled data-i18n-title="msg.368a0125f2" data-i18n-aria-label="msg.368a0125f2"><span class="ui-icon" data-icon="rotate-ccw" aria-hidden="true"></span></button>
             </div>
             <div id="lb-platform-group" class="form-group hidden">
               <label for="lb-platform"><span data-i18n="msg.1558aa8d36"></span></label>

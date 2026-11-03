@@ -2631,6 +2631,19 @@ html[data-os="linux"] .game-card:has(.game-cover-surface.has-cover)::before { wi
 .metadata-catalog-bar p,
 .metadata-search-row input { flex: 1; min-width: 0; }
 .metadata-catalog-bar button { flex-shrink: 0; }
+.metadata-catalog-bar .catalog-refresh-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  min-width: 30px;
+  padding: 5px;
+  margin-left: auto;
+}
+.metadata-catalog-bar .catalog-refresh-btn.hidden { display: none; }
+.metadata-catalog-bar .help-text { margin: 0; }
+.platform-download-panel .metadata-catalog-bar > :first-child { flex: 1; min-width: 0; }
 
 .metadata-media-fieldset {
   min-width: 0;

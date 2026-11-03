@@ -2234,6 +2234,7 @@ function createPlatformDetailsEditor() {
   let savedBoxSettings = null;
   let availableEmulators = [];
   const lbSearch = document.getElementById("btn-platform-lb-search");
+  const lbUpdate = document.getElementById("btn-platform-lb-update");
   const lbDownload = document.getElementById("btn-platform-lb-download");
   const lbMetadata = document.getElementById("btn-platform-lb-metadata");
   const lbSource = document.getElementById("platform-lb-source");
@@ -2265,7 +2266,7 @@ function createPlatformDetailsEditor() {
     if (token !== operation || closing) return;
     renderTypes(counts); typesReady = true;
   }
-  let current = null, images = [], busy = false, opening = false;
+  let current = null, images = [], busy = false, opening = false, catalog = null;
   let jobId = null, sessionPending = null, ending = null, downloading = false, closing = false, operation = 0;
   function controls(value) {
     busy = value;
@@ -2275,6 +2276,9 @@ function createPlatformDetailsEditor() {
     downloadAll.disabled = value || !typesReady || !quantities.size;
     lbDownload.disabled = value || !jobId || !lbSource.value || !typesReady || ![...quantities.values()].some(input => input.checked);
     lbMetadata.disabled = value || !jobId || !lbSource.value;
+    const personal = !!catalog?.source && catalog.source !== "OpenCabinet-BDD";
+    lbUpdate.disabled = value || !jobId || !catalog || personal;
+    lbUpdate.classList.toggle("hidden", personal);
     if (downloading && !closing) {
       document.getElementById("btn-close-platform-details").disabled = false;
       document.getElementById("btn-cancel-platform-details").disabled = false;
@@ -2338,26 +2342,29 @@ function createPlatformDetailsEditor() {
     };
     return channel;
   }
-  lbSearch.onclick = async () => {
+  async function findPlatformImages(refresh = false) {
     if (busy || !current) return;
     const token = ++operation; downloading = true; controls(true); lbMessage.textContent = globalThis.OpenCabinetI18n.t("msg.c61d0b32bc");
     try {
       if (!jobId) sessionPending = invoke("start_metadata_import", { platform: current.name }).then((session) => { jobId = session.job_id; return session; });
       const session = sessionPending ? await sessionPending : null;
       if (token !== operation) return;
-      const catalog = session?.catalog || await invoke("prepare_metadata_catalog", { jobId, refresh: false, onProgress: channel(token) });
+      const summary = !refresh && (catalog || session?.catalog) || await invoke("prepare_metadata_catalog", { jobId, refresh, onProgress: channel(token) });
       if (token !== operation) return;
-      const previous = lbSource.value || session?.source_platform || metadataPlatformSuggestion(current.name, catalog.platforms);
+      catalog = summary; rememberMetadataCatalog(summary);
+      const previous = lbSource.value || session?.source_platform || metadataPlatformSuggestion(current.name, summary.platforms);
       lbSource.replaceChildren();
       const empty = document.createElement("option"); empty.value = ""; empty.textContent = globalThis.OpenCabinetI18n.t("msg.81e799c128"); lbSource.appendChild(empty);
-      catalog.platforms.forEach((name) => { const option = document.createElement("option"); option.value = name; option.textContent = name; lbSource.appendChild(option); });
-      lbSource.value = catalog.platforms.includes(previous) ? previous : "";
+      summary.platforms.forEach((name) => { const option = document.createElement("option"); option.value = name; option.textContent = name; lbSource.appendChild(option); });
+      lbSource.value = summary.platforms.includes(previous) ? previous : "";
       await loadTypes(token);
       if (token !== operation) return;
       lbMessage.textContent = globalThis.OpenCabinetI18n.t("msg.c887525256");
     } catch (reason) { if (token === operation) lbMessage.textContent = globalThis.OpenCabinetI18n.t("msg.e78e2429a5", reason); }
     finally { if (token === operation) { downloading = false; lbProgress.classList.add("hidden"); controls(false); } }
-  };
+  }
+  lbSearch.onclick = () => findPlatformImages();
+  lbUpdate.onclick = () => { if (!lbUpdate.disabled) return findPlatformImages(true); };
   lbDownload.onclick = async () => {
     if (busy || !current || !jobId || !lbSource.value || !typesReady) return;
     const options = { selected_types: [...quantities].filter(([, input]) => input.checked).map(([key]) => key), download_all: !!downloadAll.checked };
@@ -2452,7 +2459,7 @@ function createPlatformDetailsEditor() {
         defaultEmulator.appendChild(option);
       });
       defaultEmulator.value = availableEmulators.some(emulator => emulator.id === details.default_emulator_id) ? String(details.default_emulator_id) : "";
-      current = platform; images = (details.images || []).map((image) => ({ ...image }));
+      current = platform; catalog = null; images = (details.images || []).map((image) => ({ ...image }));
       void getLibraryTools()?.renderFolders(document.getElementById('platform-folders-list'),platform,async(platform,folder)=>{if(busy)return;await close();await startSavedFolderScan(platform,folder);});
       const variableOverrides = details.variables || libraryPlatformVariables[platform.id] || {};
       variablesEditor?.set(window.OpenCabinetVariables.platformDefaults(platform.name, variableOverrides), variableOverrides);
@@ -2568,6 +2575,7 @@ function setupGameImageDownloader({ getGame, getImages, onImages, onBusy, onSour
   const result = document.getElementById("editor-artwork-result");
   const message = document.getElementById("editor-artwork-message");
   const search = document.getElementById("btn-editor-artwork-search");
+  const update = document.getElementById("btn-editor-artwork-update");
   const download = document.getElementById("btn-editor-artwork-download");
   const retry = document.getElementById("btn-editor-artwork-retry");
   const progress = document.getElementById("editor-artwork-progress");
@@ -2586,6 +2594,9 @@ function setupGameImageDownloader({ getGame, getImages, onImages, onBusy, onSour
     panel.querySelectorAll("input, select, button").forEach((element) => { element.disabled = busy; });
     download.disabled = busy || !typesReady || !quantities.size || !result.value || !platform.value || !jobId;
     retry.disabled = busy || !retryAvailable;
+    const personal = !!catalog?.source && catalog.source !== "OpenCabinet-BDD";
+    update.disabled = busy || !jobId || !catalog || personal;
+    update.classList.toggle("hidden", personal);
     onState({ visible: artworkOpened && !panel.classList.contains("hidden") && !downloadStarted, disabled: download.disabled || downloadStarted });
   }
   function setBusy(value) { busy = value; onBusy(value); controls(); }
@@ -2599,7 +2610,7 @@ function setupGameImageDownloader({ getGame, getImages, onImages, onBusy, onSour
   }
   function renderCatalog(summary) {
     const chosen = platform.value || savedPlatform || metadataPlatformSuggestion(getGame().platform, summary.platforms);
-    catalog = summary; platform.replaceChildren();
+    catalog = summary; rememberMetadataCatalog(summary); platform.replaceChildren();
     const placeholder = document.createElement("option"); placeholder.value = ""; placeholder.textContent = globalThis.OpenCabinetI18n.t("msg.d9de7e56bc");
     platform.appendChild(placeholder);
     summary.platforms.forEach((name) => {
@@ -2652,7 +2663,7 @@ function setupGameImageDownloader({ getGame, getImages, onImages, onBusy, onSour
       search.textContent = globalThis.OpenCabinetI18n.t("msg.b10bf0ae47");
     }
   }
-  async function find(current, useSavedId = false) {
+  async function find(current, useSavedId = false, previousSelection = null) {
     await ensureSession(current);
     if (!current()) return;
     if (!catalog) {
@@ -2674,7 +2685,7 @@ function setupGameImageDownloader({ getGame, getImages, onImages, onBusy, onSour
       option.textContent = metadataResultLabel(game);
       result.appendChild(option);
     });
-    const preferred = preferredMetadataMatch(games);
+    const preferred = games.some(game => game.id === previousSelection) ? previousSelection : preferredMetadataMatch(games);
     result.value = preferred === null ? "" : String(preferred);
     message.textContent = games.length ? globalThis.OpenCabinetI18n.t("msg.ac9b7a8684")
       : globalThis.OpenCabinetI18n.t("msg.fdb7f03e12");
@@ -2716,6 +2727,16 @@ function setupGameImageDownloader({ getGame, getImages, onImages, onBusy, onSour
     if (!report.available_count) query.focus();
   }
   search.addEventListener("click", () => perform((current) => find(current)));
+  update.addEventListener("click", () => {
+    if (update.disabled) return;
+    return perform(async current => {
+      const selectedId = candidates.find(game => String(game.id) === result.value)?.id ?? null;
+      const summary = await invoke("prepare_metadata_catalog", { jobId, refresh: true, onProgress: channel(current, "catalog") });
+      if (!current()) return;
+      renderCatalog(summary);
+      await find(current, false, selectedId);
+    });
+  });
   document.getElementById("game-artwork-form").addEventListener("submit", (event) => event.preventDefault());
   query.addEventListener("keydown", (event) => { if (event.key === "Enter") { event.preventDefault(); perform((current) => find(current)); } });
   platform.addEventListener("change", () => { clearResults(); controls(); message.textContent = globalThis.OpenCabinetI18n.t("msg.a2e7badbf4"); });
@@ -4123,10 +4144,17 @@ function updateImportSourceUI() {
   if (submit && !scanInProgress) { submit.textContent = store ? globalThis.OpenCabinetI18n.t("msg.649475b2ef", epic ? "Epic Games" : "Steam") : single ? globalThis.OpenCabinetI18n.t("msg.36f227205d") : globalThis.OpenCabinetI18n.t("msg.cd70ffa805"); submit.disabled = (!single && !store && pc) || !!inlineRetroarchSetup?.busy || savingInlineEmulator; }
 }
 
+function rememberMetadataCatalog(summary) {
+  metadataCatalogSummary = summary;
+  metadataCatalogWarmup = Promise.resolve(summary);
+}
 function warmImportCatalog() {
-  return metadataCatalogWarmup ||= invoke("preload_metadata_catalog").then(summary => {
-    metadataCatalogSummary = summary; return summary;
-  }).catch(() => { metadataCatalogWarmup = null; return null; });
+  if (metadataCatalogWarmup) return metadataCatalogWarmup;
+  const task = invoke("preload_metadata_catalog").then(summary => {
+    if (metadataCatalogWarmup === task) metadataCatalogSummary = summary;
+    return summary;
+  }).catch(() => { if (metadataCatalogWarmup === task) metadataCatalogWarmup = null; return null; });
+  metadataCatalogWarmup = task; return task;
 }
 
 function chooseImportMode(mode) {
@@ -5066,7 +5094,7 @@ function reviewMetadataImport(preview, platform, task, operation=null) {
       recoveryToggle.disabled = false;
       skip.disabled = busy || cancelling || preview.games.length === 0;
       search.disabled = busy || cancelling || pendingRows.size > 0 || !!report || preview.games.length === 0;
-      update.disabled = busy || cancelling || pendingRows.size > 0 || !!report || !jobId || !catalog || preview.games.length === 0;
+      update.disabled = busy || cancelling || pendingRows.size > 0 || !!report || !jobId || !catalog || preview.games.length === 0 || (!!catalog.source && catalog.source !== 'OpenCabinet-BDD');
       update.classList[!!catalog?.source&&catalog.source!=='OpenCabinet-BDD'?'add':'remove']('hidden');
       proceed.disabled = busy || cancelling || pendingRows.size > 0 || !jobId || preview.games.length === 0 || (!report && (!typesReady || matchedPlatform !== platformSelect.value));
       platformSelect.disabled ||= pendingRows.size > 0 || !jobId;
@@ -5131,7 +5159,7 @@ function reviewMetadataImport(preview, platform, task, operation=null) {
 
     function renderCatalog(summary) {
       catalog = summary;
-      metadataCatalogSummary = summary;
+      rememberMetadataCatalog(summary);
       const previous = platformSelect.value || savedPlatform || metadataPlatformSuggestion(platform, summary.platforms);
       platformSelect.replaceChildren();
       const placeholder = document.createElement("option"); placeholder.value = ""; placeholder.textContent = globalThis.OpenCabinetI18n.t("msg.d8609c9e5c");
@@ -5367,6 +5395,8 @@ function reviewMetadataImport(preview, platform, task, operation=null) {
     }).then(() => availabilityTask);
     update.onclick = () => perform(async () => {
       if (!await ensureSession()) return;
+      await availabilityTask;
+      if (!alive) return;
       const summary = await invoke("prepare_metadata_catalog", { jobId, refresh: true, onProgress: channel("catalog") });
       if (!alive) return;
       renderCatalog(summary); invalidateMatches();
