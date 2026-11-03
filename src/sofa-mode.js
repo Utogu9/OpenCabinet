@@ -34,7 +34,7 @@
           identity = null; held.clear(); direction = null; return [];
         }
         const pressed = index => !!pad.buttons?.[index]?.pressed || pad.buttons?.[index]?.value > 0.6;
-        const buttons = new Set([0, 1, 2, 3, 4, 5, 9].filter(pressed));
+        const buttons = new Set([0, 1, 2, 3, 4, 5, 9, 10, 11].filter(pressed));
         const x = Number(pad.axes?.[0]) || 0, y = Number(pad.axes?.[1]) || 0;
         const movement = pressed(14) ? 'left' : pressed(15) ? 'right' : pressed(12) ? 'up' : pressed(13) ? 'down'
           : Math.abs(x) > 0.55 && Math.abs(x) >= Math.abs(y) ? (x < 0 ? 'left' : 'right')
@@ -50,7 +50,7 @@
           actions.push(movement); nextRepeat = now + (movement !== direction ? 360 : 145);
         }
         direction = movement;
-        const names = { 0: 'accept', 1: 'back', 2: 'view', 3: 'turn', 4: 'previousPlatform', 5: 'nextPlatform', 9: 'exit' };
+        const names = { 0: 'accept', 1: 'back', 2: 'view', 3: 'turn', 4: 'previousPlatform', 5: 'nextPlatform', 9: 'exit', 10:'manual', 11:'openBox' };
         for (const button of buttons) if (!held.has(button)) actions.push(names[button]);
         held = buttons;
         return actions;
@@ -117,6 +117,31 @@
     let lastRailNavigation = -Infinity, railScrollTarget = null;
     const remembered = new Map(), banks = new Map(), platformNodes = new Map(), padInput = createPadInput();
     let cardNodes = new Map(), spareCards = [], activeBank = null;
+    let manualCard = null, boxMenu = null;
+    const manualReader = root.OpenCabinetManualReader?.create({ imageSource:options.imageSource,helpText:t('sofa.manualHelp'),
+      onClose:()=>{manualCard?._viewer?.returnManual?.();manualCard=null;} });
+    const readingManual=()=>manualReader?.isOpen&&topDialog().classList.contains('manual-reader-dialog');
+    function closeBoxMenu(focus=false) { boxMenu?.remove();boxMenu=null;if(focus)focusCurrent(); }
+    function closeManual() { manualReader?.close(false,false); }
+    function toggleBox() {
+      closeBoxMenu();const node=cardNodes.get(gameId);
+      if(!boxMode||!node?._viewer?.canOpen)return;
+      node._wantManual=!node._viewer.isOpen;node._interacted=true;node._viewer.toggleOpen();
+      if(node._viewer.isOpen&&!['ready','loading'].includes(node._manualState?.status))node._viewer.refreshManual?.();
+    }
+    function showBoxMenu(event,node) {
+      closeBoxMenu();if(!boxMode||!node)return;
+      if(Number(node.dataset.gameId)!==gameId)chooseGame(Number(node.dataset.gameId),false);
+      const menu=boxMenu=element('div','sofa-context-menu');menu.setAttribute('role','menu');
+      const open=button(t(node._viewer?.isOpen?'msg.59810c76a7':'msg.2d3b26a1ab'),toggleBox);
+      open.disabled=!node._viewer?.canOpen;open.setAttribute('role','menuitem');
+      const read=button(t('msg.297ba61d09'),()=>{closeBoxMenu();node._viewer?.readManual?.();});
+      read.disabled=!node._viewer?.isOpen||node._manualState?.status!=='ready';read.setAttribute('role','menuitem');
+      menu.append(open,read);dialog.append(menu);
+      menu.style.left=`${Math.max(8,Math.min(event.clientX,window.innerWidth-menu.offsetWidth-8))}px`;
+      menu.style.top=`${Math.max(8,Math.min(event.clientY,window.innerHeight-menu.offsetHeight-8))}px`;
+      (open.disabled?read:open).focus({preventScroll:true});
+    }
     try { boxMode = window.localStorage.getItem('opencabinet.sofaView') !== 'cover'; } catch {}
     const selected = () => games.find(game => game.id === gameId) || null;
     const coverPaths = game => {
@@ -237,7 +262,18 @@
           if (current() && cardNodes.get(id) === node && node._boxKey === key && node._renderedBoxKey !== key) {
             // A recycled Three.js viewer keeps its renderer, geometry, lights
             // and materials. update replaces the artwork for the incoming game.
-            node._viewer ||= options.createViewer(node._preview, { renderGroup: activeBank });
+            node._viewer ||= options.createViewer(node._preview, { renderGroup: activeBank,
+              loadManual:options.loadManual? (game,signal,onPreview)=>{
+                if(!active||Number(node.dataset.gameId)!==gameId||!node._wantManual)return Promise.resolve(null);
+                return options.loadManual(game,signal,onPreview);
+              }:null,
+              onManualState:state=>{node._manualState=state;},
+              onManualActivate:({manual,game,origin})=>{
+                if(!active||Number(node.dataset.gameId)!==gameId||!manualReader)return false;
+                const opened=manualReader.open(manual,{title:game.title,origin,focusTarget:node._preview});if(opened)manualCard=node;return opened;
+              },
+              onManualDeactivate:()=>{if(manualCard===node)closeManual();},
+            });
             node._viewer.update(options.sourceGame(item), options.images(item), settings);
             node._boxSettings = settings; node._settingsPlatform = item.platform;
             node._renderedBoxKey = key;
@@ -387,6 +423,7 @@
             node.append(node._preview);
           }
           node.dataset.gameId = item.id; node._abort = new AbortController();
+          node._wantManual=false;node._manualState={status:'none'};
           const art = node.querySelector('.sofa-card-art'); art.replaceChildren();
           node._selectArtwork = boxMode ? null : drawCover(art, item, node._abort.signal);
           node.setAttribute('aria-label', item.title); if (!node.isConnected) cards.append(node); cardNodes.set(item.id, node);
@@ -477,6 +514,7 @@
     }
     function chooseGame(id, focus = false) {
       if (!games.some(game => game.id === id)) return;
+      closeBoxMenu();closeManual();
       gameId = id; remembered.set(platformName, id); zone = 'games';
       renderCards(); refreshSelected(); if (focus) focusCurrent();
     }
@@ -486,6 +524,7 @@
     }
     function changePlatform(name, focus = true, reveal = true) {
       if (!platforms.some(platform => platform.name === name)) return;
+      closeBoxMenu();closeManual();
       zone = 'platforms';
       if (name === platformName) {
         if (reveal) showPosition(platformNodes.get(name));
@@ -514,6 +553,7 @@
       chooseGame((other.length ? other : games)[Math.floor(Math.random() * (other.length || games.length))].id, true);
     }
     function changeView() {
+      closeBoxMenu();closeManual();
       boxMode = !boxMode; view.textContent = t(boxMode ? 'sofa.coverView' : 'sofa.boxView');
       view.setAttribute('aria-pressed', String(boxMode));
       try { window.localStorage.setItem('opencabinet.sofaView', boxMode ? 'box' : 'cover'); } catch {}
@@ -617,7 +657,17 @@
     }
     function action(name) {
       if (!active) return;
+      if(readingManual()) {
+        if(['back','exit','manual'].includes(name))manualReader.close();
+        else if(['left','previousPlatform'].includes(name))manualReader.step(-1);
+        else if(['right','nextPlatform'].includes(name))manualReader.step(1);
+        else if(name==='up'||name==='down')manualReader.pan(0,name==='up'?-100:100);
+        return;
+      }
       const modal = topDialog(); if (modal !== dialog) { modalAction(modal, name); return; }
+      if(boxMenu){if(name==='back'){closeBoxMenu(true);return;}if(['left','right','up','down','accept'].includes(name)){modalAction(boxMenu,name);return;}}
+      if(name==='openBox'){toggleBox();return;}
+      if(name==='manual'){if(boxMode)cardNodes.get(gameId)?._viewer?.readManual?.();return;}
       if (name === 'exit') { close(); return; }
       if (name === 'back') { if (zone === 'games') { zone = 'platforms'; focusCurrent(); } else close(); return; }
       if (name === 'previousPlatform' || name === 'nextPlatform') { movePlatform(name === 'previousPlatform' ? -1 : 1); return; }
@@ -656,6 +706,16 @@
         const elapsed = lastPollTime === null ? 0 : Math.max(0, Math.min(50, now - lastPollTime));
         lastPollTime = now;
         for (const command of padInput.sample(pad, now)) action(command);
+        if(pad&&elapsed&&!busy&&watchedGame===null){
+          const value=index=>{const v=pad.buttons?.[index]?.value;return Number.isFinite(v)?Math.max(0,Math.min(1,v)):pad.buttons?.[index]?.pressed?1:0;};
+          const zoom=value(7)-value(6),delta=Math.abs(zoom)>.1?zoom*elapsed*.001:0;
+          if(readingManual()){
+            if(delta)manualReader.zoom(delta);
+            const stick=rightStick(pad);if(stick)manualReader.pan(stick[0]*elapsed*.7,stick[1]*elapsed*.7);
+          }else if(boxMode&&topDialog()===dialog&&!document.activeElement?.matches?.('input, textarea, select')&&delta){
+            const node=cardNodes.get(gameId);if(node?._viewer){node._interacted=true;node._viewer.zoom(delta);}
+          }
+        }
         rotateSelected(pad, elapsed);
       } else { padInput.reset(); lastPollTime = null; }
       // Menu input must not wait for the 3D renderer's next animation frame.
@@ -681,6 +741,7 @@
     }
     function close() {
       if (!active) return;
+      closeBoxMenu();closeManual();
       stopRailDrag(); railDragged = false;
       active = false; ++generation; ++selectionVersion;
       backgroundAbort?.abort(); backgroundAbort = null;
@@ -695,9 +756,13 @@
     }
     window.addEventListener('keydown', event => {
       if (!active || topDialog() !== dialog || event.defaultPrevented || event.isComposing) return;
+      if(boxMenu&&event.key==='Escape'){event.preventDefault();event.stopImmediatePropagation();closeBoxMenu(true);return;}
       if (event.key === 'Escape' || event.key === 'F11') { event.preventDefault(); event.stopImmediatePropagation(); close(); return; }
       if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'f') { event.preventDefault(); event.stopImmediatePropagation(); search.focus(); return; }
       if (event.target.matches?.('input, textarea, select')) return;
+      if(boxMode&&!event.ctrlKey&&!event.metaKey&&!event.altKey&&['o','m'].includes(event.key.toLowerCase())){
+        event.preventDefault();event.stopImmediatePropagation();if(!event.repeat)action(event.key.toLowerCase()==='o'?'openBox':'manual');return;
+      }
       const names = { ArrowLeft: 'left', ArrowRight: 'right', ArrowUp: 'up', ArrowDown: 'down', Enter: 'accept', ' ': 'accept' };
       const command = names[event.key];
       if (command) {
@@ -707,7 +772,8 @@
     }, true);
     dialog.addEventListener('cancel', event => { event.preventDefault(); close(); });
     dialog.addEventListener('close', () => { if (active && !dialog.open) close(); });
-    dialog.addEventListener('contextmenu', event => { event.preventDefault(); event.stopPropagation(); }, true);
+    dialog.addEventListener('contextmenu', event => { event.preventDefault();event.stopPropagation();showBoxMenu(event,event.target.closest?.('.sofa-card')); }, true);
+    dialog.addEventListener('pointerdown',event=>{if(boxMenu&&!boxMenu.contains(event.target))closeBoxMenu();},true);
     dialog.addEventListener('focusin', event => {
       if (event.target.closest('.sofa-platform')) zone = 'platforms';
       else if (event.target.closest('.sofa-card')) zone = 'games';

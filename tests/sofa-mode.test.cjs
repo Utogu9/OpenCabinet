@@ -48,6 +48,14 @@ test('Controller buttons are edge-triggered and held buttons are suppressed on o
   input.sample(pad(),210);assert.deepEqual(input.sample(pad([1,5]),220),['back','nextPlatform']);
 });
 
+test('Stick clicks open the box and read the manual once per press without consuming right-stick rotation',()=>{
+  const input=createPadInput();input.sample(pad(),0);
+  assert.deepEqual(input.sample(pad([11],[0,0,.8,.6]),20),['openBox']);
+  assert.deepEqual(input.sample(pad([11],[0,0,.8,.6]),40),[]);
+  input.sample(pad(),60);assert.deepEqual(input.sample(pad([10]),80),['manual']);
+  input.reset();assert.deepEqual(input.sample(pad([10,11]),100),[]);
+});
+
 test('Stick input has a dead zone and controlled repeat; directional pad and unmapped controllers are handled safely',()=>{
   const input=createPadInput();input.sample(pad(),0);
   assert.deepEqual(input.sample(pad([],[.3,-.4]),10),[]);

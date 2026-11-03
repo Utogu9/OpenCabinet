@@ -4,6 +4,11 @@
     "name": "English (United States)"
   },
   "messages": {
+    "sofa.manualHelp": "D-pad / LB/RB: Pages · R-stick: Pan · LT/RT: Zoom · B / L3: Return to the case",
+    "themes.mediaBox": "3D case only",
+    "themes.mediaPhotos": "Photos only",
+    "themes.mediaBoth": "3D case and Photos",
+    "themes.mediaMode": "Sidebar media",
     "platform.images.other": "Other images and alternate logos",
     "msg.aec7dea121": "{0} · {1} × {2} × {3} mm approx. · Drag to rotate",
     "msg.07b458a943": "Automatic (platform and region)",
@@ -1629,7 +1634,7 @@
     "sofa.emptyHelp": "Import games from Tools → Import games.",
     "sofa.position": "{0} of {1}",
     "sofa.keyboardHelp": "← → Navigate · ↑ ↓ Platforms/games · Enter Play · Esc Exit",
-    "sofa.padHelp": "D-pad / L-stick Navigate · R-stick Rotate · A Choose · B Back · LB/RB Platform · X View · Y Front/back · Menu Exit",
+    "sofa.padHelp": "D-pad / L-stick Navigate · R-stick Rotate · R3 Open/close · L3 Manual · LT/RT Zoom · A Choose · B Back · LB/RB Platform · X View · Y Front/back · Menu Exit",
     "sofa.padConnected": "Controller connected",
     "sofa.padConnect": "Press a controller button to connect",
     "manuals.download": "Download manuals",

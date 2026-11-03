@@ -63,6 +63,15 @@ function app({ open, draw, animated = false, pageCount = 5, nativeWindow, manual
 const pages = u => [u.left.dataset.page, u.right.dataset.page];
 const finishTurns = async a => { a.animations.filter(x => x.options.duration === 650).forEach(x => x.finish()); await turn(); };
 
+test('External reader controls turn pages, zoom, pan and return without affecting a later session',async()=>{
+  const a=app();a.openReader();await turn();a.reader.step(1);await turn();
+  assert.equal(a.ui().input.value,'2');
+  const width=parseFloat(a.ui().book.style.width);a.reader.zoom(.5);assert.ok(parseFloat(a.ui().book.style.width)>width);
+  const top=a.ui().viewport.scrollTop;a.reader.pan(20,30);assert.equal(a.ui().viewport.scrollTop,top+30);
+  a.reader.close(false);assert.equal(a.closed(),1);assert.equal(a.reader.isOpen,false);
+  a.reader.step(1);a.reader.zoom(1);a.reader.pan(1,1);assert.equal(a.reader.isOpen,false);
+});
+
 test('Reading a cropped cover keeps the original PDF proportions and does not stretch its half-page preview', async () => {
   let ready;const pending = new Promise(resolve => { ready=resolve; });
   const a = app({ manual:{ splitCover:true,aspectRatio:2/3,sourceAspectRatio:4/3 },

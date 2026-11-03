@@ -1102,13 +1102,19 @@ function createDetailsGameBox() {
       openButton.setAttribute("aria-pressed", String(state.open));
     },
   });
-  let gameId = null, gameTitle = "", settingsPlatform = null, boxSettings = null, request = 0;
+  let gameId = null, gameTitle = "", settingsPlatform = null, boxSettings = null, request = 0, currentGame = null, currentImages = [];
+  function updateViewer() { if(currentGame&&!panel.classList.contains('hidden'))viewer.update(currentGame,currentImages,boxSettings); }
   function mode(box) {
+    const allowed=document.documentElement?.dataset?.themeMedia||'both';
+    box=allowed==='photos'?false:allowed==='box'?true:box;
+    boxButton.classList.toggle('hidden',allowed==='photos');photosButton.classList.toggle('hidden',allowed==='box');
+    boxButton.parentElement?.classList.toggle('hidden',allowed!=='both');
     if (!box) { manualReader?.close(false, false); fullscreen.close(); }
     panel.classList.toggle("hidden", !box);
     photos.classList.toggle("hidden", box);
     boxButton.setAttribute("aria-pressed", String(box));
     photosButton.setAttribute("aria-pressed", String(!box));
+    if(box){viewer.resume?.();updateViewer();}else viewer.suspend?.();
     if (!box) {
       const thumbnails = document.getElementById("gallery-thumbnails");
       revealGalleryThumbnail(thumbnails, thumbnails.querySelector?.('[aria-current="true"]'));
@@ -1116,6 +1122,7 @@ function createDetailsGameBox() {
   }
   boxButton.addEventListener("click", () => mode(true));
   photosButton.addEventListener("click", () => mode(false));
+  window.addEventListener('opencabinet:themechange',()=>{if(gameId!==null)mode(boxButton.getAttribute('aria-pressed')==='true');});
   const expand = () => { if (gameId !== null) fullscreen.open(gameTitle); };
   stage.addEventListener("dblclick", event => { if (!event.target?.closest?.('[data-manual-booklet="true"]')) expand(); });
   stage.addEventListener("keydown", (event) => {
@@ -1132,21 +1139,23 @@ function createDetailsGameBox() {
   return {
     update(game, images) {
       const token = ++request;
-      if (game.id !== gameId) { fullscreen.close(); mode(true); gameId = game.id; manualPath = null; manualPaths = []; manualState = { status: "none" }; }
+      const changed=game.id!==gameId;
+      if (changed) { fullscreen.close(); gameId = game.id; manualPath = null; manualPaths = []; manualState = { status: "none" }; }
       manualEligible = !!window.OpenCabinetManualPDF?.supportsGame(game);
       gameTitle = game.title;
       document.getElementById("fullscreen-box-title").textContent = globalThis.OpenCabinetI18n.t("box.viewer.title", gameTitle);
       if (settingsPlatform !== game.platform) { settingsPlatform = game.platform; boxSettings = null; }
-      viewer.update(game, images, boxSettings);
+      currentGame=game;currentImages=images;
+      if(changed)mode(true);else updateViewer();
       const platform = allPlatforms.find(item => item.name.toLowerCase() === game.platform.toLowerCase());
       if (platform) getPlatformDetails(platform).then(details => {
         if (token !== request || gameId !== game.id) return;
         boxSettings = details.box_3d || null;
-        viewer.update(game, images, boxSettings);
+        updateViewer();
       }).catch(error => console.error("No se pudo cargar la configuración de la caja 3D:", error));
     },
     refreshManuals() { if(gameId!==null)manualCoverCache?.refresh(gameId);manualPath=null;manualPaths=[];viewer.refreshManual?.(); },
-    clear() { ++request; fullscreen.close(); gameId = null; manualPath = null; manualPaths = []; manualEligible = false; manualState = { status: "none" }; settingsPlatform = null; boxSettings = null; viewer.clear(); manualUI(); },
+    clear() { ++request; fullscreen.close(); gameId = null; currentGame=null;currentImages=[]; manualPath = null; manualPaths = []; manualEligible = false; manualState = { status: "none" }; settingsPlatform = null; boxSettings = null; viewer.clear(); manualUI(); },
   };
 }
 
@@ -5911,6 +5920,16 @@ function setupSofaMode() {
       return window.OpenCabinetOrder?.apply(sorted, allGames) || sorted;
     },
     platformDetails: getPlatformDetails,
+    async loadManual(game,signal,onPreview) {
+      if(!window.OpenCabinetManualPDF?.supportsGame(game))return null;
+      const paths=await invoke('get_game_manuals',{id:game.id});
+      if(signal.aborted)throw new DOMException('Aborted','AbortError');
+      const path=paths[0];if(!path)return null;
+      let modes={};try{modes=JSON.parse(window.localStorage.getItem('opencabinet.manualCoverModes')||'{}');}catch{}
+      const coverMode=modes?.[path]||'auto';
+      if(isJewelManualGame(game)&&manualCoverCache)return manualCoverCache.render(path,{imageSource,signal,coverMode,onPreview});
+      return window.OpenCabinetManualPDF.render(path,{imageSource,signal,platform:game.platform,coverMode});
+    },
     boxSettings: async game => {
       const platform = allPlatforms.find(item => item.name === game.platform);
       return platform ? (await getPlatformDetails(platform)).box_3d || null : null;

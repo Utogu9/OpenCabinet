@@ -21,6 +21,8 @@ Available settings:
 - Order and visibility of logo, title/platform, media, launch actions, main details,
   information and description.
 - Visibility of individual game and platform metadata fields.
+- Sidebar media: both viewers, Photos only, or 3D case only. A single-viewer
+  theme hides the view switch; Photos-only themes do not prepare a hidden 3D case.
 
 The details divider continues working on either side of the game list. Dragging
 it adjusts the current view; the theme's saved width is edited in its settings.
@@ -42,6 +44,10 @@ each supported slot exactly once; sections can be hidden with `visible: false`.
 `hiddenFields` lists the metadata fields to omit. Unknown properties, unsupported
 versions, duplicate slots and invalid dimensions are rejected. Themes cannot
 include custom CSS, scripts or external resources.
+
+The optional `layout.mediaMode` accepts `both`, `photos` or `box`. Older theme
+files default to `both`. Platform details continue displaying photos because
+platforms do not have a game case.
 
 Native saves use a temporary file and atomic replacement. Startup reconciles an
 interrupted write without replacing an already valid library with partial data.

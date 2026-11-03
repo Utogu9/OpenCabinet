@@ -47,6 +47,7 @@ function mediaApp(options = {}) {
     get previousElementSibling() { return this.parentNode?.children[this.parentNode.children.indexOf(this) - 1]; }
     querySelector(selector) { return this.querySelectorAll(selector)[0] || null; }
     setAttribute(name, value) { this.attributes[name] = value; }
+    getAttribute(name) { return this.attributes[name] ?? null; }
     addEventListener(name, handler) { this.handlers[name] = handler; }
     focus(options) { document.activeElement = this; this.focusOptions = options; }
     showModal() { this.open = true; }
@@ -80,7 +81,7 @@ function mediaApp(options = {}) {
     }
     return elements.get(id);
   };
-  const documentHandlers = {};
+  const documentHandlers = {}, windowHandlers = {};
   document = { getElementById: get, createElement: (tag) => new Element(tag),
     documentElement: new Element("html"), fullscreenElement: null,
     addEventListener: (name, handler) => { documentHandlers[name] = handler; },
@@ -169,7 +170,7 @@ function mediaApp(options = {}) {
         statisticsListener = callback;
         return () => {};
       } } },
-      addEventListener() {},
+      addEventListener(name,handler) { (windowHandlers[name] ||= []).push(handler); },
     },
     console,
   });
@@ -195,6 +196,7 @@ function mediaApp(options = {}) {
   const evaluate = (code) => vm.runInContext(code, context);
   const rowFor = (filename) => get("game-image-list").children.find((row) => row.children[1].children[0].textContent === filename);
   return { get, calls, channels, evaluate, rowFor, document, boxCalls, boxConfig: () => boxConfig,
+    emitWindow:name=>(windowHandlers[name]||[]).forEach(handler=>handler({type:name})),
     nativeIdle: () => context.OpenCabinetWindowFullscreen.forWindow(options.nativeWindow)?.idle() || Promise.resolve(),
     publishStatistics: (payload) => statisticsListener({ payload }),
     open: () => get("btn-edit-game").trigger("click"),
@@ -204,6 +206,22 @@ function mediaApp(options = {}) {
     quantity: (kind) => get("editor-artwork-options").children.find((row) => row.children[1].name === kind)?.children[1],
   };
 }
+
+test('Theme media restrictions apply live, skip disabled 3D models and allow Photos when viewing consoles',async()=>{
+  const app=mediaApp({box3D:true});app.document.documentElement.dataset.themeMedia='photos';
+  app.evaluate('renderGameMedia(allGames[0])');
+  assert.equal(app.boxCalls.filter(call=>call[0]==='update').length,0);
+  assert.equal(app.get('gallery-photos').classList.contains('hidden'),false);
+  assert.equal(app.get('btn-media-box').classList.contains('hidden'),true);
+  app.document.documentElement.dataset.themeMedia='box';app.emitWindow('opencabinet:themechange');
+  assert.equal(app.get('game-box-panel').classList.contains('hidden'),false);
+  assert.equal(app.get('gallery-photos').classList.contains('hidden'),true);
+  await app.get('btn-media-photos').trigger('click');assert.equal(app.get('gallery-photos').classList.contains('hidden'),true);
+  app.document.documentElement.dataset.themeMedia='both';app.emitWindow('opencabinet:themechange');
+  await app.get('btn-media-photos').trigger('click');assert.equal(app.get('gallery-photos').classList.contains('hidden'),false);
+  app.document.documentElement.dataset.themeMedia='box';app.evaluate('renderGameMedia({...allGames[0],is_platform:true})');
+  assert.equal(app.get('gallery-photos').classList.contains('hidden'),false);
+});
 
 test("Manual downloads support PDF and CBZ drafts, a manual-only catalog and the editor footer", async () => {
   const paths = ['C:/temp/manual.pdf', 'C:/temp/manual2.cbz'];

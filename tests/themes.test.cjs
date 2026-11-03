@@ -39,6 +39,19 @@ test('Unsupported versions, executable colors, invalid dimensions and duplicate 
   const theme=JSON.parse(JSON.stringify(api.builtins[0]));theme.id='user-example';
   assert.throws(()=>api.validateLibrary({format:'OpenCabinet Themes',version:1,active:theme.id,themes:[theme,theme]}));
 });
+
+test('Sidebar media choices round-trip and older themes retain both viewers',()=>{
+  const e=environment();
+  for(const mode of ['photos','box','both']){
+    const theme=JSON.parse(JSON.stringify(e.api.builtins[0]));theme.layout.mediaMode=mode;
+    const checked=e.api.validate(theme);e.api.apply(checked,{document:e.document,window:e.window});
+    assert.equal(e.root.dataset.themeMedia,mode);
+    assert.equal(e.api.validate(JSON.parse(JSON.stringify(checked))).layout.mediaMode,mode);
+  }
+  const old=JSON.parse(JSON.stringify(e.api.builtins[0]));delete old.layout.mediaMode;
+  e.api.apply(old,{document:e.document,window:e.window});assert.equal(e.root.dataset.themeMedia,'both');
+  old.layout.mediaMode='anything';assert.throws(()=>e.api.validate(old));
+});
 test('Applying layouts moves existing panels, preserves their focus and toggles fields independently',()=>{
   const e=environment(),theme=JSON.parse(JSON.stringify(e.api.builtins[0]));
   theme.layout.panels=['details','catalog','library'];theme.layout.hiddenFields=['genre'];theme.layout.sections[0].visible=false;

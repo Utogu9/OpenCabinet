@@ -4,6 +4,11 @@
     "name": "Español (Argentina)"
   },
   "messages": {
+    "sofa.manualHelp": "Cruceta / LB/RB: Páginas · Stick derecho: Desplazar · LT/RT: Zoom · B / L3: Volver a la caja",
+    "themes.mediaBox": "Solo Caja 3D",
+    "themes.mediaPhotos": "Solo Fotos",
+    "themes.mediaBoth": "Caja 3D y Fotos",
+    "themes.mediaMode": "Visores del lateral",
     "platform.images.other": "Otros y logos alternativos",
     "msg.aec7dea121": "{0} · {1} × {2} × {3} mm aprox. · Arrastra para girar",
     "msg.07b458a943": "Automático (consola y región)",
@@ -1629,7 +1634,7 @@
     "sofa.emptyHelp": "Importá juegos desde Herramientas → Importar juegos.",
     "sofa.position": "{0} de {1}",
     "sofa.keyboardHelp": "← → Navegar · ↑ ↓ Consolas/juegos · Enter Jugar · Esc Salir",
-    "sofa.padHelp": "Cruceta / stick izq. Navegar · Stick der. Girar · A Elegir · B Volver · LB/RB Consola · X Vista · Y Frente/dorso · Menu Salir",
+    "sofa.padHelp": "Cruceta / Stick izq. Navegar · Stick der. Girar · R3 Abrir/cerrar · L3 Manual · LT/RT Zoom · A Elegir · B Volver · LB/RB Consola · X Vista · Y Frente/detrás · Menú Salir",
     "sofa.padConnected": "Mando conectado",
     "sofa.padConnect": "Presioná un botón del mando para conectarlo",
     "manuals.download": "Descargar manuales",

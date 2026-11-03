@@ -80,6 +80,9 @@ the selected game; farther neighbors are grouped more tightly.
 | Previous/next platform | Select a platform | LB/RB |
 | Switch cover/3D preview | On-screen view button | X / left face button |
 | Rotate the selected 3D box | Drag with the mouse | Right stick |
+| Open/close the selected case | Right-click menu or O | R3 / right-stick click |
+| Read the manual in an open case | Click the booklet or M | L3 / left-stick click |
+| Zoom the case or manual | Mouse wheel | RT/R2 zoom in; LT/L2 zoom out |
 | Front/back of the 3D box | Home resets the front | Y / top face button |
 | Back to platforms, then exit | Esc exits directly | B / right face button |
 | Exit couch mode | Esc or F11 | Menu/Start |
@@ -92,6 +95,11 @@ The right stick rotates only the selected box in 3D view, without pressing R3.
 Both axes respond proportionally to the stick, with a dead zone to avoid drift.
 Rotation pauses in dialogs, while searching, during launches and when the app
 loses focus. Existing axis locks apply, and changing games resets the rotation.
+
+The manual reader uses left/right or LB/RB to turn pages and the right stick to
+pan an enlarged booklet. B or L3 returns to the open case; Escape and the return
+button also work. Manuals load when opening the selected case, not for every
+neighboring model. Both legacy and Three.js cases use the same reader.
 
 Playing uses the same region, version and disc selectors as the desktop library.
 Their buttons can also be navigated with the controller. Missing files are checked

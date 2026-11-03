@@ -88,6 +88,11 @@ dialog.sofa-mode[open] { display: grid; grid-template-rows: auto minmax(170px, 1
 .sofa-platform-count { color: var(--text-muted); font-size: 10px; }
 .sofa-footer { display: flex; align-items: center; justify-content: space-between; gap: 15px; padding: 10px 38px 14px; font-size: 12px; color: var(--text-muted); background: var(--sidebar-bg); }
 .sofa-pad-status { white-space: nowrap; opacity: .7; }
+.sofa-context-menu { position: absolute; z-index: 100; min-width: 190px; max-width: calc(100vw - 16px); padding: 5px; border: 1px solid var(--border-color); border-radius: 8px; background: var(--modal-bg); box-shadow: 0 8px 24px #0006; }
+.sofa-context-menu button { display: block; width: 100%; padding: 9px 12px; text-align: left; border: 0; border-radius: 4px; background: transparent; }
+.sofa-context-menu button:hover, .sofa-context-menu button:focus-visible { background: var(--card-hover-bg); }
+.sofa-context-menu button:disabled { opacity: .4; cursor: default; }
+.sofa-manual-help { flex-basis: 100%; text-align: center; color: var(--text-muted); font-size: 12px; }
 @media (max-height: 700px) {
   .sofa-header { padding-top: 13px; }.sofa-details { margin-bottom: 8px; }.sofa-platforms { padding-top: 7px; padding-bottom: 4px; }
   .sofa-mode .sofa-platform { height: 86px; }.sofa-platform-art { height: 35px; }.sofa-footer { padding-top: 6px; padding-bottom: 8px; }

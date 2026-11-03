@@ -79,7 +79,10 @@ pub struct Layout {
     radius: u32,
     sections: Vec<Section>,
     hidden_fields: Vec<String>,
+    #[serde(default = "default_media_mode")]
+    media_mode: String,
 }
+fn default_media_mode() -> String { "both".into() }
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Theme {
@@ -140,6 +143,7 @@ fn validate(theme: &Theme) -> Result<()> {
         || !(100..=320).contains(&l.cover_size)
         || l.gap > 48
         || l.radius > 24
+        || !["both", "photos", "box"].contains(&l.media_mode.as_str())
         || !permutation(
             &l.sections.iter().map(|s| s.id.clone()).collect::<Vec<_>>(),
             SECTIONS,
@@ -301,6 +305,7 @@ mod tests {
                     })
                     .collect(),
                 hidden_fields: vec!["genre".into()],
+                media_mode: default_media_mode(),
             },
         }
     }
@@ -309,6 +314,12 @@ mod tests {
         let text = include_str!("../../docs/example.opencabinet-theme.json");
         let example: Theme = serde_json::from_str(text).unwrap();
         validate(&example).unwrap();
+        assert_eq!(example.layout.media_mode,"both");
+        for mode in ["both","photos","box"] {
+            let mut updated=example.clone();updated.layout.media_mode=mode.into();validate(&updated).unwrap();
+            let saved=serde_json::to_string(&updated).unwrap();let loaded:Theme=serde_json::from_str(&saved).unwrap();
+            assert_eq!(loaded.layout.media_mode,mode);
+        }
         let mut value: serde_json::Value = serde_json::from_str(text).unwrap();
         value["css"] = "body { display: none; }".into();
         assert!(serde_json::from_value::<Theme>(value).is_err());
@@ -328,6 +339,7 @@ mod tests {
             },
             |t: &mut Theme| t.layout.details_width = 99999,
             |t: &mut Theme| t.layout.hidden_fields.push("script".into()),
+            |t: &mut Theme| t.layout.media_mode = "unknown".into(),
         ] {
             let mut changed = original.clone();
             mutate(&mut changed);

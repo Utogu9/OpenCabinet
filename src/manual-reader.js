@@ -5,7 +5,7 @@
   const maxSpread = count => Math.floor(count / 2);
   const offset = (spread, count) => spread === 0 ? '-25%' : spread * 2 === count ? '25%' : '0%';
   const readingLayouts=['auto','booklet','nested','spreads','original'];
-  function create({ imageSource = value => value, openPDF = (...args) => globalThis.OpenCabinetManualPDF.open(...args), onClose = () => {} } = {}) {
+  function create({ imageSource = value => value, openPDF = (...args) => globalThis.OpenCabinetManualPDF.open(...args), onClose = () => {}, helpText = '' } = {}) {
     let active = null;
     const readingPreferenceKey = 'opencabinet.manualReadingModes';
     let readingModes = {};
@@ -242,6 +242,9 @@
     }
     const api = {
       get isOpen() { return !!active; },
+      step(delta) { if(active&&!active.closing)step(active,delta); },
+      zoom(delta) { if(active&&!active.closing)zoom(active,active.zoom+delta); },
+      pan(x,y) { if(active&&!active.closing){active.viewport.scrollLeft+=x;active.viewport.scrollTop+=y;} },
       open(manual, { title = globalThis.OpenCabinetI18n.t("msg.b0b9fe24ff"), origin = null, focusTarget = null, readingMode = readingModes[manual.path] } = {}) {
         close(false, false);
         if (!readingLayouts.includes(readingMode)) readingMode = 'auto';
@@ -288,6 +291,7 @@
         const zoomIn = button(globalThis.OpenCabinetI18n.t("msg.5a7eaf7830"), '+', () => zoom(s, s.zoom + .25));
         const fitButton = button(globalThis.OpenCabinetI18n.t("msg.cc6bc8265b"), globalThis.OpenCabinetI18n.t("msg.1f90f84c2f"), () => zoom(s, 1));
         nav.append(previous, label, next, zoomOut, fitButton, zoomIn);
+        if(helpText)nav.append(el('small',helpText,'sofa-manual-help'));
         const status = el('div', null, 'manual-reader-status'), error = el('p'); error.setAttribute('role', 'alert');
         const retry = button(globalThis.OpenCabinetI18n.t("msg.8b7a2fdca0"), globalThis.OpenCabinetI18n.t("msg.a9254c5f81"), () => s.doc ? display(s) : load(s)); retry.hidden = true; status.append(error, retry);
         dialog.append(header, viewport, status, nav);
