@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 
-export const preparedModels=['ps2','ps3','ps4','xbox','psp','genesis','wii','wiiu','gamecube','gamecube-japan','ds','ds-pal','3ds','longbox','cardboard','dreamcast'];
+export const preparedModels=['dvd','ps2','ps3','ps4','xbox','psp','genesis','wii','wiiu','gamecube','gamecube-japan','ds','ds-pal','3ds','longbox','cardboard','dreamcast'];
 
 // Validate the distributed artifact, without a browser or any authoring source.
 export function readModel(file,model) {

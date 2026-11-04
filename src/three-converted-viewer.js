@@ -2,6 +2,7 @@ import { createModelViewer } from './three-gltf-box-viewer.js';
 import { loadPreparedCase } from './three-prepared-case.js';
 
 const families={
+  dvd:{model:'dvd',platform:'PC'},
   genesis:{model:'genesis',platform:'Sega Mega Drive / Genesis'},
   wii:{model:'wii',platform:'Nintendo Wii'},
   wiiu:{model:'wiiu',platform:'Nintendo Wii U'},

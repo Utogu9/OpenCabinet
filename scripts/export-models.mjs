@@ -9,6 +9,7 @@ const root=path.resolve(fileURLToPath(new URL('../',import.meta.url)));
 const require=createRequire(import.meta.url);
 const {chromium}=require('playwright-core');
 const cases=[
+  ['dvd','PC'],
   ['ps2','Sony PlayStation 2'],['ps3','Sony PlayStation 3'],['ps4','Sony PlayStation 4'],
   ['xbox','Microsoft Xbox'],['psp','Sony PSP'],['genesis','Sega Mega Drive / Genesis'],
   ['wii','Nintendo Wii'],['wiiu','Nintendo Wii U'],['gamecube','Nintendo GameCube'],

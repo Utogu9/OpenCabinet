@@ -7,6 +7,9 @@ The GLBs include geometry, UVs, articulated groups, physical dimensions and
 opening keyframes. Shared formats reuse one model: PS4/PS5, Xbox/Xbox 360,
 Sega CD/Saturn, Dreamcast/PlayStation and the cardboard formats.
 
+Generic DVD keep cases (including PC/Windows games) use `models/dvd/case.glb`,
+with the same matte dark-gray plastic as PS2 and no console-specific fittings.
+
 Each GLB is fetched and parsed once per application session. Viewers receive
 private geometry, material and animation clones so retiring a viewer or
 changing UVs cannot affect another one. Artwork, optical shaders, custom colors

@@ -29,7 +29,7 @@ test('Couch mode carousels, controller selectors, launch return and cleanup work
     // Only the router's test profile changes; the legacy builder still uses PSP.
     const createRouter=OpenCabinetThreeBoxes.createRouter;
     OpenCabinetThreeBoxes.createRouter=(host,options,createLegacy,profileFor,resolveSettings)=>createRouter(host,options,createLegacy,(...args)=>{
-      const profile=profileFor(...args);return profile.id==='psp'?{...profile,id:'dvd',variant:'dvd'}:profile;
+      const profile=profileFor(...args);return profile.id==='psp'?{...profile,id:'custom',variant:'custom'}:profile;
     },resolveSettings);
     window.OpenCabinetI18n={t:(key,...values)=>(messages[key]||key).replace(/\{(\d+)\}/g,(token,index)=>values[index]??token)};
     const image=(text,color)=>'data:image/svg+xml,'+encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="480" height="680"><rect width="480" height="680" fill="${color}"/><path d="M0 140 480 430V680H0Z" fill="#0003"/><text x="35" y="75" font-family="sans-serif" font-size="22" fill="white">OpenCabinet</text><text x="35" y="320" font-family="sans-serif" font-size="34" fill="white">${text}</text></svg>`);

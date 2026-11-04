@@ -12,6 +12,7 @@ test('Sega and Nintendo converted cases preserve media, molding, logos, manuals 
   });await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));t.after(()=>new Promise(resolve=>{server.closeAllConnections();server.close(resolve);}));
   const browser=await chromium.launch({executablePath:executable,headless:true});t.after(()=>browser.close());
   const cases=[
+    ['PC','Game.exe','dvd','343537',false,120,null,14],
     ['Sega Mega Drive / Genesis','Game (USA).md','genesis','343537',false,0,'sega',25],
     ['Nintendo Wii','Game.iso','wii','d5d7d9',false,120,'wii',14],
     ['Nintendo Wii U','Game.wud','wiiu','1686ac',false,120,'nintendo',14],
@@ -51,7 +52,17 @@ test('Sega and Nintendo converted cases preserve media, molding, logos, manuals 
       assert.equal(await page.evaluate(()=>debug.materials.has('UMD Label')),false,model+' has a cartridge, not a disc');
       await page.waitForFunction(()=>debug.materials.get('Cartridge Cover')?.map?.image.width===60);
     }
-    await page.waitForFunction(key=>debug.materials.get('Console Mark '+key)?.map.version>=3,brand);
+    if(brand)await page.waitForFunction(key=>debug.materials.get('Console Mark '+key)?.map.version>=3,brand);
+    if(model==='dvd'){
+      const finish=await page.evaluate(async()=>{
+        const {loadPreparedCase}=await import('/src/three-prepared-case.js'),ps2=await loadPreparedCase('ps2');
+        const reference=ps2.materials.find(material=>material.name==='Case Plastic'),actual=debug.materials.get('Case Plastic');
+        const keys=['roughness','metalness','specularIntensity','envMapIntensity','clearcoat'];
+        const same=reference.color.equals(actual.color)&&keys.every(key=>reference[key]===actual[key]);ps2.dispose();
+        return {same,hasConsoleMark:debug.materials.has('Memory Card Mark')};
+      });
+      assert.deepEqual(finish,{same:true,hasConsoleMark:false},'Generic DVDs use the PS2 matte material without PlayStation fittings');
+    }
     if(model==='genesis'){
       assert.equal(await page.evaluate(()=>debug.materials.get('Cartridge Plastic').color.getHexString()),'202020','Genesis cartridge uses neutral black plastic');
       assert.equal(await page.evaluate(()=>!!debug.model.getObjectByName('Booklet Retainer Feet')),false,'Genesis keeps its original small tabs');

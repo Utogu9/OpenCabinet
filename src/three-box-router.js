@@ -9,7 +9,7 @@
       ? import('./three-ps3-viewer.js') : model==='ps4'
       ? import('./three-ps4-viewer.js') : model==='xbox'
       ? import('./three-xbox-viewer.js') : model==='cardboard'
-      ? import('./three-cardboard-viewer.js') : ['genesis','wii','wiiu','gamecube','gamecube-japan','ds','ds-pal','3ds','longbox'].includes(model)
+      ? import('./three-cardboard-viewer.js') : ['dvd','genesis','wii','wiiu','gamecube','gamecube-japan','ds','ds-pal','3ds','longbox'].includes(model)
       ? import('./three-converted-viewer.js') : import('./three-box-viewer.js'))
       .catch(error=>{moduleTasks.delete(model);throw error;}));
     return moduleTasks.get(model);
@@ -30,6 +30,7 @@
         : profile.id==='bluray'&&profile.variant==='ps4' ? 'ps4'
         : profile.id==='dvd'&&['xbox','xbox360'].includes(profile.variant) ? 'xbox'
         : profile.id==='dvd'&&['wii','wiiu','gamecube'].includes(profile.variant) ? profile.variant
+        : profile.id==='dvd'&&profile.variant==='dvd' ? 'dvd'
         : profile.id==='psp' ? 'psp'
         : ({genesis:'genesis',gameCubeJapan:'gamecube-japan',ds:'ds',dsPal:'ds-pal',threeDs:'3ds',longbox:'longbox'})[profile.id]
           || (profile.id==='switch' && globalThis.OpenCabinetLocalModels?.switch ? 'switch' : null);
