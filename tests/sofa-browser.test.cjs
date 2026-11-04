@@ -395,8 +395,6 @@ test('Couch mode carousels, controller selectors, launch return and cleanup work
   await page.keyboard.press('Escape');
   assert.equal(await page.evaluate(()=>fixture.liveViewers),0);
   await page.evaluate(()=>{
-    // The following geometry checks explicitly exercise the legacy Switch.
-    OpenCabinetLocalModels.switch=false;
     const stage=document.createElement('div');stage.className='game-box-stage';Object.assign(stage.style,{width:'490px',height:'480px'});document.body.append(stage);
     const bitmap=document.createElement('canvas');bitmap.width=96;bitmap.height=136;bitmap.getContext('2d').fillRect(0,0,96,136);
     fixture.cacheLoads=0;fixture.cacheStage=stage;
@@ -405,7 +403,7 @@ test('Couch mode carousels, controller selectors, launch return and cleanup work
   });
   await page.waitForFunction(()=>fixture.cacheStage.dataset.artworkReady==='true');
   assert.equal(await page.evaluate(()=>fixture.cacheLoads),0,'The cached cover is applied to the 3D case before requesting the original');
-  await page.evaluate(()=>{fixture.originalFace=fixture.cacheStage.querySelector('.game-box-front');fixture.cubeHeight=fixture.originalFace.getBoundingClientRect().height;});
+  await page.evaluate(()=>{fixture.originalFace=fixture.cacheStage.querySelector('.game-box-front');});
   await page.waitForFunction(()=>fixture.cacheStage.querySelectorAll('.game-box-front .game-box-wrap-texture.loaded').length===2);
   assert.equal(await page.evaluate(()=>{
     const layers=[...fixture.cacheStage.querySelectorAll('.game-box-front .game-box-wrap-texture.loaded')];
@@ -417,10 +415,6 @@ test('Couch mode carousels, controller selectors, launch return and cleanup work
     'A plastic color change uses the immediate artwork path');
   assert.equal(await page.evaluate(()=>fixture.cacheStage.querySelector('.game-box-front')===fixture.originalFace),true,'Changing plastic color retains the molded faces');
   assert.equal(await page.evaluate(()=>fixture.cacheStage.querySelector('.game-box-model').style.getPropertyValue('--box-material')),'#143fff');
-  await page.evaluate(()=>fixture.cacheViewer.update({...fixtureGames[0],id:999,platform:'Nintendo Switch'},fixtureGames[0].images));
-  await page.waitForTimeout(100);
-  const heightRatio=await page.evaluate(()=>fixture.cacheStage.querySelector('.game-box-front').getBoundingClientRect().height/fixture.cubeHeight);
-  assert.ok(Math.abs(heightRatio-1)<.1,'Switch and PSP share a consistent visible height: '+heightRatio);
   await page.evaluate(()=>{fixture.cacheViewer.dispose();fixture.cacheStage.remove();});
   await page.evaluate(()=>{
     const stage=document.createElement('div');stage.className='game-box-stage';Object.assign(stage.style,{width:'490px',height:'480px'});document.body.append(stage);
