@@ -70,5 +70,5 @@ test('The PSP viewer loads artwork, opens its booklet reader lazily and cancels 
  assert.equal(await page.evaluate(()=>viewer.rotationLock),'x');assert.equal(await page.evaluate(()=>debug.renderer.getContext().getError()),0);
  await page.evaluate(()=>viewer.suspend(true));await page.waitForFunction(()=>debug.renderer.getContext().isContextLost());
  await page.evaluate(()=>viewer.resume());await page.waitForFunction(()=>!debug.renderer.getContext().isContextLost()&&debug.materials.get('UMD Housing').envMap===debug.scene.environment);
- assert.deepEqual(errors,[]);assert.deepEqual(modelRequests,[],'PSP never requests the retired external model');await page.evaluate(()=>viewer.dispose());assert.equal(await page.locator('#stage canvas').count(),0);
+ assert.deepEqual(errors,[]);assert.equal(modelRequests.length,1,'PSP loads its bundled legacy-derived GLB once');assert.ok(modelRequests[0].endsWith('/case.glb'));await page.evaluate(()=>viewer.dispose());assert.equal(await page.locator('#stage canvas').count(),0);
 });

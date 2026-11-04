@@ -1,7 +1,7 @@
 # Cardboard cases
 
-All built-in cardboard formats use `three-cardboard-viewer.js` and one unit
-cuboid. The controller scales it to each physical profile without rebuilding
+All built-in cardboard formats use `three-cardboard-viewer.js` and the unit
+cuboid in `models/cardboard/case.glb`. The controller scales it to each physical profile without rebuilding
 the model or WebGL context. All corners and folds remain exactly 90 degrees.
 
 | Format | Width x height x depth (mm) | Default spine |

@@ -311,6 +311,7 @@ export function convertLegacyCase(sourceFactory,templateKey) {
       new THREE.Box3(new THREE.Vector3(side*w/2-1.5,-h/2-1.5,-d/2-1.5),new THREE.Vector3(side*w/2+1.5,h/2+1.5,d/2))));
     const mesh=new THREE.Mesh(geometry,byName.get(entry.material));mesh.name=entry.key;parts[entry.part].add(mesh);
     mesh.userData.sourceFaces=entry.count;
+    if(entry.category==='clips')mesh.userData.caseClip=true;
     if(entry.category==='clips')clipMeshes.push(mesh);
   }
   const shadowReceivers=[],shadowCasters=[],receiverMaterial=clear?new THREE.ShadowMaterial({color:0x17202b,opacity:.12,depthWrite:false,side:THREE.FrontSide}):null;
@@ -330,12 +331,14 @@ export function convertLegacyCase(sourceFactory,templateKey) {
     const shade=geometry.clone(),sp=shade.attributes.position;
     for(let i=0;i<sp.count;i++)sp.setXYZ(i,sp.getX(i)+n.getX(i)*.03,sp.getY(i)+n.getY(i)*.03,sp.getZ(i)+n.getZ(i)*.03);
     const receiver=new THREE.Mesh(shade,receiverMaterial);receiver.name='Inlay Contact Shadows';receiver.receiveShadow=true;
+    receiver.userData.caseShadow='receiver';
     parts[entry.part].add(receiver);shadowReceivers.push(receiver);
   }
   if(clear)for(const part of ['tray','lid']) {
     const geometry=mergeGeometries(compiled.filter(entry=>entry.part===part&&['Case Plastic','Case Raised Plastic'].includes(entry.material)).map(entry=>entry.geometry));
     const walls=wallShadowGeometry(geometry,part==='tray'?-d/2+1.15:d/2-1.15,part==='lid');geometry.dispose();
     const caster=new THREE.Mesh(walls,casterMaterial);caster.name='Clear Relief Shadow Caster';caster.castShadow=true;
+    caster.userData.caseShadow='caster';
     parts[part].add(caster);shadowCasters.push(caster);
   }
   if(!longbox){const lip=new THREE.Mesh(closingLip(profile),plastic);lip.name='Closing Lip';parts.tray.add(lip);}
@@ -354,6 +357,7 @@ export function convertLegacyCase(sourceFactory,templateKey) {
     const mat=raised.clone();mat.name=decal.name||(decal.brand?'Blu-ray Mark':decal.memory?'Memory Card Mark':'Push Mark');mat.map=texture;mat.transparent=true;mat.alphaTest=.2;
     if(clear){mat.opacity=.28;mat.onBeforeCompile=plastic.onBeforeCompile;mat.customProgramCacheKey=plastic.customProgramCacheKey;}
     const mesh=new THREE.Mesh(decal.geometry.clone(),mat);parts[decal.part].add(mesh);
+    mesh.userData.caseDecal=decals.indexOf(decal);
     labelTextures.push(texture);labelMaterials.push(mat);labelCanvases.push(canvas);
   }
   function pose(amount) {
@@ -463,6 +467,8 @@ export function convertLegacyCase(sourceFactory,templateKey) {
     if(longbox)for(const mesh of parts.lid.children)if(mesh.material===paper)mesh.visible=!image;
   }
   return {scene,animations:[],manifest:{dimensions:[w,h,d],spine_fraction:d/total},pose,createManual,fitManual,clearManual,update,
+    exportData:{profile,paperLayout:snapshot.paperLayout,sourceFaceCount:template?.sourceFaceCount||snapshot.faces.length,
+      decals:decals.map(({geometry,...info})=>info)},
     configureLighting,beforeRender,releaseLighting,selectArtwork,
     ...(longbox?{manualCover:true,onManualCover}:{}),
     ...(clear?{clearSpine:true,paperReverse}:{}),

@@ -1,14 +1,9 @@
 # PS2 case geometry
 
-PS2 keep cases use Three.js with geometry converted from the existing case
-construction. `three-legacy-geometry.js` consumes the millimetre-sized faces
-produced by `game-box.js` and `dvd-case.js`; there is no external model asset.
-
-The adapter resolves the CSS polygons, rounded shapes and SVG cutouts into
-triangles. It batches pieces by material and moving half, smooths the normals
-of curved strips, and uses the existing hinge transforms for opening. The
-compiled geometry is retained in memory and cloned for subsequent viewers.
-The temporary construction DOM is removed before the first rendered frame.
+PS2 keep cases load `models/ps2/case.glb`, exported from the existing case
+construction. It contains the batched triangles, curved normals, UVs and opening
+rig. The viewer never captures the construction DOM or triangulates CSS faces.
+The legacy source remains editable; see [exporting models](3d-models.md).
 
 Cover, back cover and spine share a continuous texture atlas. Full-cover images
 use the same UV layout. Artwork uses cached previews while originals load.

@@ -36,7 +36,7 @@ function releaseModel(model) {
 
 export async function createModelViewer(host,options={},definition) {
   const modelId=definition.model,directory=new URL(`./models/${modelId}/`,import.meta.url);
-  const procedural=definition.build ? await definition.build(options) : null;
+  const procedural=definition.load ? await definition.load(options) : null;
   const {manifest,binary}=procedural || await sourceData(directory,modelId);
   if(options.isCurrent&&!options.isCurrent()){if(procedural){releaseModel(procedural.scene);procedural.dispose?.();}return null;}
   // Each viewer owns its skeleton and materials; the downloaded bytes are shared.
@@ -44,9 +44,9 @@ export async function createModelViewer(host,options={},definition) {
   if(options.isCurrent&&!options.isCurrent()){releaseModel(gltf.scene);procedural?.dispose?.();return null;}
   const {imageSource=path=>path,onProfile=()=>{},onOpenState=()=>{}}=options;
   const math=globalThis.OpenCabinet3D.math,model=gltf.scene;
-  const names=procedural ? [] : manifest.animations||[manifest.animation];
+  const names=procedural ? procedural.animationNames||[] : manifest.animations||[manifest.animation];
   const clips=names.map(name=>gltf.animations.find(clip=>clip.name===name));
-  if(!procedural&&(!clips.length||clips.some(clip=>!clip))){releaseModel(model);throw Error(`The ${modelId} opening animation is missing`);}
+  if((!procedural&&!clips.length)||clips.some(clip=>!clip)){releaseModel(model);procedural?.dispose?.();throw Error(`The ${modelId} opening animation is missing`);}
   prepareRenderGroup(options.renderGroup);
   let renderer;
   try{renderer=new THREE.WebGLRenderer({alpha:true,antialias:true,powerPreference:'high-performance'});}

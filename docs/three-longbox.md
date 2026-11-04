@@ -1,8 +1,9 @@
 # Sega CD and Saturn cases
 
 Sega CD, Mega CD and Saturn use the same `longbox` Three.js template through
-`three-converted-viewer.js`. Its 142 x 209 x 21 mm construction is converted
-once from the existing geometry; no external model files are required.
+`three-converted-viewer.js`. Its 142 x 209 x 21 mm construction and opening rig
+are loaded from the bundled `models/longbox/case.glb`. Conversion is an explicit
+offline step; see [exporting models](3d-models.md).
 
 The interior tray and fixed ribbed hinge column use PS2's matte dark-gray
 plastic. The lid, upper/lower rails and hinge ears use clear acrylic. The

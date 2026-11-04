@@ -34,8 +34,7 @@ src/vendor/three/
 
 # Optional authoring sources and local conversion artifacts.
 /_modelos/
-# Retired PSP model assets must not be reintroduced into the project.
-/src/models/psp/
+# Bundled GLB exports under src/models are versioned.
 src/models/dreamcast/.source-hash
 src/models/dreamcast/ribs-height.png
 

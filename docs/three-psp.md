@@ -1,8 +1,9 @@
 # PSP case geometry
 
-PSP uses `three-psp-viewer.js` and `three-legacy-geometry.js` to convert the
-existing case construction into cached Three.js geometry. It needs no external
-model files, local model flags, authoring tools or downloaded model assets.
+PSP uses `three-psp-viewer.js` and the bundled `models/psp/case.glb`, exported
+from the existing legacy construction. It needs no local model flags, authoring
+tools or downloaded model assets at runtime. The legacy source remains editable;
+see [exporting models](3d-models.md).
 
 The original 99 x 168 x 14 mm dimensions, two-part opening, rounded corners,
 finger recess and central manual clip are retained. The shell and raised

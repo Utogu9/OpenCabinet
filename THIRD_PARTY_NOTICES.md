@@ -119,8 +119,8 @@ POSSIBILITY OF SUCH DAMAGE.
 
 ### Dreamcast and PlayStation CD case
 
-The shared Dreamcast and PlayStation case geometry in `src/models/dreamcast/case.bin` and
-`case.json` is adapted from **Compact disc and case** by **effe**, released
+The shared Dreamcast and PlayStation case geometry in `src/models/dreamcast/case.glb`
+is adapted from **Compact disc and case** by **effe**, released
 under **Creative Commons Zero (CC0 / Public Domain)**. The original source
 reference is <http://www.blendswap.com/blends/view/2841>. The supplied licensing
 notice is preserved in

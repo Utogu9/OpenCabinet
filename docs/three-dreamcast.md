@@ -24,7 +24,7 @@ de inlays y de la primera página del manual, con reemplazo por los originales
 cuando están disponibles. No se duplica la geometría al cambiar entre PS1 y
 Dreamcast.
 
-`src/models/dreamcast/case.json` y `case.bin` contienen la geometría preparada
+`src/models/dreamcast/case.glb` contiene la geometría preparada
 y versionada. Proviene de **Compact disc and case**, de **effe**, con licencia
 CC0; se conserva su aviso original en `src/models/dreamcast/LICENSE-CC0.txt`.
 Los créditos de la geometría y de las texturas están separados en el README

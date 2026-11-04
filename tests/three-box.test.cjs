@@ -5,7 +5,7 @@ const path=require('node:path');
 const vm=require('node:vm');
 const tick=()=>new Promise(resolve=>setImmediate(resolve));
 function dreamcastModel() {
-  const directory=path.join(__dirname,'../src/models/dreamcast');
+  const directory=path.join(__dirname,'../scripts/model-sources/dreamcast');
   return {manifest:JSON.parse(fs.readFileSync(path.join(directory,'case.json'),'utf8')),binary:fs.readFileSync(path.join(directory,'case.bin'))};
 }
 function router(load,{switchModel=false}={}) {

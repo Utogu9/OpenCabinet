@@ -1,9 +1,9 @@
 # PS3 case geometry
 
-`three-ps3-viewer.js` uses the shared legacy-to-Three.js adapter with the PS3
-profile: rounded Blu-ray shell, recessed sleeve, raised header, transparent
-manual retainers, disc cradle, hub and opening recess. Geometry is compiled
-once per page and reused; there is no external model asset.
+`three-ps3-viewer.js` loads `models/ps3/case.glb`, preserving the rounded
+Blu-ray shell, recessed sleeve, raised header, transparent manual retainers,
+disc cradle, hub and opening recess. Geometry and opening keyframes are exported
+offline and reused at runtime; see [exporting models](3d-models.md).
 
 The transparent molding uses haze and grazing reflections without screen-space
 refraction. This keeps nearby paper and disc artwork from appearing reflected

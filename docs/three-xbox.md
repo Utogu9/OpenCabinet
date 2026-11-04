@@ -1,5 +1,8 @@
 # Xbox and Xbox 360 cases
 
+Geometry is loaded from bundled GLBs exported offline. The legacy source is
+preserved for editing; see [exporting models](3d-models.md).
+
 Both platforms use `three-xbox-viewer.js` and one cached DVD geometry template.
 The original Xbox uses a yellow-green tint and denser plastic; Xbox 360 uses
 its lighter green tint and greater transparency. Switching between them updates

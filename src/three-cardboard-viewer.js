@@ -1,21 +1,18 @@
-import * as THREE from './vendor/three/three.module.js';
 import { createModelViewer } from './three-gltf-box-viewer.js';
+import { loadPreparedModel } from './three-prepared-model.js';
+import * as THREE from './vendor/three/three.module.js';
 
-// A shared unit cuboid covers every cardboard format. Each viewer owns only
-// a small UV buffer; console dimensions are applied by the common controller.
-let template;
-function build() {
-  template ??= new THREE.BoxGeometry(1,1,1);
-  const geometry=template.clone(),sourceUV=template.attributes.uv,uv=geometry.attributes.uv;
-  const cover=new THREE.MeshBasicMaterial({name:'Cover Outside',color:0xffffff,side:THREE.FrontSide,toneMapped:false});
-  const edge=new THREE.MeshPhysicalMaterial({name:'Cardboard Edges',color:0x55525a,roughness:.85,
-    metalness:0,specularIntensity:.15,envMapIntensity:.2});
-  const finish=new THREE.MeshPhysicalMaterial({name:'Cardboard Finish',color:0x000000,roughness:.55,
-    metalness:0,clearcoat:.1,specularIntensity:.15,envMapIntensity:.15,
-    transparent:true,opacity:.16,blending:THREE.AdditiveBlending,depthWrite:false});
-  const mesh=new THREE.Mesh(geometry,[edge,cover,edge,edge,cover,cover]),sheen=new THREE.Mesh(geometry,finish),scene=new THREE.Group();
-  mesh.name='Cardboard Box';sheen.name='Printed Cardboard Finish';scene.add(mesh,sheen);
-  const manifest={dimensions:[1,1,1],spine_fraction:.046};
+// All cardboard profiles share a baked unit cuboid. Only UVs and dimensions
+// adapt to the selected cover; no case geometry is generated at runtime.
+async function load() {
+  const {scene,manifest}=await loadPreparedModel('cardboard');
+  const mesh=scene.getObjectByName('Cardboard Box'),sheen=scene.getObjectByName('Printed Cardboard Finish');
+  const geometry=mesh.geometry,sourceUV=geometry.attributes.uv.clone(),uv=geometry.attributes.uv;
+  const loader=new THREE.MaterialLoader(),materials=new Map(manifest.cardboardMaterials.map(info=>[info.name,loader.parse(info)]));
+  const edge=materials.get('Cardboard Edges'),cover=materials.get('Cover Outside');
+  mesh.material.dispose();sheen.material.dispose();sheen.material=materials.get('Cardboard Finish');
+  mesh.material=[edge,cover,edge,edge,cover,cover];
+  geometry.clearGroups();for(let i=0;i<6;i++)geometry.addGroup(i*6,6,i);
   let base=null,current=null,game=null,settings=null,axis='x',uvKey=null;
   function layout(profile,wrapAxis) {
     const key=[profile.width,profile.height,profile.depth,profile.spineFace,wrapAxis].join(':');
@@ -58,5 +55,5 @@ function build() {
 }
 
 export function createViewer(host,options={}) {
-  return createModelViewer(host,options,{model:'cardboard',canOpen:false,build});
+  return createModelViewer(host,options,{model:'cardboard',canOpen:false,load});
 }

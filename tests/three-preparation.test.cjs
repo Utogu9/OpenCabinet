@@ -4,7 +4,7 @@ const fs=require('node:fs');
 const path=require('node:path');
 const crypto=require('node:crypto');
 const root=path.resolve(__dirname,'..');
-const assets=['case.json','case.bin','insert.webp','insert2.webp','ps1-insert.webp','ribs-height.svg','LICENSE-CC0.txt'];
+const assets=['case.glb','insert.webp','insert2.webp','ps1-insert.webp','ribs-height.svg','LICENSE-CC0.txt'];
 function distribution(t) {
   const target=path.join(root,'target');fs.mkdirSync(target,{recursive:true});
   const projectRoot=fs.mkdtempSync(path.join(target,'three-preparation-'));
@@ -16,6 +16,9 @@ function distribution(t) {
   const model=path.join(projectRoot,'src/models/dreamcast'),textures=path.join(projectRoot,'src/assets/textures');
   fs.mkdirSync(model,{recursive:true});fs.mkdirSync(textures,{recursive:true});
   for(const file of assets)fs.copyFileSync(path.join(root,'src/models/dreamcast',file),path.join(model,file));
+  for(const name of ['ps2','ps3','ps4','xbox','psp','genesis','wii','wiiu','gamecube','gamecube-japan','ds','ds-pal','3ds','longbox','cardboard']){
+    const directory=path.join(projectRoot,'src/models',name);fs.mkdirSync(directory,{recursive:true});fs.copyFileSync(path.join(root,'src/models',name,'case.glb'),path.join(directory,'case.glb'));
+  }
   fs.copyFileSync(path.join(root,'src/assets/textures/cd-case-ribs.svg'),path.join(textures,'cd-case-ribs.svg'));
   const digest=file=>crypto.createHash('sha256').update(fs.readFileSync(path.join(model,file))).digest('hex');
   return {projectRoot,model,digest,options:{projectRoot,dependencyRoot:path.join(root,'node_modules/three')}};
@@ -39,9 +42,9 @@ test('A fresh distribution prepares Three.js without authoring files and preserv
 
 test('Preparing a distribution rejects missing runtime images and truncated geometry',async t=>{
   const {prepare}=await import('../scripts/prepare-three.mjs'),app=distribution(t);
-  fs.writeFileSync(path.join(app.model,'case.bin'),Buffer.alloc(4));
+  fs.writeFileSync(path.join(app.model,'case.glb'),Buffer.alloc(4));
   assert.throws(()=>prepare(app.options),/geometry is incomplete/);
-  fs.copyFileSync(path.join(root,'src/models/dreamcast/case.bin'),path.join(app.model,'case.bin'));
+  fs.copyFileSync(path.join(root,'src/models/dreamcast/case.glb'),path.join(app.model,'case.glb'));
   fs.unlinkSync(path.join(app.model,'insert2.webp'));
   assert.throws(()=>prepare(app.options),/Missing bundled Dreamcast assets: insert2.webp/);
 });

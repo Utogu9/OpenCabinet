@@ -1,5 +1,8 @@
 # PS4 and PS5 cases
 
+Geometry is loaded from bundled GLBs exported offline. The legacy source is
+preserved for editing; see [exporting models](3d-models.md).
+
 Both platforms use `three-ps4-viewer.js` and the same cached geometry template.
 The shared converter preserves the existing Blu-ray shell, disc cradle and
 release hub, manual retainers, opening recess and articulated halves.

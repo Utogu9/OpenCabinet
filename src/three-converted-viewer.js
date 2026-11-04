@@ -1,5 +1,5 @@
 import { createModelViewer } from './three-gltf-box-viewer.js';
-import { convertLegacyCase } from './three-legacy-geometry.js';
+import { loadPreparedCase } from './three-prepared-case.js';
 
 const families={
   genesis:{model:'genesis',platform:'Sega Mega Drive / Genesis'},
@@ -17,9 +17,5 @@ export function createViewer(host,options={}) {
   const profile=globalThis.OpenCabinet3D.profileFor(game.platform,null,game.rom_path,settings);
   const spec=families[profile.id==='dvd'?profile.variant:profile.id];
   if(!spec)throw Error('Unsupported converted case family');
-  return createModelViewer(host,options,{model:spec.model,manual:true,build(){
-    let source;
-    try{return convertLegacyCase(()=>source=globalThis.OpenCabinet3D.geometrySource({id:spec.model+'-geometry',title:'',platform:spec.platform,rom_path:spec.rom||'Game (USA).rom'}),spec.model);}
-    catch(error){source?.dispose();throw error;}
-  }});
+  return createModelViewer(host,options,{model:spec.model,manual:true,load:()=>loadPreparedCase(spec.model)});
 }

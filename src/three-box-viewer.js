@@ -2,22 +2,13 @@ import * as THREE from './vendor/three/three.module.js';
 import { RoomEnvironment } from './vendor/three/RoomEnvironment.js';
 import { artworkWindow, chooseArtwork, dreamcastInsertWindows, dreamcastInsertTheme, dreamcastInsertProbes } from './three-box-artwork.js';
 import { arcballPoint, lidAngle, canvasViewport } from './three-box-motion.js';
-import { createContactShadows, configureAcrylicOptics, maskClearPanels } from './three-box-relief.js';
+import { createContactShadows, configureAcrylicOptics } from './three-box-relief.js';
 import { prepareRenderGroup, createRenderLease, releaseSceneGpu, createFrameHold } from './three-box-session.js';
 import { createDiscMaterial } from './three-disc-material.js';
-
-let caseTask;
-async function caseData() {
-  return caseTask ??= Promise.all([
-    fetch(new URL('./models/dreamcast/case.json',import.meta.url)).then(response=>{if(!response.ok)throw Error('Dreamcast model not prepared');return response.json();}),
-    fetch(new URL('./models/dreamcast/case.bin',import.meta.url)).then(response=>{if(!response.ok)throw Error('Dreamcast geometry not prepared');return response.arrayBuffer();}),
-  ]).then(([manifest,binary])=>{
-    if(manifest.version!==3)throw Error('Unsupported Dreamcast geometry');return {manifest,binary};
-  }).catch(error=>{caseTask=null;throw error;});
-}
+import { loadPreparedModel } from './three-prepared-model.js';
 
 export async function createViewer(host, options={}) {
-  const {manifest,binary}=await caseData();
+  const {manifest,scene:preparedScene}=await loadPreparedModel('dreamcast');
   if(options.isCurrent && !options.isCurrent())return null;
   const {imageSource=path=>path,onProfile=()=>{},onOpenState=()=>{},loadManual,
     onManualState=()=>{},onManualActivate=()=>false,onManualDeactivate=()=>{},onManualCoverChange=()=>{}}=options;
@@ -59,28 +50,13 @@ export async function createViewer(host, options={}) {
     hub:new THREE.MeshPhysicalMaterial({color:0xcfdde8,roughness:.2,transmission:.65,thickness:.4,side:THREE.DoubleSide}),
   };
   const meshes=[],manualMeshes=[];
-  for(const spec of manifest.meshes) {
-    const geometry=new THREE.BufferGeometry();
-    const buffer=new THREE.InterleavedBuffer(new Float32Array(binary,spec.vertexOffset,spec.vertexCount*8),8);
-    geometry.setAttribute('position',new THREE.InterleavedBufferAttribute(buffer,3,0));
-    geometry.setAttribute('normal',new THREE.InterleavedBufferAttribute(buffer,3,3));
-    geometry.setAttribute('uv',new THREE.InterleavedBufferAttribute(buffer,2,6));
-    geometry.setIndex(new THREE.BufferAttribute(new Uint32Array(binary,spec.indexOffset,spec.indexCount),1));
-    // A private position buffer lets each viewer own its hinge transform.
-    if(spec.part==='lid') {
-      const copy=new Float32Array(buffer.array);geometry.attributes.position.data=new THREE.InterleavedBuffer(copy,8);
-      geometry.attributes.normal.data=geometry.attributes.position.data;geometry.attributes.uv.data=geometry.attributes.position.data;
-      const position=geometry.attributes.position;
-      for(let i=0;i<position.count;i++)position.setXYZ(i,position.getX(i)-pivot.x,position.getY(i)-pivot.y,position.getZ(i)-pivot.z);
-    }
-    geometry.computeBoundingBox();geometry.computeBoundingSphere();
-    const mesh=new THREE.Mesh(geometry,materials[spec.material]);mesh.name=spec.name;
-    (spec.part==='lid'?lid:base).add(mesh);meshes.push(mesh);
-    if(['cover','manualBack','pages'].includes(spec.material))manualMeshes.push(mesh);
-  }
-  const spineWindows=['spine_left','spine_right'].map(kind=>meshes.find(mesh=>mesh.material===materials[kind]).geometry.boundingBox.clone().expandByScalar(1.5));
-  for(const mesh of meshes.filter(mesh=>mesh.material===acrylic)) {
-    maskClearPanels(mesh.geometry,spineWindows,mesh.parent===lid?pivot:undefined);
+  const preparedMeshes=[];preparedScene.traverse(mesh=>{if(mesh.isMesh)preparedMeshes.push(mesh);});
+  for(const mesh of preparedMeshes) {
+    const kind=mesh.userData.caseMaterial;
+    mesh.material.dispose();mesh.material=materials[kind];
+    mesh.geometry.computeBoundingBox();mesh.geometry.computeBoundingSphere();
+    (mesh.userData.dreamcastPart==='lid'?lid:base).add(mesh);meshes.push(mesh);
+    if(['cover','manualBack','pages'].includes(kind))manualMeshes.push(mesh);
   }
   const insertMesh=meshes.find(mesh=>mesh.name==='dreamcast-insert');
   const insertBounds=insertMesh.geometry.boundingBox;

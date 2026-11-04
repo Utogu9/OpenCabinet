@@ -1,11 +1,14 @@
 # Converted Sega and Nintendo cases
 
+Geometry is loaded from bundled GLBs exported offline. The legacy source is
+preserved for editing; see [exporting models](3d-models.md).
+
 Mega Drive/Genesis, Wii, Wii U, GameCube, DS and 3DS use the shared Three.js
-geometry adapter through `three-converted-viewer.js`. Geometry comes from
-`game-box.js` and `dvd-case.js`; no external model files are required. The
-construction DOM is removed after conversion and the resulting templates are
-cached in memory, separately for regional shapes such as Japanese GameCube
-and European DS cases.
+prepared-model adapter through `three-converted-viewer.js`. Their bundled GLBs
+are exported from `game-box.js` and `dvd-case.js` without downloaded models.
+Templates are parsed once and cached in memory, separately for regional shapes
+such as Japanese GameCube and European DS cases. No construction DOM is created
+at runtime.
 
 Genesis, GameCube and DS use the same matte dark-gray shell material as PS2.
 Wii and 3DS retain white plastic; Wii U uses solid blue plastic. The Genesis

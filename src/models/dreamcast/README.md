@@ -1,6 +1,6 @@
 # Dreamcast and PlayStation jewel-case assets
 
-`case.bin` and `case.json` contain the prepared geometry used by the WebGL
+`case.glb` contains the prepared geometry used by the WebGL
 viewer. They are adapted from **Compact disc and case** by **effe**, released
 under **Creative Commons Zero (CC0 / Public Domain)**.
 
@@ -25,3 +25,6 @@ rights holders; the model's CC0 notice does not license those marks.
 
 The viewer uses the game's own inlay when available. Game covers, disc artwork
 and PDF manuals are supplied by the user and are not included in this folder.
+
+The previous binary source is preserved under `scripts/model-sources/dreamcast/`.
+See [model exporting](../../../docs/3d-models.md) for the explicit regeneration step.
