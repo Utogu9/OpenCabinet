@@ -451,20 +451,23 @@ fn prepare_with_index(
     }
     let path = job.catalog_path();
     recover_catalog(&path)?;
-    let upgrade = path.exists() && !sources::indexed(&open_catalog(&path)?);
-    if refresh || !path.exists() || (upgrade && !job.repository_upgrade_attempted.swap(true, Ordering::AcqRel)) {
+    let check_index = !job.repository_index_checked.swap(true, Ordering::AcqRel);
+    if refresh || !path.exists() || check_index {
         let index = job.directory.join("repository-index.json");
         let outcome = fetch_index(&index,&mut progress);
-        if upgrade && !refresh && outcome.is_err() {
+        if path.exists() && !refresh && outcome.is_err() {
             job.check()?;
-            // Existing catalogs remain available offline. Retry migration in
-            // the next operation, or immediately after an explicit refresh.
+            // Check routes once per operation, preserving cached catalogs
+            // offline or when GitHub rate-limits the index request.
             return cached_catalog_summary(&path);
         }
         outcome?;
         let entries: Vec<sources::DirectoryEntry> =
             serde_json::from_reader(BufReader::new(File::open(index).map_err(err)?))
                 .map_err(err)?;
+        if !refresh && path.exists() && sources::unchanged(&open_catalog(&path)?, &entries)? {
+            return cached_catalog_summary(&path);
+        }
         let next = job.directory.join("repository.next.db");
         let _ = fs::remove_file(&next);
         if path.exists() {
@@ -1032,6 +1035,9 @@ mod tests {
                 |_| (),
             )
             .unwrap();
+            // Fixture catalogs are already prepared; individual index tests
+            // opt into a simulated refresh explicitly, without network access.
+            self.job.repository_index_checked.store(true, Ordering::Release);
             conn
         }
     }
@@ -1092,6 +1098,7 @@ mod tests {
                 .query_map([&old_prefix],|r|Ok((r.get(0)?,r.get(1)?))).unwrap().collect::<rusqlite::Result<_>>().unwrap();
             assert!(rows.len()>1);let before=catalog_summary(&files.job.catalog_path()).unwrap().game_count;
             conn.execute_batch("DROP TABLE repository_sources").unwrap();drop(conn);
+            files.job.repository_index_checked.store(false, Ordering::Release);
             assert_eq!(image_url(&files.job,IMAGE_BASE,&rows[0].0).unwrap(),rows[0].1);
             prepare_with_index(&files.job,false,|_|(),|path,_|fs::write(path,SUBMODULES).map_err(err)).unwrap();
             assert!(files.job.image_urls.lock().unwrap().is_empty());
@@ -1110,6 +1117,7 @@ mod tests {
     #[test]
     fn source_migration_keeps_old_catalogs_offline_and_failed_refreshes_never_replace_them() {
         let files=Sandbox::new();let conn=files.catalog();conn.execute_batch("DROP TABLE repository_sources").unwrap();drop(conn);
+        files.job.repository_index_checked.store(false, Ordering::Release);
         let before=fs::read(files.job.catalog_path()).unwrap();
         prepare_with_index(&files.job,false,|_|(),|_,_|Err("offline".into())).unwrap();
         prepare_with_index(&files.job,false,|_|(),|_,_|panic!("only attempt the automatic upgrade once per job")).unwrap();
@@ -1119,6 +1127,41 @@ mod tests {
         assert_eq!(fs::read(files.job.catalog_path()).unwrap(),before);
         prepare_with_index(&files.job,true,|_|(),|path,_|fs::write(path,SUBMODULES).map_err(err)).unwrap();
         assert!(sources::indexed(&open_catalog(&files.job.catalog_path()).unwrap()));
+    }
+
+    #[test]
+    fn future_submodules_are_discovered_even_with_an_existing_source_index() {
+        let files=Sandbox::new();let mut conn=files.catalog();
+        let original=r#"[{"name":"Sony - PlayStation 2","type":"dir"}]"#;
+        sources::apply(&mut conn,serde_json::from_str(original).unwrap()).unwrap();
+        let before_count=catalog_summary(&files.job.catalog_path()).unwrap().game_count;
+        let before_urls:Vec<(String,String)>=conn.prepare("SELECT filename,url FROM image_urls ORDER BY filename").unwrap()
+            .query_map([],|r|Ok((r.get(0)?,r.get(1)?))).unwrap().collect::<rusqlite::Result<_>>().unwrap();
+        drop(conn);
+        let updated=r#"[
+            {"name":"Sony - PlayStation 2","type":"file","git_url":"https://api.github.com/repos/example/future-ps2-library/git/trees/pinned-commit"},
+            {"name":"Future console","type":"submodule","submodule_git_url":"https://github.com/example/new-console.git"}
+        ]"#;
+        files.job.repository_index_checked.store(false, Ordering::Release);
+        prepare_with_index(&files.job,false,|_|(),|path,_|fs::write(path,updated).map_err(err)).unwrap();
+        let conn=open_catalog(&files.job.catalog_path()).unwrap();
+        assert_eq!(sources::base(&conn,"Future console").unwrap(),"https://raw.githubusercontent.com/example/new-console/main/");
+        assert_eq!(catalog_summary(&files.job.catalog_path()).unwrap().game_count,before_count);
+        let old=format!("{RAW_URL}Sony%20-%20PlayStation%202/");
+        for (filename,url) in before_urls {
+            let actual:String=conn.query_row("SELECT url FROM image_urls WHERE filename=?1",[filename],|r|r.get(0)).unwrap();
+            assert_eq!(actual,url.replacen(&old,"https://raw.githubusercontent.com/example/future-ps2-library/main/",1));
+        }
+        drop(conn);
+        ensure_platform(&files.job,"Sony - PlayStation 2",|_|panic!("preserve the indexed game catalog")).unwrap();
+        prepare_with_index(&files.job,false,|_|(),|_,_|panic!("check only once per operation")).unwrap();
+        let before=fs::read(files.job.catalog_path()).unwrap();
+        files.job.repository_index_checked.store(false, Ordering::Release);
+        prepare_with_index(&files.job,false,|_|(),|path,_|fs::write(path,updated).map_err(err)).unwrap();
+        assert_eq!(fs::read(files.job.catalog_path()).unwrap(),before,"unchanged routes must not rebuild the catalog");
+        files.job.repository_index_checked.store(false, Ordering::Release);
+        prepare_with_index(&files.job,false,|_|(),|_,_|Err("GitHub unavailable or rate-limited".into())).unwrap();
+        assert_eq!(fs::read(files.job.catalog_path()).unwrap(),before);
     }
 
     #[test]

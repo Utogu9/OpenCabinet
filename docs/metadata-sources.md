@@ -13,9 +13,11 @@ de imagen elegidos y los cambios sin guardar mientras vuelve a consultar el cat�
 Las plataformas pueden ser carpetas o submódulos de GitHub. En ambos casos se
 usan los catálogos y las imágenes de la rama `main` del repositorio correspondiente;
 el commit fijado por el repositorio principal no limita las actualizaciones.
-El índice guarda estas ubicaciones para reutilizarlas sin conexión. Los índices
-anteriores se actualizan una vez al preparar el catálogo, conservando las
-coincidencias y corrigiendo las URLs de plataformas trasladadas a submódulos.
+El índice guarda estas ubicaciones para reutilizarlas sin conexión. Al preparar
+el catálogo se comprueban las rutas una vez por operación, incluso si ya existe
+un índice local. Los nuevos submódulos se detectan sin actualizar la app,
+conservando las coincidencias y corrigiendo las URLs de plataformas trasladadas.
+Si las rutas no cambiaron, no se reconstruye ni se copia el catálogo local.
 Si no hay conexión, se conserva el catálogo anterior y se puede reintentar con
 «Actualizar catálogo». Los cambios posteriores de contenido siguen siendo manuales.
 

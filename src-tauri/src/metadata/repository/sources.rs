@@ -84,6 +84,36 @@ fn default_base(source: &str) -> String {
     format!("{RAW_URL}{}/", url_path(source))
 }
 
+fn entry_base(entry: &DirectoryEntry) -> Option<String> {
+    if !valid_relative(&entry.name) || entry.name.contains('/') || entry.name.starts_with('.') {
+        return None;
+    }
+    match entry.kind.as_str() {
+        "dir" => Some(default_base(&entry.name)),
+        "file" | "submodule" => submodule_base(entry),
+        _ => None,
+    }
+}
+
+pub(super) fn unchanged(conn: &Connection, entries: &[DirectoryEntry]) -> Result<bool> {
+    if !indexed(conn) {
+        return Ok(false);
+    }
+    let mut found = false;
+    for entry in entries {
+        let Some(raw) = entry_base(entry) else { continue; };
+        found = true;
+        let saved: Option<String> = conn.query_row(
+            "SELECT raw_base FROM repository_sources WHERE name=?1", [&entry.name], |r|r.get(0)
+        ).optional().map_err(err)?;
+        if saved.as_deref() != Some(raw.as_str()) {
+            return Ok(false);
+        }
+    }
+    // Empty or invalid indexes must not silently count as a valid refresh.
+    Ok(found)
+}
+
 pub(super) fn base(conn: &Connection, source: &str) -> Result<String> {
     if !indexed(conn) {
         return Ok(default_base(source));
@@ -104,17 +134,7 @@ pub(super) fn apply(conn: &mut Connection, entries: Vec<DirectoryEntry>) -> Resu
     schema(&tx)?;
     let mut found = 0;
     for entry in entries {
-        if !valid_relative(&entry.name) || entry.name.contains('/') || entry.name.starts_with('.') {
-            continue;
-        }
-        let raw = if entry.kind == "dir" {
-            Some(default_base(&entry.name))
-        } else if matches!(entry.kind.as_str(), "file" | "submodule") {
-            submodule_base(&entry)
-        } else {
-            None
-        };
-        let Some(raw) = raw else {
+        let Some(raw) = entry_base(&entry) else {
             continue;
         };
         let old = base(&tx, &entry.name)?;
