@@ -17,7 +17,7 @@ dialog.sofa-mode[open] { display: grid; grid-template-rows: auto minmax(170px, 1
 .sofa-mode button { font: inherit; cursor: pointer; color: var(--text-main); }
 .sofa-mode .sofa-tool { background: var(--card-bg); border: 1px solid var(--border-color); border-radius: 12px; padding: 11px 17px; font-size: 14px; white-space: nowrap; }
 .sofa-mode .sofa-tool:hover, .sofa-mode .sofa-tool:focus-visible { background: var(--card-hover-bg); }
-.sofa-search { width: clamp(160px, 19vw, 290px); background: var(--card-bg); color: var(--text-main); border: 1px solid var(--border-color); border-radius: 12px; padding: 11px 15px; font-size: 14px; }
+.sofa-search, .sofa-playlist { width: clamp(160px, 19vw, 290px); background: var(--card-bg); color: var(--text-main); border: 1px solid var(--border-color); border-radius: 12px; padding: 11px 15px; font-size: 14px; }
 .sofa-deck { position: relative; min-height: 0; overflow: hidden; }
 .sofa-cards { position: absolute; inset: 20px 0 12px; transform-style: preserve-3d; }
 .sofa-card { position: absolute; left: 50%; top: 50%; width: clamp(180px, 27vw, 410px); height: 94%; padding: 0; background: transparent; border: 0; transition: transform .23s ease; }
@@ -99,7 +99,7 @@ dialog.sofa-mode[open] { display: grid; grid-template-rows: auto minmax(170px, 1
 }
 @media (max-width: 850px) {
   .sofa-header { padding-left: 20px; padding-right: 20px; }.sofa-brand span { display: none; }.sofa-tools { gap: 7px; }
-  .sofa-search { width: 155px; }.sofa-mode .sofa-tool { padding: 10px 12px; }.sofa-details { width: 89%; gap: 15px; }
+  .sofa-search, .sofa-playlist { width: 155px; }.sofa-mode .sofa-tool { padding: 10px 12px; }.sofa-details { width: 89%; gap: 15px; }
   .sofa-mode .sofa-play { min-width: 135px; padding: 13px 20px; }.sofa-subtitle { font-size: 12px; }.sofa-footer { padding-left: 22px; padding-right: 22px; font-size: 10px; }
 }
 @media (prefers-reduced-motion: reduce) {

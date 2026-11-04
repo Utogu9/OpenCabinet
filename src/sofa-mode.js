@@ -95,11 +95,11 @@
     brand.append(element('strong', '', 'OpenCabinet'));
     const heading = element('span', '', t('sofa.title')); heading.id = 'sofa-heading'; brand.append(heading);
     const tools = element('div', 'sofa-tools');
-    const search = element('input', 'sofa-search'); search.type = 'search'; search.autocomplete = 'off';
+    const search = element('input', 'sofa-search'); search.id = 'sofa-search'; search.type = 'search'; search.autocomplete = 'off';
     search.placeholder = t('sofa.search'); search.setAttribute('aria-label', t('sofa.search'));
     const view = button('', () => changeView(), 'sofa-tool'); view.id = 'sofa-view';
     const exit = button(t('sofa.exit'), () => close(), 'sofa-tool'); exit.id = 'sofa-exit';
-    const playlistSelect=element('select','sofa-search sofa-playlist');playlistSelect.setAttribute('aria-label',t('playlists.title'));
+    const playlistSelect=element('select','sofa-playlist');playlistSelect.setAttribute('aria-label',t('playlists.title'));
     playlistSelect.addEventListener('change',()=>{playlistId=playlistSelect.value;platformName=null;gameId=null;refresh();focusCurrent();});
     if(options.getPlaylists)tools.append(playlistSelect);
     tools.append(search, view, exit); header.append(brand, tools);

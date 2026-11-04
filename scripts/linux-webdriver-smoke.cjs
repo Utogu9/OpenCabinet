@@ -197,7 +197,7 @@ async function main(){
       window.sofaTestPad.buttons[15]={pressed:false,value:0};await pause(40);
       const wii=modal.querySelector('.sofa-platform[data-platform="Nintendo Wii"]');wii.click();await pause(50);
       const filtered=modal.querySelectorAll('.sofa-card').length;
-      const search=modal.querySelector('.sofa-search');search.value='No fixture has this title';search.dispatchEvent(new Event('input',{bubbles:true}));
+      const search=modal.querySelector('input#sofa-search');if(!search)throw Error('Couch search input is missing');search.value='No fixture has this title';search.dispatchEvent(new Event('input',{bubbles:true}));
       const empty=modal.querySelectorAll('.sofa-card').length;search.value='';search.dispatchEvent(new Event('input',{bubbles:true}));
       if(document.getElementById('sofa-view').getAttribute('aria-pressed')!=='true')document.getElementById('sofa-view').click();
       for(let n=0;n<150&&modal.dataset.hasBox!=='true';n++)await pause(50);

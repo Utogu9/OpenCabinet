@@ -53,6 +53,13 @@ test('Playlist editing, random filtering and action arguments work in the browse
   });
   await page.locator('.sofa-playlist').selectOption('friends');
   await page.waitForSelector('.sofa-card.is-selected[data-game-id="3"]');
+  assert.equal(await page.locator('.sofa-search').count(),1,'The playlist selector must not masquerade as the search input');
+  await page.locator('#sofa-search').fill('No fixture has this title');
+  assert.equal(await page.locator('.sofa-card').count(),0,'Searching an empty result works with playlists enabled');
+  assert.equal(await page.locator('.sofa-playlist').inputValue(),'friends');
+  await page.locator('#sofa-search').fill('');
+  await page.waitForSelector('.sofa-card.is-selected[data-game-id="3"]');
+  await page.locator('.sofa-card.is-selected').focus();
   await page.keyboard.press('ArrowRight');await page.waitForSelector('.sofa-card.is-selected[data-game-id="1"]');
   await page.locator('.sofa-random').click();
   await page.getByLabel('Minimum players',{exact:true}).fill('4');await page.getByLabel('Minimum players',{exact:true}).dispatchEvent('change');
