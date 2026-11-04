@@ -806,6 +806,70 @@ mod tests {
         );
     }
     #[test]
+    fn automatic_and_manual_backups_restore_session_history_and_independent_regional_statistics() {
+        type Statistics = (i64, i64, i64, i64, Option<String>);
+        type Session = (i64, i64, String, String, String, Option<String>, i64, String);
+        fn statistics(conn: &Connection) -> Vec<Statistics> {
+            conn.prepare("SELECT id,play_time,play_time_seconds,session_count,last_played FROM games ORDER BY id").unwrap()
+                .query_map([],|r|Ok((r.get(0)?,r.get(1)?,r.get(2)?,r.get(3)?,r.get(4)?))).unwrap()
+                .collect::<rusqlite::Result<_>>().unwrap()
+        }
+        fn sessions(conn: &Connection) -> Vec<Session> {
+            conn.prepare("SELECT id,game_id,rom_path,started_at,last_checkpoint,ended_at,duration_seconds,state FROM play_sessions ORDER BY id").unwrap()
+                .query_map([],|r|Ok((r.get(0)?,r.get(1)?,r.get(2)?,r.get(3)?,r.get(4)?,r.get(5)?,r.get(6)?,r.get(7)?))).unwrap()
+                .collect::<rusqlite::Result<_>>().unwrap()
+        }
+        for (full,automatic) in [(false,true),(false,false),(true,false)] {
+            let f=Library::new();
+            let db=Connection::open(f.root.join("opencabinet.db")).unwrap();
+            db.execute_batch("PRAGMA journal_mode=WAL;
+                ALTER TABLE games ADD COLUMN play_time_seconds INTEGER DEFAULT 0;
+                ALTER TABLE games ADD COLUMN last_played TEXT;
+                UPDATE games SET play_time=0,session_count=0;
+                INSERT INTO games(id,title,platform,rom_path,play_time,session_count) VALUES(2,'European edition','PS2','eu.iso',0,0);").unwrap();
+            crate::game_regions::init(&db).unwrap();
+            db.execute_batch("INSERT INTO game_regions VALUES(1,1,'USA',0,1),(2,1,'Europe',1,0);").unwrap();
+            let regional_path=f.root.join("roms/eu.iso").to_string_lossy().into_owned();
+            db.execute("UPDATE games SET rom_path=?1 WHERE id=2",[&regional_path]).unwrap();
+            // Use the actual playtime writer, including checkpoints and two
+            // discs belonging to one regional edition, without launching games.
+            for (id,path,seconds) in [(1,"D:/ROMs/disc1.iso",3600),(1,"D:/ROMs/disc2.iso",90),(2,regional_path.as_str(),120)] {
+                crate::playtime::start_session_path(&db,id,path).unwrap();
+                let mut saved=0;
+                crate::playtime::save_elapsed(&db,id,seconds,&mut saved,false).unwrap();
+            }
+            let expected_statistics=statistics(&db);
+            let mut expected_sessions=sessions(&db);
+            assert_eq!(expected_sessions.len(),3);
+            let archive=if automatic {
+                automatic_at(&f.root,now()).unwrap();
+                f.root.join("backups").join(entries(&f.root).unwrap().into_iter().find(|entry|entry.automatic).unwrap().name)
+            } else {create(&f.root,full,false,None).unwrap()};
+            assert_eq!(manifest(&archive).unwrap().full,full);
+            // The backup must restore its snapshot, even if the live library
+            // has since reset its sessions and changed the aggregate counters.
+            db.execute_batch("DELETE FROM play_sessions;UPDATE games SET play_time=0,play_time_seconds=0,session_count=0,last_played=NULL;").unwrap();
+            let destination=prepare_restore(&f.root,&archive,None).unwrap();
+            let restored=Connection::open(destination.join("opencabinet.db")).unwrap();
+            for session in &mut expected_sessions {
+                if session.2==regional_path {session.2=destination.join("roms").join("eu.iso").to_string_lossy().into_owned();}
+            }
+            assert_eq!(statistics(&restored),expected_statistics);
+            assert_eq!(sessions(&restored),expected_sessions);
+            assert_eq!(crate::game_regions::expanded(&restored,&[1]).unwrap(),vec![1,2]);
+            let tracker=crate::playtime::PlayTracker::default();
+            for (combine,seconds,count,recorded) in [(false,3690,2,2),(true,3810,3,3)] {
+                let history=serde_json::to_value(crate::session_history::history(&restored,1,combine,0,&tracker).unwrap()).unwrap();
+                assert_eq!(history["play_time_seconds"],seconds);
+                assert_eq!(history["session_count"],count);
+                assert_eq!(history["sessions"].as_array().unwrap().len(),recorded);
+                assert_eq!(history["is_running"],false);
+            }
+            assert!(sessions(&db).is_empty(),"restoration never overwrites the current library");
+        }
+    }
+
+    #[test]
     fn automatic_backups_default_to_daily_seven_and_never_prune_manual_copies() {
         let f = Library::new();
         assert!(settings(&f.root).automatic);

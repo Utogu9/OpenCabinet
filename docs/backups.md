@@ -16,7 +16,11 @@ publicar otra correctamente. Las manuales no se eliminan automáticamente.
 
 La copia liviana contiene una instantánea consistente de SQLite (incluidas las
 escrituras confirmadas en WAL), biblioteca, estadísticas, emuladores configurados
-y preferencias. La completa agrega las imágenes y manuales de las colecciones
+y preferencias. Las estadísticas incluyen tiempo acumulado, cantidad de partidas,
+última fecha jugada y el historial de sesiones con sus fechas, duración y archivo
+ejecutado. También se conservan por separado los datos de cada región o versión
+y sus asociaciones para consultar los totales combinados al restaurar.
+La completa agrega las imágenes y manuales de las colecciones
 administradas, incluidas las imágenes de consolas. No copia ROM, ejecutables,
 binarios de emuladores, catálogos descargables ni cachés. Los medios enlazados
 fuera de la carpeta administrada no se incluyen. Las copias locales no protegen
