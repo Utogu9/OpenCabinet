@@ -1,6 +1,9 @@
 let appFeatures = null;
 let libraryPlay = null;
-const { invoke } = window.__TAURI__.core;
+const invoke = (...args) => window.__TAURI__.core.invoke(...args).catch(error => {
+  globalThis.OpenCabinetMaintenance?.record(error, `command:${args[0]}`);
+  throw error;
+});
 
 // Estado local
 let allGames = [];
@@ -223,17 +226,19 @@ function setupPreferences() {
     }
   }
   showThemeEditorTab(false);
-  function updateSaveVisibility() { save.classList.toggle("hidden", ["backups", "themes", "theme-editor"].includes(preferenceCategory)); }
-  const tabs = ["startup", "library", "themes", "theme-editor", "metadata", "data", "backups"].map(name => ({
+  const maintenancePanel = globalThis.OpenCabinetMaintenance?.setup({ document, invoke, getPreferences: () => preferences, onBusyChange: update });
+  function updateSaveVisibility() { save.classList.toggle("hidden", ["backups", "storage", "themes", "theme-editor"].includes(preferenceCategory)); }
+  const tabs = ["startup", "library", "themes", "theme-editor", "metadata", "data", "storage", "backups"].map(name => ({
     name, button: document.getElementById(`preferences-tab-${name}`),
     panel: document.getElementById(`preferences-panel-${name}`),
   }));
   function showCategory(name, focus = false, internal = false) {
-    if (!internal && (backupsPanel?.busy || themesPanel?.busy)) return;
+    if (!internal && (backupsPanel?.busy || themesPanel?.busy || maintenancePanel?.busy)) return;
     preferenceCategory = name; updateSaveVisibility();
-    document.getElementById("preferences-tab-data").classList.toggle("has-active-subcategory", name === "backups");
+    document.getElementById("preferences-tab-data").classList.toggle("has-active-subcategory", ["backups", "storage"].includes(name));
     document.getElementById("preferences-tab-themes").classList.toggle("has-active-subcategory", name === "theme-editor");
     if (name === "backups") void backupsPanel?.open();
+    if (name === "storage") void maintenancePanel?.open();
     document.getElementById("preferences-panels").scrollTop = 0;
     tabs.forEach(tab => {
       const active = tab.name === name;
@@ -269,7 +274,7 @@ function setupPreferences() {
     directory.value = draftDirectory;
     document.getElementById("preferences-current-directory").textContent = location
       ? globalThis.OpenCabinetI18n.t("msg.8d1a55bd93", location.active_directory) : globalThis.OpenCabinetI18n.t("msg.cd9c5528d2");
-    const busy = saving || choosing || !!backupsPanel?.busy || !!themesPanel?.busy;
+    const busy = saving || choosing || !!backupsPanel?.busy || !!themesPanel?.busy || !!maintenancePanel?.busy;
     tabs.forEach(tab => { tab.button.disabled = busy; });
     metadataImport.disabled=metadataReset.disabled=busy;
     catalogTitles.disabled=busy;
@@ -309,7 +314,7 @@ function setupPreferences() {
     Channel: window.__TAURI__.core.Channel, getPreferences: () => preferences, onBusyChange: update,
     onRestored: async () => { location = await readLocation(); draftDirectory = location.pending_directory || location.active_directory; selection = null; update(); },
     canRestart: () => !scanInProgress && !launchingGames.size && !allGames.some(game => game.is_running) });
-  function close() { if (!saving && !choosing && !backupsPanel?.busy && !themesPanel?.busy) { themesPanel?.close(); dialog.close(); } }
+  function close() { if (!saving && !choosing && !backupsPanel?.busy && !themesPanel?.busy && !maintenancePanel?.busy) { themesPanel?.close(); dialog.close(); } }
   openButton.addEventListener("click", async (event) => {
     event.stopPropagation();
     document.getElementById("dropdown-options-menu").classList.remove("show");
@@ -345,7 +350,7 @@ function setupPreferences() {
     if (currentRequest === request) update();
   });
   dialog.addEventListener("close", () => { request++; themesPanel?.close(); });
-  dialog.addEventListener("cancel", (event) => { if (saving || choosing || backupsPanel?.busy || themesPanel?.busy) event.preventDefault(); });
+  dialog.addEventListener("cancel", (event) => { if (saving || choosing || backupsPanel?.busy || themesPanel?.busy || maintenancePanel?.busy) event.preventDefault(); });
   document.getElementById("btn-close-preferences").addEventListener("click", close);
   document.getElementById("btn-cancel-preferences").addEventListener("click", close);
   async function inspectSelection(selected, currentRequest) {

@@ -16,6 +16,7 @@ mod platform_defaults;
 mod retroarch;
 mod manual_import;
 mod backups;
+mod maintenance;
 mod game_availability;
 mod library_files;
 mod session_history;
@@ -2638,6 +2639,11 @@ pub fn run() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
+            maintenance::get_storage_usage,
+            maintenance::clear_thumbnail_cache,
+            maintenance::open_retained_collection,
+            maintenance::diagnostic_system,
+            maintenance::export_diagnostic_report,
             themes::get_theme_library,
             themes::save_theme_library,
             themes::import_theme,

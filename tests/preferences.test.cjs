@@ -14,6 +14,7 @@ function app(storage = new Map(), failSave = false, options = {}) {
       elements.set(id, {
         handlers: {}, attributes: {}, value: "", open: false, children: [],
         replaceChildren(...children) { this.children = children; }, appendChild(child) { this.children.push(child); },
+        append(...children) { this.children.push(...children); },
         classList: { add: (name) => classes.add(name), remove: (name) => classes.delete(name), contains: (name) => classes.has(name), toggle(name, enabled) { if (enabled) classes.add(name); else classes.delete(name); } },
         addEventListener(name, handler) { this.handlers[name] = handler; },
         showModal() { this.open = true; }, close() { this.open = false; this.handlers.close?.(); }, focus() { this.focused = true; },
@@ -27,7 +28,7 @@ function app(storage = new Map(), failSave = false, options = {}) {
   };
   const context = vm.createContext({
     navigator: { language: options.systemLanguage || 'es-AR' },
-    document: { getElementById: get, createElement: () => ({}) },
+    document: { getElementById: get, createElement: () => ({ append() {} }) },
     window: {
       __TAURI__: { app: { getVersion: async () => "1.2.3" }, core: { Channel:class {}, invoke: async (command, args) => {
         calls.push({ command, args });
@@ -51,6 +52,7 @@ function app(storage = new Map(), failSave = false, options = {}) {
   });
   const evaluate = (code) => vm.runInContext(code, context);
   if(options.backups) evaluate(fs.readFileSync(path.join(__dirname, "../src/backups.js"), "utf8"));
+  if(options.maintenance) evaluate(fs.readFileSync(path.join(__dirname, "../src/maintenance.js"), "utf8"));
   if(options.updates) {
     evaluate(fs.readFileSync(path.join(__dirname, "../src/app-updates.js"), "utf8"));
     evaluate(`window.OpenCabinetUpdates=OpenCabinetUpdates;
@@ -81,11 +83,29 @@ test('User Data separates backups from folder settings and preserves drafts when
  assert.equal(instance.get('preferences-tab-data').classList.contains('has-active-subcategory'),true);
  assert.equal(instance.get('btn-save-preferences').classList.contains('hidden'),true);
  instance.get('preferences-tab-backups').handlers.keydown({key:'ArrowUp',preventDefault(){}});
+ assert.equal(instance.get('preferences-panel-storage').classList.contains('hidden'),false);
+ assert.equal(instance.get('preferences-tab-data').classList.contains('has-active-subcategory'),true);
+ instance.get('preferences-tab-storage').handlers.keydown({key:'ArrowUp',preventDefault(){}});
  assert.equal(instance.get('preferences-panel-data').classList.contains('hidden'),false);
  assert.equal(instance.get('preferences-tab-data').focused,true);
  assert.equal(instance.get('preference-cover-limit').value,'800');
  instance.get('preferences-tab-library').handlers.click();
  assert.equal(instance.get('btn-save-preferences').classList.contains('hidden'),false);
+});
+
+test('Storage only scans on request and permits changing sections and closing during calculation',async()=>{
+ let finish;
+ const instance=app(new Map(),false,{maintenance:true,invoke:command=>{
+   if(command==='get_storage_usage')return new Promise(resolve=>{finish=resolve;});
+ }});
+ await instance.open();instance.get('preferences-tab-storage').handlers.click();
+ assert.equal(instance.calls.some(call=>call.command==='get_storage_usage'),false);
+ const pending=instance.get('btn-refresh-storage').handlers.click();
+ instance.get('preferences-tab-library').handlers.click();
+ assert.equal(instance.get('preferences-panel-library').classList.contains('hidden'),false);
+ instance.get('btn-close-preferences').handlers.click();assert.equal(instance.get('preferences-dialog').open,false);
+ finish({directory:'/data',cache_directory:'/cache',sections:{},retained:[],skipped:0});await pending;
+ assert.equal(instance.get('btn-refresh-storage').disabled,false);
 });
 
 test('Embedded backup operations block closing Preferences until completion',async()=>{

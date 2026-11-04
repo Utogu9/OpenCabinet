@@ -1182,6 +1182,9 @@
             <button id="preferences-tab-metadata" type="button" role="tab" aria-controls="preferences-panel-metadata" aria-selected="false" tabindex="-1"><span data-i18n="source.title"></span></button>
             <button id="preferences-tab-data" type="button" role="tab" aria-controls="preferences-panel-data" aria-selected="false" tabindex="-1"><span data-i18n="msg.cf6371762e"></span></button>
             <div class="preferences-subcategory-row" role="presentation">
+              <button id="preferences-tab-storage" class="preferences-subcategory" type="button" role="tab" aria-controls="preferences-panel-storage" aria-selected="false" tabindex="-1" data-i18n="maintenance.storage"></button>
+            </div>
+            <div class="preferences-subcategory-row" role="presentation">
               <button id="preferences-tab-backups" class="preferences-subcategory" type="button" role="tab" aria-controls="preferences-panel-backups" aria-selected="false" tabindex="-1"><span data-i18n="backup.title"></span></button>
             </div>
           </nav>
@@ -1309,6 +1312,22 @@
             <p id="preference-cover-help" class="preference-help"><span data-i18n="msg.e2de227f73"></span></p>
           </div>
         </section>
+        <section id="preferences-panel-storage" class="preferences-section hidden" role="tabpanel" aria-labelledby="preferences-tab-storage">
+          <h3 data-i18n="maintenance.storage"></h3>
+          <p id="storage-location" class="preference-help storage-path"></p>
+          <p id="storage-cache-location" class="preference-help storage-path"></p>
+          <div id="storage-sections" class="storage-sections"></div>
+          <div class="form-actions">
+            <button id="btn-refresh-storage" class="secondary-btn" type="button" data-i18n="maintenance.refresh"></button>
+            <button id="btn-clear-cache" class="secondary-btn" type="button" data-i18n="maintenance.clear_cache"></button>
+          </div>
+          <p class="preference-help" data-i18n="maintenance.cache_help"></p>
+          <h3 data-i18n="maintenance.retained"></h3>
+          <p class="preference-help" data-i18n="maintenance.retained_help"></p>
+          <p id="storage-retained-count" class="preference-help"></p>
+          <div id="storage-retained" class="storage-retained"></div>
+          <p id="storage-status" class="preference-help" role="status" aria-live="polite" data-i18n="maintenance.storage_hint"></p>
+        </section>
         <section id="preferences-panel-backups" class="preferences-section hidden" role="tabpanel" aria-labelledby="preferences-tab-backups">
       <h3 id="backups-title" data-i18n="backup.title"></h3>
       <p class="preference-help" data-i18n="backup.help"></p>
@@ -1357,6 +1376,7 @@
         <p id="about-version" class="preference-help" role="status"></p>
         <p><span data-i18n="msg.5ce017e5a7"></span></p>
         <p class="preference-help"><span data-i18n="msg.1a1c4ecdb7"></span></p>
+        <div class="about-logs"><button id="btn-diagnostics" class="secondary-btn" type="button" data-i18n="maintenance.logs"></button></div>
         <section class="app-updates" aria-labelledby="updates-title">
           <div class="about-updates-heading">
             <h3 id="updates-title" data-i18n="update.title"></h3>
@@ -1452,6 +1472,23 @@
       </form>
     </dialog>
     <script src="branding.js"></script>
+    <dialog id="storage-clear-confirm" class="confirmation-dialog" aria-labelledby="storage-clear-title">
+      <form method="dialog" class="maintenance-dialog-body">
+        <h3 id="storage-clear-title" data-i18n="maintenance.clear_cache"></h3>
+        <p data-i18n="maintenance.clear_confirm"></p>
+        <div class="form-actions"><button value="cancel" class="secondary-btn" data-i18n="backup.cancel"></button><button value="clear" class="primary-btn" data-i18n="maintenance.clear_cache"></button></div>
+      </form>
+    </dialog>
+    <dialog id="diagnostic-dialog" class="diagnostic-dialog" aria-labelledby="diagnostic-title">
+      <div class="modal-header"><h2 id="diagnostic-title" data-i18n="maintenance.diagnostics"></h2><button id="btn-close-diagnostics" class="close-btn" type="button" data-i18n-aria-label="backup.close">&times;</button></div>
+      <div class="maintenance-dialog-body">
+        <p class="preference-help" data-i18n="maintenance.diagnostic_help"></p>
+        <textarea id="diagnostic-preview" rows="15" spellcheck="false" data-i18n-aria-label="maintenance.preview"></textarea>
+        <p id="diagnostic-status" role="status" class="preference-help"></p>
+        <div class="form-actions"><button id="btn-export-diagnostics" class="primary-btn" type="button" data-i18n="maintenance.export"></button></div>
+      </div>
+    </dialog>
+    <script src="maintenance.js"></script>
     <script src="backups.js"></script>
     <script src="app-updates.js"></script>
     <script src="locales/catalogs.js"></script>

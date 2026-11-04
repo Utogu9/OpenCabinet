@@ -14,6 +14,10 @@ use std::{
 use tauri::Manager;
 
 static WRITER: Mutex<()> = Mutex::new(());
+pub(crate) fn clear_managed(root: &Path) -> Result<crate::maintenance::Usage, String> {
+    let _writer = WRITER.lock().map_err(error)?;
+    crate::maintenance::clear_files(root)
+}
 static SEQUENCE: AtomicU64 = AtomicU64::new(0);
 #[cfg(target_os = "linux")]
 static PREPARERS: tokio::sync::Semaphore = tokio::sync::Semaphore::const_new(2);

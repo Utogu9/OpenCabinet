@@ -2057,6 +2057,19 @@ html[data-os="linux"] .game-card:has(.game-cover-surface.has-cover)::before { wi
 #about-dialog { padding: 0; max-width: 680px; }
 .about-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
 .about-actions [hidden] { display: none !important; }
+.about-logs { margin-top: 8px; }
+.about-logs .secondary-btn { padding: 4px 10px; font-size: 12px; }
+.diagnostic-dialog { margin: auto; width: min(760px, calc(100vw - 40px)); max-height: 90vh; overflow-y: auto; padding: 0; border: 1px solid var(--border-color); border-radius: var(--ui-radius); background: var(--modal-bg); color: var(--text-main); }
+.diagnostic-dialog::backdrop { background: rgba(0,0,0,.65); }
+.maintenance-dialog-body { padding: 20px 24px; display: flex; flex-direction: column; gap: 16px; }
+#diagnostic-preview { width: 100%; min-height: 220px; max-height: 50vh; resize: vertical; padding: 12px; background: var(--bg-color); color: var(--text-main); border: 1px solid var(--border-color); border-radius: var(--ui-radius); font-family: monospace; font-size: 12px; }
+.storage-path { overflow-wrap: anywhere; }
+.storage-sections { margin: 16px 0; }
+.storage-usage-row { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--border-color); }
+.storage-usage-row > span { flex: 1; min-width: 140px; overflow-wrap: anywhere; }
+.storage-usage-row > strong { white-space: nowrap; font-variant-numeric: tabular-nums; }
+.storage-retained { max-height: 280px; overflow-y: auto; padding-right: 8px; }
+#preferences-panel-storage h3 { margin-top: 20px; }
 #btn-keyboard-shortcuts { margin-right: auto; }
 .about-updates-heading { display: flex; align-items: center; gap: 12px; margin-bottom: 8px; }
 .app-updates .about-updates-heading h3 { margin: 0; }
