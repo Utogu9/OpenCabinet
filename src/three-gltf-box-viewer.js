@@ -36,18 +36,21 @@ function releaseModel(model) {
 
 export async function createModelViewer(host,options={},definition) {
   const modelId=definition.model,directory=new URL(`./models/${modelId}/`,import.meta.url);
-  const {manifest,binary}=await sourceData(directory,modelId);
-  if(options.isCurrent&&!options.isCurrent())return null;
+  const procedural=definition.build ? await definition.build(options) : null;
+  const {manifest,binary}=procedural || await sourceData(directory,modelId);
+  if(options.isCurrent&&!options.isCurrent()){if(procedural){releaseModel(procedural.scene);procedural.dispose?.();}return null;}
   // Each viewer owns its skeleton and materials; the downloaded bytes are shared.
-  const gltf=await new GLTFLoader().parseAsync(binary.slice(0),directory.href);
-  if(options.isCurrent&&!options.isCurrent()){releaseModel(gltf.scene);return null;}
+  const gltf=procedural || await new GLTFLoader().parseAsync(binary.slice(0),directory.href);
+  if(options.isCurrent&&!options.isCurrent()){releaseModel(gltf.scene);procedural?.dispose?.();return null;}
   const {imageSource=path=>path,onProfile=()=>{},onOpenState=()=>{}}=options;
   const math=globalThis.OpenCabinet3D.math,model=gltf.scene;
-  const names=manifest.animations||[manifest.animation];
+  const names=procedural ? [] : manifest.animations||[manifest.animation];
   const clips=names.map(name=>gltf.animations.find(clip=>clip.name===name));
-  if(!clips.length||clips.some(clip=>!clip)){releaseModel(model);throw Error(`The ${modelId} opening animation is missing`);}
+  if(!procedural&&(!clips.length||clips.some(clip=>!clip))){releaseModel(model);throw Error(`The ${modelId} opening animation is missing`);}
   prepareRenderGroup(options.renderGroup);
-  const renderer=new THREE.WebGLRenderer({alpha:true,antialias:true,powerPreference:'high-performance'});
+  let renderer;
+  try{renderer=new THREE.WebGLRenderer({alpha:true,antialias:true,powerPreference:'high-performance'});}
+  catch(error){releaseModel(model);procedural?.dispose?.();throw error;}
   renderer.setClearColor(0,0);renderer.outputColorSpace=THREE.SRGBColorSpace;
   renderer.toneMapping=THREE.ACESFilmicToneMapping;renderer.toneMappingExposure=1.05;renderer.transmissionResolutionScale=.5;
   const canvas=renderer.domElement;canvas.setAttribute('aria-hidden','true');
@@ -57,13 +60,15 @@ export async function createModelViewer(host,options={},definition) {
   let environmentTarget=pmrem.fromScene(environment,.04,1,100);
   environment.dispose();pmrem.dispose();scene.environment=environmentTarget.texture;
   scene.add(new THREE.HemisphereLight(0xeaf2ff,0x566377,.65));
+  const directionalLights=[];
   for(const [color,intensity,position] of [[0xfff7ed,3.2,[-180,150,200]],[0xdceaff,1.6,[180,-60,-80]]]) {
-    const light=new THREE.DirectionalLight(color,intensity);light.position.fromArray(position);scene.add(light);
+    const light=new THREE.DirectionalLight(color,intensity);light.position.fromArray(position);scene.add(light);directionalLights.push(light);
   }
+  procedural?.configureLighting?.({renderer,scene,keyLight:directionalLights[0]});
   const root=new THREE.Group(),contents=new THREE.Group();scene.add(root);root.add(contents);contents.add(model);
   // Undo the exporter's Z-up to Y-up conversion: this source lies flat in Blender.
   // Its printed front must face +Z and its physical height must align with +Y.
-  model.rotation.x=Math.PI/2;model.scale.setScalar(1000);
+  if(!procedural){model.rotation.x=Math.PI/2;model.scale.setScalar(1000);}
   const mixer=new THREE.AnimationMixer(model),actions=clips.map(clip=>{
     const action=mixer.clipAction(clip);action.play();action.paused=true;return action;
   });
@@ -75,7 +80,13 @@ export async function createModelViewer(host,options={},definition) {
       const name=original.name==='PP'&&definition.spineNormalAxis&&node.name.endsWith('_spine_shell')?'PP Spine':original.name;
       if(materials.has(name))return materials.get(name);
       let material;
-      if(['PP','PP Spine','PP Cloudy','Plastic Film','UMD Window'].includes(name)) {
+      if(procedural){
+        material=original;
+        // An explicit map keeps the material's own reflection intensity;
+        // otherwise Three uses the scene-wide environment intensity instead.
+        if(material.isMeshStandardMaterial)material.envMap=scene.environment;
+      }
+      else if(['PP','PP Spine','PP Cloudy','Plastic Film','UMD Window'].includes(name)) {
         material=new THREE.MeshPhysicalMaterial({side:THREE.DoubleSide,transparent:true,depthWrite:false,forceSinglePass:true});
         // A bend in the sleeve is still the same thin film. Do not treat the
         // flat spine as a thick molded edge merely because its normal is sideways.
@@ -118,7 +129,9 @@ export async function createModelViewer(host,options={},definition) {
   const manualWidth=.096,manualHeight=.170;
   const manualFront=new THREE.MeshBasicMaterial({color:0xffffff,toneMapped:false});
   const manualBack=manualFront.clone(),manualPages=new THREE.MeshBasicMaterial({color:0xe9e5dc,toneMapped:false});
-  if(definition.manual) {
+  if(procedural?.createManual) {
+    procedural.createManual({manualGroup,manualMeshes,manualFront,manualBack,manualPages,meshes});
+  } else if(definition.manual) {
     const hinge=model.getObjectByName('PSP_Lid_Hinge');
     if(hinge) {
       manualGroup.name='PSP Booklet';manualGroup.position.set(.04934,-.0013,0);hinge.add(manualGroup);
@@ -134,9 +147,10 @@ export async function createModelViewer(host,options={},definition) {
       manualMeshes.forEach(mesh=>{mesh.name='PSP Booklet '+manualMeshes.indexOf(mesh);manualGroup.add(mesh);meshes.push(mesh);});
     }
   }
-  manualGroup.scale.set(manualWidth,1,manualHeight);manualGroup.visible=false;
+  if(!procedural)manualGroup.scale.set(manualWidth,1,manualHeight);manualGroup.visible=false;
   // Evaluate a few poses once; rotating the case never scans every vertex.
   function pose(amount) {
+    procedural?.pose(amount);
     actions.forEach((action,i)=>{action.time=clips[i].duration*amount;action.enabled=true;});
     mixer.update(0);model.updateMatrixWorld(true);
     for(const node of meshes)node.skeleton?.update();
@@ -154,6 +168,7 @@ export async function createModelViewer(host,options={},definition) {
   let manual=null,manualController=null,manualExtracted=false,manualBackTask=null;
   const manualTextures=new Set(),raycaster=new THREE.Raycaster(),pointer=new THREE.Vector2();
   function clearManual() {
+    procedural?.clearManual?.();
     manualController?.abort();manualController=null;manualBackTask=null;
     if(manualExtracted)options.onManualDeactivate?.();
     manual?.dispose();manual=null;manualExtracted=false;manualGroup.visible=false;
@@ -165,7 +180,10 @@ export async function createModelViewer(host,options={},definition) {
     const texture=textureFrom(copy);dynamicTextures.delete(texture);manualTextures.add(texture);
     const old=material.map;material.map=texture;material.needsUpdate=true;
     if(manualTextures.delete(old))old.dispose();
-    if(material===manualFront){const ratio=copy.width/copy.height,h=Math.min(manualHeight,manualWidth/ratio);manualGroup.scale.set(h*ratio,1,h);}
+    if(material===manualFront){
+      if(procedural?.fitManual)procedural.fitManual(copy,manual);
+      else {const ratio=copy.width/copy.height,h=Math.min(manualHeight,manualWidth/ratio);manualGroup.scale.set(h*ratio,1,h);}
+    }
     manualGroup.visible=!manualExtracted;schedule();
   }
   function ensureManualBack() {
@@ -233,10 +251,12 @@ export async function createModelViewer(host,options={},definition) {
     }
     if(!options.carousel||opened!==0)distance*=1.12;
     const cameraDistance=distance/zoom,switch2=modelId==='switch'&&profile.generation===2;
-    const near=switch2?Math.max(1,(cameraDistance-maxDepth)*.5):5;
-    const far=switch2?Math.max(near+10,cameraDistance-minDepth+25):3000;
+    const preciseDepth=switch2||!!procedural;
+    const near=preciseDepth?Math.max(1,(cameraDistance-maxDepth)*.5):5;
+    const far=preciseDepth?Math.max(near+10,cameraDistance-minDepth+25):3000;
     if(camera.near!==near||camera.far!==far){camera.near=near;camera.far=far;camera.updateProjectionMatrix();}
-    camera.position.set(0,0,cameraDistance);camera.lookAt(0,0,0);renderer.render(scene,camera);frameHold.release();
+    camera.position.set(0,0,cameraDistance);camera.lookAt(0,0,0);
+    procedural?.beforeRender?.({renderer,root,opened});renderer.render(scene,camera);frameHold.release();
     retiredTextures.splice(0).forEach(texture=>texture.dispose());
     host.dataset.triangles=String(renderer.info.render.triangles);host.dataset.drawCalls=String(renderer.info.render.calls);
   }
@@ -263,14 +283,14 @@ export async function createModelViewer(host,options={},definition) {
         if(!blankTextures.has(name)){const blank=textureFrom(globalThis.OpenCabinetCarouselBoxes.blankImage());dynamicTextures.delete(blank);blankTextures.set(name,blank);}
         texture=blankTextures.get(name);
       }
-      if(name==='Cover Inside'){texture.repeat.x=-1;texture.wrapS=THREE.RepeatWrapping;}
+      if(name==='Cover Inside'&&!procedural){texture.repeat.x=-1;texture.wrapS=THREE.RepeatWrapping;}
       if(!renderLease?.lost&&!renderLease?.paused)renderer.initTexture(texture);material.map=texture;material.color.set(image?0xffffff:0xe7e4db);
       if(!previous)material.needsUpdate=true;
       if(previous!==texture&&dynamicTextures.delete(previous))retiredTextures.push(previous);
       schedule();return;
     }
     const old=material.map;material.map=image?textureFrom(image):null;material.color.set(0xffffff);material.needsUpdate=true;
-    if(name==='Cover Inside'&&material.map){material.map.repeat.x=-1;material.map.wrapS=THREE.RepeatWrapping;}
+    if(name==='Cover Inside'&&material.map&&!procedural){material.map.repeat.x=-1;material.map.wrapS=THREE.RepeatWrapping;}
     if(dynamicTextures.delete(old))old.dispose();schedule();
   }
   function label(context,text,x,y,w,h) {
@@ -302,11 +322,13 @@ export async function createModelViewer(host,options={},definition) {
           if((image.naturalWidth||image.width)>(image.naturalHeight||image.height)) {
             ctx.save();ctx.translate(face,atlas.height);ctx.rotate(-Math.PI/2);ctx.drawImage(image,0,0,atlas.height,spine);ctx.restore();
           } else ctx.drawImage(image,face,0,spine,atlas.height);
-        }else {ctx.fillStyle='#252b36';ctx.fillRect(face,0,spine,atlas.height);}
+        }else if(procedural?.clearSpine)ctx.clearRect(face,0,spine,atlas.height);
+        else {ctx.fillStyle='#252b36';ctx.fillRect(face,0,spine,atlas.height);}
         assign('Cover Outside',atlas);
       }
     }
-    if(changed('inside',[pictures.inlay]))assign('Cover Inside',pictures.inlay||null);
+    if(changed('inside',[pictures.inlay,...(procedural?.paperReverse?[!!pictures.full,!!pictures.spine]:[])]))
+      assign('Cover Inside',pictures.inlay||procedural?.paperReverse?.(pictures)||null);
     if(materials.has('UMD Label')&&changed('disc',[pictures.disc])) {
       if(pictures.disc)assign('UMD Label',pictures.disc);
       else {const disc=document.createElement('canvas');disc.width=512;disc.height=512;label(disc.getContext('2d'),game.title,0,0,512,512);assign('UMD Label',disc);}
@@ -330,7 +352,7 @@ export async function createModelViewer(host,options={},definition) {
   }
   async function loadArtwork(images,token) {
     const art=chooseArtwork(images);
-    const paths={cover:art.full||art.cover,back_cover:art.back_cover,spine:art.spine,inlay:art.inlay,cartridge:art.cartridge,...(modelId==='psp'?{disc:art.disc}:{})};
+    const paths={cover:art.full||art.cover,back_cover:art.back_cover,spine:art.spine,inlay:art.inlay,cartridge:art.cartridge,...(materials.has('UMD Label')?{disc:art.disc}:{})};
     const signal=controller.signal,current=()=>!disposed&&revision===token&&!signal.aborted;
     const front=art.full?'full':'cover';
     let originalReady=false;
@@ -432,6 +454,7 @@ export async function createModelViewer(host,options={},definition) {
       if(changed){opened=0;openTarget=false;animation=null;pose(0);rotation=initialRotation();zoom=1;side='front';}
       const resolved=globalThis.OpenCabinet3D.resolveSettings(settings,next.box_3d);
       const style=resolved?.regions?.[globalThis.OpenCabinet3D.regionFor(next.rom_path)]||resolved?.base;
+      procedural?.update(profile,next);
       const switch2=modelId==='switch'&&profile.generation===2;
       switchShells?.set(switch2,style?.color||profile.color);
       for(const mesh of cartridgeMeshes)mesh.material=switch2?redCartridge:cartridgePlastic;
@@ -478,6 +501,7 @@ export async function createModelViewer(host,options={},definition) {
       dynamicTextures.forEach(texture=>texture.dispose());dynamicTextures.clear();
       retiredTextures.splice(0).forEach(texture=>texture.dispose());blankTextures.forEach(texture=>texture.dispose());blankTextures.clear();
       mixer.stopAllAction();mixer.uncacheRoot(model);releaseModel(model);originalMaterials.forEach(value=>value.dispose());
+      procedural?.dispose?.();
       new Set(materials.values()).forEach(material=>material.dispose());switchShells?.dispose();
       new Set([manualFront,manualBack,manualPages]).forEach(material=>material.dispose());
       const images=new Set();originalTextures.forEach(value=>{images.add(value.image);value.dispose();});images.forEach(value=>value?.close?.());
@@ -491,9 +515,11 @@ export async function createModelViewer(host,options={},definition) {
     }
     schedule();
   },()=>{
+    procedural?.releaseLighting?.();
     releaseSceneGpu(scene);environmentTarget?.dispose();environmentTarget=null;scene.environment=null;
     new Set([...dynamicTextures,...originalTextures,...retiredTextures,...blankTextures.values()]).forEach(texture=>texture.dispose());
   },()=>{if(game&&renderer.info.render.calls)frameHold.capture();});
-  options.debug?.({scene,renderer,camera,root,model,meshes,materials,mixer,action:actions[0],actions,frames,render:schedule,pose});
+  procedural?.onChange?.(schedule);
+  options.debug?.({scene,renderer,camera,root,model,meshes,materials,mixer,action:actions[0],actions,frames,manualGroup,manualMeshes,render:schedule,pose});
   return api;
 }

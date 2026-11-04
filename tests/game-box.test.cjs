@@ -790,6 +790,7 @@ test('Xbox, Xbox 360, DS, GameCube, Wii, Wii U, PS3 and Genesis keep a prefetche
     ['Nintendo DS','Game (USA).nds'],['Nintendo DS','Game (Europe).nds'],
     ['Nintendo GameCube','Game.iso'],['Nintendo GameCube','Game (Japan).iso'],
     ['Nintendo Wii','Game.iso'],['Nintendo Wii U','Game.wud'],['Sony PlayStation 3','EBOOT.BIN'],
+    ['Sony PlayStation 4','EBOOT.BIN'],['Sony PlayStation 5','Game.bin'],
     ['Sega Genesis','Game (USA).md'],['Sega Mega Drive','Game (Europe).bin'],['Sega Mega Drive / Genesis','Game.md'],
   ]){
     const data=booklet(32,platform==='Nintendo DS'?1.03:.65),activated=[];let loads=0;

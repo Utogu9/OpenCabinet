@@ -42,7 +42,9 @@ test('Couch mode carousels, controller selectors, launch return and cleanup work
     window.fixturePad={id:'Fixture standard controller',index:0,connected:true,mapping:'standard',axes:[0,0],buttons:Array.from({length:17},()=>({pressed:false,value:0}))};
     Object.defineProperty(navigator,'getGamepads',{configurable:true,value:()=>{window.fixture.reads++;return [window.fixturePad];}});
     window.fixtureOptions={document,window,games:()=>fixtureGames,platforms:()=>platforms,
-      images:game=>game.images||[],sourceGame:game=>game.regions?.[0].game||game,imageSource:path=>path,
+      // This section exercises the CSS carousel; GPU families are tested below
+      // and in their dedicated browser fixtures.
+      images:game=>game.images||[],sourceGame:game=>{const source=game.regions?.[0].game||game;return source.platform==='Sony PlayStation 2'?{...source,platform:'Nintendo Wii'}:source;},imageSource:path=>path,
       formatPlayTime:game=>`${game.session_count} sessions`,variantLabel:game=>game.regions?'2 regions':game.discs?.length>1?'2 discs':'',
       sortGames:games=>[...games].sort((a,b)=>a.title.localeCompare(b.title)),
       platformDetails:async platform=>({images:[{kind:'logo',path:image(platform.name.includes('Sony')?'PS2':'Wii','#252c3c')}]}),
@@ -468,7 +470,7 @@ test('Couch mode carousels, controller selectors, launch return and cleanup work
   assert.equal(await page.evaluate(()=>fixture.platformPreparations.every(name=>name==='Sony PlayStation 2')),true,'Only the final console prepares its missing models');
   await page.keyboard.press('Escape');
   await page.evaluate(async()=>{
-    fixtureGames=[{...fixtureGames[0],id:9000,title:'Manual fixture',platform:'Sony PlayStation 2',regions:null}];
+    fixtureGames=[{...fixtureGames[0],id:9000,title:'Manual fixture',platform:'Nintendo Wii',regions:null}];
     fixture.manualLoads=0;fixture.manualBackLoads=0;
     const canvas=()=>{const c=document.createElement('canvas');c.width=300;c.height=450;const ctx=c.getContext('2d');ctx.fillStyle='#b45d32';ctx.fillRect(0,0,300,450);return c;};
     fixtureOptions.loadManual=async()=>{fixture.manualLoads++;return {path:'fixture.pdf',platform:'Sony PlayStation 2',front:canvas(),loadBack:async()=>{fixture.manualBackLoads++;return canvas();},pageCount:6,aspectRatio:2/3,dispose(){}};};

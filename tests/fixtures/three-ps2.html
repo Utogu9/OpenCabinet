@@ -1,0 +1,25 @@
+<!doctype html><meta charset="utf-8"><title>PS2 geometry conversion</title>
+<link rel="stylesheet" href="/src/styles.css">
+<style>body{margin:0;background:#191d26}#stage{width:800px;height:650px}</style>
+<div id="stage" class="game-box-stage" tabindex="0"></div>
+<script>globalThis.OpenCabinetI18n={t:key=>key};</script>
+<script src="/src/image-fallbacks.js"></script><script src="/src/dvd-case.js"></script>
+<script src="/src/pdf-manual.js"></script><script src="/src/three-box-router.js"></script><script src="/src/game-box.js"></script>
+<script src="/src/cover-cache.js"></script><script src="/src/carousel-boxes.js"></script>
+<script type="module">
+const solid=(color,w=300,h=420)=>{
+  const canvas=document.createElement('canvas');canvas.width=w;canvas.height=h;
+  const context=canvas.getContext('2d');context.fillStyle=color;context.fillRect(0,0,w,h);
+  context.fillStyle='#fff';context.font='bold 35px sans-serif';context.fillText('PS2',24,55);
+  return canvas;
+};
+window.art=[['cover','#2264b8'],['back_cover','#c95b27'],['spine','#f4ba2f'],['disc','#57962e']]
+  .map(([kind,color])=>({kind,path:solid(color).toDataURL()}));
+window.manualFixture={front:solid('#d8393f'),back:solid('#e6b52f'),aspectRatio:.70,pageCount:32,path:'test.pdf',dispose(){}};
+window.viewer=OpenCabinet3D.createViewer(document.getElementById('stage'),{
+  debug:state=>window.debug=state,loadManual:async()=>manualFixture,
+  onManualActivate:()=>{window.reading=true;return true;},onManualDeactivate:()=>window.reading=false
+});
+window.select=(id=1,rom='Game (USA).iso',images=art,settings=null)=>viewer.update({id,title:'PS2 conversion',platform:'Sony PlayStation 2',rom_path:rom},images,settings);
+select();
+</script>

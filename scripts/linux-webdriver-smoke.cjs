@@ -138,7 +138,7 @@ async function main(){
     `);
     if(boxes.error)throw Error(boxes.error);
     for(const box of boxes.value){assert.ok(box.children>0);assert.equal(box.canOpen,true);assert.equal(box.open,true);}
-    assert.equal(boxes.value[0].renderer,'css');
+    assert.equal(boxes.value[0].renderer,'three-ps2');
     const played=await script(`
       const invoke=window.__TAURI__.core.invoke,progress=new window.__TAURI__.core.Channel();progress.onmessage=()=>{};
       const preview=await invoke('preview_single_game',{platform:'PC',filePath:${JSON.stringify(nativeGame)},title:'Native Linux fixture',launchDirectly:true});

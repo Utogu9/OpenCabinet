@@ -360,8 +360,13 @@
         face("wall-inner", thickness,height,x-direction*.8,0,z,[-direction,0,0],"rotateY(" + -direction*90 + "deg)",part);
         face('wall-rim',.8,height,x-direction*.4,0,rimZ,[0,0,-sign],sign>0?'rotateY(180deg)':'',part);
       }
-      const endInset=variant==='genesis'?3.8:0,edgeWidth=variant==='genesis'?w-6.45:w-4.5,edgeX=variant==='genesis'?-2.575:.95;
+      const endInset=variant==='genesis'?3.8:0;
       for (const [y, direction] of [[-h/2+endInset,-1],[h/2-endInset,1]]) {
+        // End the straight wall exactly at both corner tangencies. The opening
+        // corner is wider than the hinge corner, so the midpoint is shifted
+        // toward the hinge, not toward the opening.
+        const left=-w/2+radii[direction<0?0:3],right=w/2-openingInset-radii[direction<0?1:2];
+        const edgeWidth=right-left,edgeX=(left+right)/2;
         face("wall", edgeWidth,thickness,edgeX,y,z,[0,direction,0],"rotateX(" + -direction*90 + "deg)",part);
         face("wall-inner",edgeWidth,thickness,edgeX,y-direction*.8,z,[0,-direction,0],"rotateX("+direction*90+"deg)",part);
         face('wall-rim',edgeWidth,.8,edgeX,y-direction*.4,rimZ,[0,0,-sign],sign>0?'rotateY(180deg)':'',part);
@@ -684,7 +689,7 @@
     }
     function setManual(manual) {
       manualFaces.forEach(removeFace); manualFaces = []; manualLift = 0;
-      if ((!ps2 && !jewel && !['psp','xbox','xbox360','ds','gamecube','wii','wiiu','ps3','genesis'].includes(variant)) || !manual) return null;
+      if ((!ps2 && !jewel && !['psp','xbox','xbox360','ds','gamecube','wii','wiiu','ps3','ps4','genesis'].includes(variant)) || !manual) return null;
       const size = globalThis.OpenCabinetManualPDF.dimensions(profile, manual);
       const { width, height, thickness, x, y, sheets } = size;
       if(jewel) {

@@ -4,6 +4,7 @@ import { artworkWindow, chooseArtwork, dreamcastInsertWindows, dreamcastInsertTh
 import { arcballPoint, lidAngle, canvasViewport } from './three-box-motion.js';
 import { createContactShadows, configureAcrylicOptics, maskClearPanels } from './three-box-relief.js';
 import { prepareRenderGroup, createRenderLease, releaseSceneGpu, createFrameHold } from './three-box-session.js';
+import { createDiscMaterial } from './three-disc-material.js';
 
 let caseTask;
 async function caseData() {
@@ -53,8 +54,8 @@ export async function createViewer(host, options={}) {
     cover:print(),manualBack:print(),back_cover:print(),spine_left:print(),spine_right:print(),
     paper:print(),paper_spine_left:print(),paper_spine_right:print(),insert:print(0x151515),
     pages:new THREE.MeshStandardMaterial({color:0xdad8cd,roughness:.9}),
-    disc:new THREE.MeshStandardMaterial({color:0xbbc5d5,metalness:.45,roughness:.25,side:THREE.DoubleSide}),
-    discSilver:new THREE.MeshStandardMaterial({color:0xc3cedb,metalness:.9,roughness:.19,side:THREE.DoubleSide}),
+    disc:createDiscMaterial(),
+    discSilver:createDiscMaterial({silver:true}),
     hub:new THREE.MeshPhysicalMaterial({color:0xcfdde8,roughness:.2,transmission:.65,thickness:.4,side:THREE.DoubleSide}),
   };
   const meshes=[],manualMeshes=[];

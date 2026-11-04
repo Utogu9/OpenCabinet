@@ -1,0 +1,31 @@
+<!doctype html><meta charset="utf-8"><title>PS3 transparent case conversion</title>
+<link rel="stylesheet" href="/src/styles.css">
+<style>body{margin:0;background:#191d26}#stage{width:800px;height:650px}</style>
+<div id="stage" class="game-box-stage" tabindex="0"></div>
+<script>globalThis.OpenCabinetI18n={t:key=>key};</script>
+<script src="/src/image-fallbacks.js"></script><script src="/src/dvd-case.js"></script>
+<script src="/src/pdf-manual.js"></script><script src="/src/three-box-router.js"></script><script src="/src/game-box.js"></script>
+<script src="/src/cover-cache.js"></script><script src="/src/carousel-boxes.js"></script>
+<script type="module">
+window.platform=new URLSearchParams(location.search).get('platform')||'Sony PlayStation 3';
+const modelLabel='PS'+platform.match(/[345]/)[0];
+window.solid=(color,w=300,h=420)=>{
+  const canvas=document.createElement('canvas');canvas.width=w;canvas.height=h;
+  const context=canvas.getContext('2d');context.fillStyle=color;context.fillRect(0,0,w,h);
+  context.fillStyle='#fff';context.font='bold 24px sans-serif';context.fillText(modelLabel,20,40);return canvas;
+};
+const inlay=document.createElement('canvas');inlay.width=840;inlay.height=450;
+const ctx=inlay.getContext('2d'),spine=840*14/(133.2*2+14),face=(840-spine)/2;
+for(const [color,x,width,text] of [['#bf3f36',0,face,'FRONT INSIDE'],['#3255c3',face,spine,''],['#247d41',face+spine,face,'BACK INSIDE']]){
+  ctx.fillStyle=color;ctx.fillRect(x,0,width,450);ctx.fillStyle='#fff';ctx.font='bold 26px sans-serif';ctx.fillText(text,x+20,60);
+}
+window.art=[['cover','#2264b8'],['back_cover','#c95b27'],['spine','#f4ba2f'],['disc','#57962e']]
+  .map(([kind,color])=>({kind,path:solid(color).toDataURL()}));art.push({kind:'inlay',path:inlay.toDataURL()});
+window.manualFixture={front:solid('#d8393f'),back:solid('#e6b52f'),aspectRatio:300/420,pageCount:32,path:'test.pdf',dispose(){}};
+window.viewer=OpenCabinet3D.createViewer(document.getElementById('stage'),{
+  debug:state=>window.debug=state,loadManual:async()=>manualFixture,
+  onManualActivate:()=>{window.reading=true;return true;},onManualDeactivate:()=>window.reading=false
+});
+window.select=(id=1,images=art,settings=null)=>viewer.update({id,title:modelLabel+' conversion',platform,rom_path:'Game (USA).iso'},images,settings);
+select();
+</script>

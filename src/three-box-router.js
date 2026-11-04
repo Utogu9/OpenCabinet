@@ -4,7 +4,10 @@
   const load = model => {
     if(!moduleTasks.has(model))moduleTasks.set(model,(model==='switch'
       ? import('./three-switch-viewer.js') : model==='psp'
-      ? import('./three-psp-viewer.js') : import('./three-box-viewer.js'))
+      ? import('./three-psp-viewer.js') : model==='ps2'
+      ? import('./three-ps2-viewer.js') : model==='ps3'
+      ? import('./three-ps3-viewer.js') : model==='ps4'
+      ? import('./three-ps4-viewer.js') : import('./three-box-viewer.js'))
       .catch(error=>{moduleTasks.delete(model);throw error;}));
     return moduleTasks.get(model);
   };
@@ -18,6 +21,9 @@
     function backendFor(game,settings) {
       const profile=profileFor(game.platform,null,game.rom_path,resolveSettings(settings,game.box_3d));
       const model=globalThis.OpenCabinet3D.jewelFamily(game.platform) && ['jewel','jewelPal'].includes(profile.id) ? 'dreamcast'
+        : profile.id==='dvd'&&profile.variant==='ps2' ? 'ps2'
+        : profile.id==='bluray'&&profile.variant==='ps3' ? 'ps3'
+        : profile.id==='bluray'&&profile.variant==='ps4' ? 'ps4'
         : ['switch','psp'].includes(profile.id) && globalThis.OpenCabinetLocalModels?.[profile.id] ? profile.id : null;
       return model ? `three:${model}` : 'css';
     }

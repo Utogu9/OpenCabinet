@@ -4,7 +4,7 @@
   const isJewelBooklet = game => /^(sony)?playstation(1)?$|^ps1?$|^(sega)?dreamcast$/.test(String(game?.platform || '').toLowerCase().replace(/[^a-z0-9]/g, ''));
   const isPSP = game => /^(sony)?(playstationportable|psp)$/.test(String(game?.platform || '').toLowerCase().replace(/[^a-z0-9]/g, ''));
   const supportsGame = game => isPS2(game) || isJewelBooklet(game) || isPSP(game)
-    || /^(microsoft)?xbox(360)?$|^(nintendo)?(ds|dsi|gamecube|wii|wiiu)$|^(sony)?(playstation3|ps3)$|^(sega)?(megadrive(genesis)?|genesis(megadrive)?)$/.test(String(game?.platform || '').toLowerCase().replace(/[^a-z0-9]/g, ''));
+    || /^(microsoft)?xbox(360)?$|^(nintendo)?(ds|dsi|gamecube|wii|wiiu)$|^(sony)?(playstation[345]|ps[345])$|^(sega)?(megadrive(genesis)?|genesis(megadrive)?)$/.test(String(game?.platform || '').toLowerCase().replace(/[^a-z0-9]/g, ''));
   const isCoverSpread = (ratio,platform) => /^(nintendo)?dsi?$/.test(String(platform).toLowerCase().replace(/[^a-z0-9]/g,''))
     ? ratio>=1.8&&ratio<=2.4 : ratio>=1.05&&ratio<=1.7;
   let library;

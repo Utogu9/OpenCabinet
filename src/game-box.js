@@ -160,7 +160,7 @@
   }
   const initialRotation = () => multiply(axisAngle([1,0,0], -9), axisAngle([0,1,0], 28));
 
-  function createViewer(host, { imageSource = (path) => path, getCoverPreview = () => null, loadCoverPreview = null, onProfile = () => {}, onOpenState = () => {}, loadManual = null, onManualState = () => {}, onManualCoverChange = () => {}, onManualActivate = () => false, onManualDeactivate = () => {}, carousel = false, deferArtwork = false } = {}) {
+  function createViewer(host, { imageSource = (path) => path, getCoverPreview = () => null, loadCoverPreview = null, onProfile = () => {}, onOpenState = () => {}, loadManual = null, onManualState = () => {}, onManualCoverChange = () => {}, onManualActivate = () => false, onManualDeactivate = () => {}, carousel = false, deferArtwork = false, geometryOnly = false } = {}) {
     const dvd = globalThis.OpenCabinetDVD;
     const model = document.createElement("div"); model.className = "game-box-model";
     model.setAttribute("aria-hidden", "true"); host.replaceChildren(model);
@@ -414,7 +414,7 @@
       if (opening) schedule();
     }
     function schedule() {
-      if (!disposed && !suspended && frame === null) frame = requestAnimationFrame(paint);
+      if (!geometryOnly && !disposed && !suspended && frame === null) frame = requestAnimationFrame(paint);
     }
     function clearTextures() {
       spineLoads.splice(0).forEach(controller => controller.abort());
@@ -1081,6 +1081,16 @@
     });
     const observer = new ResizeObserver(() => { viewport = null; closeMenu(); schedule(); }); observer.observe(host);
     const api = {
+      // Consume the existing construction once, without mounting a CSS renderer
+      // or starting its lighting loop. Coordinates remain in millimetres.
+      captureGeometry(manual = null) {
+        ensureInterior();
+        interior?.setManual(manual);
+        model.style.setProperty('--box-scale', '1');
+        ['tl','tr','br','bl'].forEach((corner,index) => model.style.setProperty(`--box-corner-${corner}`, `${cornerRadii[index]}px`));
+        for (const face of faces) Object.assign(face.element.style, {width:`${face.width}px`,height:`${face.height}px`});
+        return {profile,faces:[...faces],paperLayout};
+      },
       suspend() { suspended = true; stopDrag(); if (frame !== null) { cancelAnimationFrame(frame); frame = null; } },
       resume() { if (!disposed) { suspended = false; schedule(); } },
       update(nextGame, nextImages, nextSettings = null) {
@@ -1143,7 +1153,16 @@
   }
   const legacyViewer = (host, options) => options.carousel && globalThis.OpenCabinetCarouselBoxes
     ? globalThis.OpenCabinetCarouselBoxes.createLegacy(host, options, createViewer) : createViewer(host, options);
-  globalThis.OpenCabinet3D = { resolveSettings,
+  function geometrySource(game, settings = null) {
+    const host = document.createElement('div');
+    host.style.cssText = 'position:fixed;visibility:hidden;pointer-events:none;left:-10000px;top:0;width:300px;height:300px;';
+    document.body.appendChild(host);
+    const blank = 'data:image/gif;base64,R0lGODlhAQABAAD/ACwAAAAAAQABAAACADs=';
+    const viewer = createViewer(host, {geometryOnly:true,deferArtwork:true,imageSource:()=>blank});
+    viewer.update(game, ['cover','back_cover','spine','disc'].map(kind=>({kind,path:blank})), settings);
+    return {capture:manual=>viewer.captureGeometry(manual),dispose(){viewer.dispose();host.remove();}};
+  }
+  globalThis.OpenCabinet3D = { resolveSettings, geometrySource,
     createViewer: (host, options = {}) => globalThis.OpenCabinetThreeBoxes
       ? globalThis.OpenCabinetThreeBoxes.createRouter(host, options, legacyViewer, profileFor, resolveSettings)
       : legacyViewer(host, options), profileFor, regionFor, jewelFamily,
