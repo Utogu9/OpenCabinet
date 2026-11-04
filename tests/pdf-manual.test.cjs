@@ -144,8 +144,8 @@ test('Mega Drive/Genesis manuals fit their original retaining tabs without stret
 
 test('DVD, DS, GameCube and PS3/PS4/PS5 manuals preserve their page proportions and respect lid clearances',()=>{
   const {api}=fixture();
-  for(const platform of ['Xbox','Microsoft Xbox','Xbox 360','Microsoft Xbox 360','DS','Nintendo DS','GameCube','Nintendo GameCube','Wii','Nintendo Wii','Wii U','Nintendo Wii U','PS3','Sony PlayStation 3','PS4','Sony PlayStation 4','PS5','Sony PlayStation 5'])assert.equal(api.supportsGame({platform}),true,platform);
-  for(const platform of ['Xbox One','Xbox Series X','Nintendo Switch','Nintendo 3DS','PS Vita'])assert.equal(api.supportsGame({platform}),false,platform);
+  for(const platform of ['Xbox','Microsoft Xbox','Xbox 360','Microsoft Xbox 360','DS','Nintendo DS','Nintendo 3DS','Nintendo 2DS','GameCube','Nintendo GameCube','Wii','Nintendo Wii','Wii U','Nintendo Wii U','PS3','Sony PlayStation 3','PS4','Sony PlayStation 4','PS5','Sony PlayStation 5'])assert.equal(api.supportsGame({platform}),true,platform);
+  for(const platform of ['Xbox One','Xbox Series X','Nintendo Switch','PS Vita'])assert.equal(api.supportsGame({platform}),false,platform);
   for(const profile of [
     {id:'dvd',variant:'xbox',width:135,height:190},
     {id:'dvd',variant:'xbox360',width:135,height:190},
@@ -155,6 +155,7 @@ test('DVD, DS, GameCube and PS3/PS4/PS5 manuals preserve their page proportions 
     {id:'gameCubeJapan',variant:'gamecube',width:107,height:149},
     {id:'ds',variant:'ds',width:135,height:122},
     {id:'dsPal',variant:'ds',width:135,height:122},
+    {id:'threeDs',variant:'threeDs',width:135,height:122},
     {id:'bluray',variant:'ps3',width:135,height:171,headerHeight:14},
     {id:'bluray',variant:'ps4',width:135,height:171,headerHeight:0},
   ])for(const ratio of [.45,.65,1.03,1.4]){

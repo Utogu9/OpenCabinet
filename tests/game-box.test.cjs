@@ -788,6 +788,7 @@ test('Xbox, Xbox 360, DS, GameCube, Wii, Wii U, PS3 and Genesis keep a prefetche
   for(const [platform,rom_path] of [
     ['Microsoft Xbox','Game (USA).iso'],['Microsoft Xbox 360','Game.iso'],
     ['Nintendo DS','Game (USA).nds'],['Nintendo DS','Game (Europe).nds'],
+    ['Nintendo 3DS','Game.3ds'],
     ['Nintendo GameCube','Game.iso'],['Nintendo GameCube','Game (Japan).iso'],
     ['Nintendo Wii','Game.iso'],['Nintendo Wii U','Game.wud'],['Sony PlayStation 3','EBOOT.BIN'],
     ['Sony PlayStation 4','EBOOT.BIN'],['Sony PlayStation 5','Game.bin'],

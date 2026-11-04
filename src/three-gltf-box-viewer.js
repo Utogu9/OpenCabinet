@@ -293,8 +293,8 @@ export async function createModelViewer(host,options={},definition) {
     if(name==='Cover Inside'&&material.map&&!procedural){material.map.repeat.x=-1;material.map.wrapS=THREE.RepeatWrapping;}
     if(dynamicTextures.delete(old))old.dispose();schedule();
   }
-  function label(context,text,x,y,w,h) {
-    context.fillStyle='#202633';context.fillRect(x,y,w,h);context.fillStyle='#e8edf5';
+  function label(context,text,x,y,w,h,background='#202633') {
+    context.fillStyle=background;context.fillRect(x,y,w,h);context.fillStyle=background==='#ffffff'?'#666666':'#e8edf5';
     context.textAlign='center';context.font=`600 ${Math.round(h*.035)}px sans-serif`;
     const words=String(text).split(/\s+/),lines=[];let line='';
     for(const word of words){if(context.measureText(`${line} ${word}`).width>w*.85&&line){lines.push(line);line=word;}else line=line?`${line} ${word}`:word;}
@@ -311,11 +311,12 @@ export async function createModelViewer(host,options={},definition) {
     if(changed('outside',pictures.full?[pictures.full,null,null,null]:[null,pictures.cover,pictures.back_cover,pictures.spine])) {
       if(pictures.full)assign('Cover Outside',pictures.full);
       else {
+        const whitePaper=['wii','wiiu','threeDs'].includes(profile.variant);
         const atlas=document.createElement('canvas');atlas.width=options.carousel?1024:2048;atlas.height=options.carousel?790:1580;
         const ctx=atlas.getContext('2d'),spine=atlas.width*(manifest.spine_fraction||.046),face=(atlas.width-spine)/2;
         ctx.fillStyle='#f0efe9';ctx.fillRect(0,0,atlas.width,atlas.height);
         for(const [kind,x] of [['back_cover',0],['cover',face+spine]]) {
-          if(pictures[kind])ctx.drawImage(pictures[kind],x,0,face,atlas.height);else label(ctx,game.title,x,0,face,atlas.height);
+          if(pictures[kind])ctx.drawImage(pictures[kind],x,0,face,atlas.height);else label(ctx,game.title,x,0,face,atlas.height,whitePaper?'#ffffff':undefined);
         }
         if(pictures.spine) {
           const image=pictures.spine;
@@ -323,7 +324,7 @@ export async function createModelViewer(host,options={},definition) {
             ctx.save();ctx.translate(face,atlas.height);ctx.rotate(-Math.PI/2);ctx.drawImage(image,0,0,atlas.height,spine);ctx.restore();
           } else ctx.drawImage(image,face,0,spine,atlas.height);
         }else if(procedural?.clearSpine)ctx.clearRect(face,0,spine,atlas.height);
-        else {ctx.fillStyle='#252b36';ctx.fillRect(face,0,spine,atlas.height);}
+        else {ctx.fillStyle=whitePaper?'#ffffff':'#252b36';ctx.fillRect(face,0,spine,atlas.height);}
         assign('Cover Outside',atlas);
       }
     }
@@ -336,7 +337,7 @@ export async function createModelViewer(host,options={},definition) {
     if(changed('cartridge',[pictures.cartridge])) {
       if(pictures.cartridge)assign('Cartridge Cover',pictures.cartridge);
       else if(!options.useModelArtwork) {
-        const card=document.createElement('canvas');card.width=256;card.height=352;label(card.getContext('2d'),game.title,0,0,256,352);assign('Cartridge Cover',card);
+        const card=document.createElement('canvas');card.width=256;card.height=352;label(card.getContext('2d'),game.title,0,0,256,352,modelId==='genesis'?'#202020':undefined);assign('Cartridge Cover',card);
       }
     }
   }
@@ -455,6 +456,7 @@ export async function createModelViewer(host,options={},definition) {
       const resolved=globalThis.OpenCabinet3D.resolveSettings(settings,next.box_3d);
       const style=resolved?.regions?.[globalThis.OpenCabinet3D.regionFor(next.rom_path)]||resolved?.base;
       procedural?.update(profile,next);
+      procedural?.selectArtwork?.(images);
       const switch2=modelId==='switch'&&profile.generation===2;
       switchShells?.set(switch2,style?.color||profile.color);
       for(const mesh of cartridgeMeshes)mesh.material=switch2?redCartridge:cartridgePlastic;

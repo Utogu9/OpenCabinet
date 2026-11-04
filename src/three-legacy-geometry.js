@@ -15,7 +15,7 @@ export function faceMatrix(transform) {
 function length(value,size) {
   // Computed clip paths can retain calc(), but only sums of lengths occur in
   // the case definitions. No script evaluation is needed to resolve them.
-  return [...String(value).replace(/calc\(|\)/g,'').replace(/\s+/g,'').matchAll(/([+-]?(?:\d*\.)?\d+)(%|px)?/g)]
+  return [...String(value).replace(/calc\(|\)/g,'').replace(/\s+/g,'').matchAll(/([+-]?(?:\d*\.)?\d+(?:e[+-]?\d+)?)(%|px)?/gi)]
     .reduce((sum,m)=>sum+Number(m[1])*(m[2]==='%'?size/100:1),0);
 }
 function components(value) {
@@ -52,13 +52,15 @@ function intersectConvex(subject,boundary) {
 }
 function closingLip(profile) {
   const {width:w,height:h}=profile,channel=globalThis.OpenCabinetDVD.openingChannel(profile);
+  const genesis=profile.id==='genesis',openingInset=genesis?2.6:0,endInset=genesis?3.8:0;
   const outline=inset=>{
-    const points=roundedRect(-w/2+inset,-h/2+inset,w-2*inset,h-2*inset,
-      [Math.max(.2,(profile.variant==='ps3'?3.2:1.3)-inset),3.2-inset,3.2-inset,Math.max(.2,1.3-inset)]);
-    const result=[],right=w/2-inset,half=h*channel.length/2;
+    const hinge=genesis?.65:1.3;
+    const points=roundedRect(-w/2+inset,-h/2+endInset+inset,w-openingInset-2*inset,h-2*endInset-2*inset,
+      [Math.max(.2,(profile.variant==='ps3'?3.2:hinge)-inset),3.2-inset,3.2-inset,Math.max(.2,hinge-inset)]);
+    const result=[],right=w/2-openingInset-inset,half=h*(channel?.length||0)/2;
     for(let i=0;i<points.length;i++){
       const p=points[i],q=points[(i+1)%points.length];result.push(p);
-      if(Math.abs(p[0]-right)<1e-6&&Math.abs(q[0]-right)<1e-6&&p[1]<-half&&q[1]>half)
+      if(channel&&Math.abs(p[0]-right)<1e-6&&Math.abs(q[0]-right)<1e-6&&p[1]<-half&&q[1]>half)
         result.push([right,-half],[right-channel.intrusion,-half],[right-channel.intrusion,half],[right,half]);
     }
     return result.map(([x,y])=>new THREE.Vector2(x,-y));
@@ -97,6 +99,19 @@ function pointInside([x,y],points) {
 }
 function contours(face,style) {
   const w=face.width,h=face.height,mask=style.maskImage;
+  if(face.element.classList.contains('game-box-grab-lip')) {
+    // This mask has an opening that reaches outside the silhouette, not an
+    // enclosed hole. Feeding it to Earcut as a hole fills the entire cover.
+    const svg=new DOMParser().parseFromString(decodeURIComponent(mask.match(/data:image\/svg\+xml,([^"']*)/)[1]),'image/svg+xml');
+    const left=Number(svg.querySelector('rect[fill="black"]').getAttribute('x'))<0;
+    const outline=roundedRect(0,0,w,h,[.65,.65,.65,.65]),points=[];
+    for(let i=0;i<outline.length;i++){
+      const p=outline[i],q=outline[(i+1)%outline.length];points.push(p);
+      if(left&&p[0]<1e-6&&q[0]<1e-6&&p[1]>q[1])points.push([0,h-4.6],[w-4.6,h-4.6],[w-4.6,4.6],[0,4.6]);
+      if(!left&&Math.abs(p[0]-w)<1e-6&&Math.abs(q[0]-w)<1e-6&&p[1]<q[1])points.push([w,4.6],[4.6,4.6],[4.6,h-4.6],[w,h-4.6]);
+    }
+    return [{outline:points,holes:[]}];
+  }
   const cornerRadii=(width,height)=>['borderTopLeftRadius','borderTopRightRadius','borderBottomRightRadius','borderBottomLeftRadius']
     .map(key=>Math.min(width/2,height/2,length(style[key],Math.min(w,h))));
   const svg=svgContours(mask,w,h,style.maskMode==='luminance');
@@ -153,11 +168,15 @@ export function faceGeometry(face,{style=getComputedStyle(face.element),uv=(x,y)
 export function convertLegacyCase(sourceFactory,templateKey) {
   const template=templates.get(templateKey),source=template?null:sourceFactory();
   const snapshot=template||source.capture(),profile=snapshot.profile,{width:w,height:h,depth:d}=profile;
-  const clear=['ps3','ps4','xbox','xbox360'].includes(profile.variant),dvdClips=profile.id==='dvd';
+  const clear=['ps3','ps4','xbox','xbox360'].includes(profile.variant);
+  const handheld=['ds','threeDs'].includes(profile.variant),cartridgeCase=handheld||profile.variant==='genesis';
+  const dvdClips=profile.id==='dvd'||profile.variant==='gamecube'||handheld;
+  const securityClips=profile.variant==='gamecube'||handheld;
   const bodyOpacity=variant=>({ps3:.07,ps4:.14,xbox:.20,xbox360:.12}[variant]??.07);
   const scene=new THREE.Group(),parts={},batches=new Map();
   for(const name of ['tray','spine','lid']){const group=new THREE.Group();group.name=`Case ${name}`;scene.add(group);parts[name]=group;}
-  const plasticColor=color=>color.toLowerCase()==='#16191f'?'#343537':color;
+  const plasticColor=color=>['#16191f','#202328','#282c32'].includes(color.toLowerCase())
+    ||profile.variant==='gamecube'&&color.toLowerCase()==='#8b8f96'?'#343537':color;
   const plastic=clear?clearCasePlastic(profile.color):new THREE.MeshPhysicalMaterial({color:plasticColor(profile.color),roughness:.84,metalness:0,
     specularIntensity:.16,envMapIntensity:.24,clearcoat:0,side:THREE.DoubleSide});plastic.name='Case Plastic';
   if(clear)plastic.opacity=bodyOpacity(profile.variant);
@@ -173,7 +192,11 @@ export function convertLegacyCase(sourceFactory,templateKey) {
     blending:THREE.AdditiveBlending,depthWrite:false,side:THREE.FrontSide});film.name='Sleeve Film';
   const disc=createDiscMaterial();disc.name='UMD Label';
   const silver=createDiscMaterial({silver:true});silver.name='Disc Silver';
-  const surfaceMaterials=[plastic,raised,paper,cover,disc,silver,film,...(inside?[inside]:[])],decals=template?.decals||[];
+  const genesis=profile.variant==='genesis';
+  const cart=new THREE.MeshPhysicalMaterial({color:profile.variant==='threeDs'?0xeeeae5:genesis?0x202020:0x34363a,
+    roughness:genesis?.8:.7,metalness:0,specularIntensity:genesis?.12:.16,envMapIntensity:genesis?.12:.2,side:THREE.DoubleSide});cart.name='Cartridge Plastic';
+  const cartLabel=paper.clone();cartLabel.name='Cartridge Cover';
+  const surfaceMaterials=[plastic,raised,paper,cover,disc,silver,film,...(inside?[inside]:[]),...(cartridgeCase?[cart,cartLabel]:[])],decals=template?.decals||[];
   const faceWidth=snapshot.paperLayout.width,total=faceWidth*2+d;
   function artUV(kind,u,v) {
     return [(kind==='back_cover'?u*faceWidth:kind==='spine'?faceWidth+u*d:faceWidth+d+u*faceWidth)/total,v];
@@ -222,9 +245,21 @@ export function convertLegacyCase(sourceFactory,templateKey) {
     if(/dvd-memory-slot|dvd-brand|dvd-hub-label/.test(name)) {
       if(/memory-slot|hub-label/.test(name))decals.push({part:face.part,width:face.width,height:face.height,
         geometry:faceGeometry(face,{style,offset:.015}),memory:/memory-slot/.test(name),text:element.textContent});
+      const brandKeys=[['.game-box-gamecube-logo','gamecube-logo'],['.game-box-sega-mark','sega'],
+        ['.wii-mark','wii'],['.wiiu-mark','nintendo'],['.game-box-handheld-logo.three-ds','three-ds'],['.game-box-handheld-logo.ds','ds']];
+      for(const [selector,brand] of brandKeys){
+        const mark=element.querySelector(selector);if(!mark)continue;
+        const ms=getComputedStyle(mark),ww=length(ms.width,face.width)||face.width,hh=length(ms.height,face.height)||face.height;
+        const x=mark.offsetLeft+ww/2-face.width/2,y=mark.offsetTop+hh/2-face.height/2;
+        const markFace={...face,width:ww,height:hh,transform:s=>`${face.transform(s)} translate3d(${x*s}px,${y*s}px,${.02*s}px)`};
+        decals.push({part:face.part,width:ww,height:hh,geometry:faceGeometry(markFace,{style:{maskImage:'none',clipPath:'none'}}),brand,text:'',name:'Console Mark '+brand});
+      }
+      if(!element.children.length&&element.textContent.trim()&&!/hub-label/.test(name))decals.push({part:face.part,width:face.width,height:face.height,
+        geometry:faceGeometry(face,{style,offset:.015}),text:element.textContent,fontSize:parseFloat(style.fontSize),name:'Molded Caption'});
       continue;
     }
-    let mat=/dvd-disc(?:\s|$)/.test(name)?(/underside/.test(name)?silver:disc):/disc-edge/.test(name)?silver:/hub|clip|cradle/.test(name)?raised:plastic;
+    let mat=/dvd-cartridge-label/.test(name)?cartLabel:/dvd-cartridge(?:\s|$)/.test(name)?cart:
+      /dvd-disc(?:\s|$)/.test(name)?(/underside/.test(name)?silver:disc):/disc-edge/.test(name)?silver:/hub|clip|cradle/.test(name)?raised:plastic;
     batch(face,faceGeometry(face,{style}),mat,/manual-clip|manual-pressure|manual-frame/.test(name)?'clips':'body');
   }
   const clipMeshes=[];
@@ -267,16 +302,16 @@ export function convertLegacyCase(sourceFactory,templateKey) {
   scene.traverse(node=>{if(node.isMesh&&!shadowReceivers.includes(node)&&!shadowCasters.includes(node)){node.castShadow=!node.material.transparent&&!node.material.isMeshBasicMaterial;
     node.receiveShadow=!!node.material.isMeshStandardMaterial;}});
   if(!template){templates.set(templateKey,{profile,paperLayout:snapshot.paperLayout,meshes:compiled,decals,sourceFaceCount:snapshot.faces.length});source.dispose();}
-  let changed=()=>{},disposed=false,brandURL=null;
+  let changed=()=>{},disposed=false;const brandURLs=new Map();
   const labelTextures=[],labelMaterials=[],labelCanvases=[];
   for(const decal of decals) {
     const canvas=document.createElement('canvas');canvas.width=Math.max(128,Math.ceil(decal.width*12));canvas.height=Math.max(64,Math.ceil(decal.height*12));
     const context=canvas.getContext('2d');context.fillStyle='#fff';context.textAlign='center';context.textBaseline='middle';
-    context.font=`bold ${decal.memory?canvas.height*.075:canvas.height*.65}px Arial,sans-serif`;
+    context.font=`bold ${decal.memory?canvas.height*.075:decal.fontSize?decal.fontSize/decal.height*canvas.height:canvas.height*.65}px Arial,sans-serif`;
     if(decal.memory){context.fillText('MEMORY CARD',canvas.width/2,canvas.height*.77);context.fillText('HOLDER',canvas.width/2,canvas.height*.86);}
     else context.fillText(decal.text,canvas.width/2,canvas.height/2,canvas.width*.95);
     const texture=new THREE.CanvasTexture(canvas);texture.flipY=false;texture.colorSpace=THREE.SRGBColorSpace;
-    const mat=raised.clone();mat.name=decal.brand?'Blu-ray Mark':decal.memory?'Memory Card Mark':'Push Mark';mat.map=texture;mat.transparent=true;mat.alphaTest=.2;
+    const mat=raised.clone();mat.name=decal.name||(decal.brand?'Blu-ray Mark':decal.memory?'Memory Card Mark':'Push Mark');mat.map=texture;mat.transparent=true;mat.alphaTest=.2;
     if(clear){mat.opacity=.28;mat.onBeforeCompile=plastic.onBeforeCompile;mat.customProgramCacheKey=plastic.customProgramCacheKey;}
     const mesh=new THREE.Mesh(decal.geometry.clone(),mat);parts[decal.part].add(mesh);
     labelTextures.push(texture);labelMaterials.push(mat);labelCanvases.push(canvas);
@@ -296,39 +331,54 @@ export function convertLegacyCase(sourceFactory,templateKey) {
     const front=sheet(manualFront);front.rotation.y=Math.PI;front.position.z=-.52;
     const back=sheet(manualBack);back.position.z=.52;
     for(const mesh of [body,front,back]){manualGroup.add(mesh);manualMeshes.push(mesh);meshes.push(mesh);}
-    const footGeometry=new THREE.BoxGeometry(dvdClips?4.5:4,dvdClips?10.4:16,1),footParts=[];
-    for(const sign of [-1,1]){const g=footGeometry.clone();g.translate(w/2-(dvdClips?5.75:4.5),sign*h*(dvdClips?.415:.34),0);footParts.push(g);}
-    feet=new THREE.Mesh(mergeGeometries(footParts),raised);footGeometry.dispose();footParts.forEach(g=>g.dispose());
-    feet.name='Booklet Retainer Feet';
-    feet.castShadow=feet.receiveShadow=true;feet.visible=false;parts.lid.add(feet);meshes.push(feet);
+    if(profile.variant!=='genesis'){
+      const footGeometry=new THREE.BoxGeometry(dvdClips?4.5:4,dvdClips?10.4:16,1),footParts=[];
+      for(const sign of [-1,1]){const g=footGeometry.clone();g.translate(w/2-(securityClips?12.25:dvdClips?5.75:4.5),sign*h*(dvdClips?.415:.34),0);footParts.push(g);}
+      feet=new THREE.Mesh(mergeGeometries(footParts),raised);footGeometry.dispose();footParts.forEach(g=>g.dispose());
+      feet.name='Booklet Retainer Feet';
+      feet.castShadow=feet.receiveShadow=true;feet.visible=false;parts.lid.add(feet);meshes.push(feet);
+    }
   }
   function fitManual(image,data) {
     const size=globalThis.OpenCabinetManualPDF.dimensions(profile,{aspectRatio:image.width/image.height,pageCount:data?.pageCount||16});
     const {width,height,thickness,x,y}=size;
     booklet.group.scale.set(width,height,thickness);
     booklet.group.position.set(x,-y,d/2-1.15-.18-thickness/2);
-    clipLift=Math.max(0,thickness-.55);clipMeshes.forEach(mesh=>mesh.position.z=-clipLift);
-    feet.scale.z=Math.max(.001,clipLift);feet.position.z=d/2-1.15-clipLift/2;feet.visible=clipLift>0;
+    clipLift=profile.variant==='genesis'?0:Math.max(0,thickness-.55);clipMeshes.forEach(mesh=>mesh.position.z=-clipLift);
+    if(feet){feet.scale.z=Math.max(.001,clipLift);feet.position.z=d/2-1.15-clipLift/2;feet.visible=clipLift>0;}
     lastSize=size;
   }
   function refreshBrand() {
-    if(!decals.some(decal=>decal.memory||decal.brand))return;
-    const url=document.documentElement.style.getPropertyValue(clear?'--box-brand-bluray':'--box-brand-playstation').trim();
-    if(url===brandURL)return;brandURL=url;
-    decals.forEach((decal,i)=>{if(!decal.memory&&!decal.brand)return;const canvas=labelCanvases[i];
-      canvas.getContext('2d').clearRect(decal.brand?0:canvas.width*.32,decal.brand?0:canvas.height*.12,decal.brand?canvas.width:canvas.width*.36,decal.brand?canvas.height:canvas.height*.42);labelTextures[i].needsUpdate=true;
-    });changed();
-    const path=url.match(/^url\(["']?(.*?)["']?\)$/)?.[1];if(!path)return;
-    const image=new Image();image.crossOrigin='anonymous';image.onload=()=>{
-      if(disposed||brandURL!==url)return;
-      decals.forEach((decal,i)=>{if(!decal.memory&&!decal.brand)return;const canvas=labelCanvases[i],ctx=canvas.getContext('2d');
-        const x=decal.brand?0:canvas.width*.32,y=decal.brand?0:canvas.height*.12,width=decal.brand?canvas.width:canvas.width*.36,height=decal.brand?canvas.height:canvas.height*.42;
-        const scale=Math.min(width/image.width,height/image.height),ww=image.width*scale,hh=image.height*scale;
-        ctx.clearRect(x,y,width,height);ctx.drawImage(image,x+(width-ww)/2,y+(height-hh)/2,ww,hh);
-        ctx.globalCompositeOperation='source-in';ctx.fillStyle='#fff';ctx.fillRect(0,0,canvas.width,canvas.height);ctx.globalCompositeOperation='source-over';
-        labelTextures[i].needsUpdate=true;
+    for(const key of new Set(decals.map(decal=>decal.memory?'playstation':decal.brand).filter(Boolean))){
+      const url=document.documentElement.style.getPropertyValue('--box-brand-'+key).trim();
+      if(brandURLs.get(key)===url)continue;brandURLs.set(key,url);
+      const applies=decal=>(decal.memory?'playstation':decal.brand)===key;
+      decals.forEach((decal,i)=>{if(!applies(decal))return;const canvas=labelCanvases[i];
+        canvas.getContext('2d').clearRect(decal.brand?0:canvas.width*.32,decal.brand?0:canvas.height*.12,decal.brand?canvas.width:canvas.width*.36,decal.brand?canvas.height:canvas.height*.42);labelTextures[i].needsUpdate=true;
       });changed();
-    };image.src=path;
+      const path=url.match(/^url\(["']?(.*?)["']?\)$/)?.[1];if(!path)continue;
+      const image=new Image();image.crossOrigin='anonymous';image.onload=()=>{
+        if(disposed||brandURLs.get(key)!==url)return;
+        decals.forEach((decal,i)=>{if(!applies(decal))return;const canvas=labelCanvases[i],ctx=canvas.getContext('2d');
+          const x=decal.brand?0:canvas.width*.32,y=decal.brand?0:canvas.height*.12,width=decal.brand?canvas.width:canvas.width*.36,height=decal.brand?canvas.height:canvas.height*.42;
+          const scale=Math.min(width/image.width,height/image.height),ww=image.width*scale,hh=image.height*scale;
+          ctx.clearRect(x,y,width,height);ctx.drawImage(image,x+(width-ww)/2,y+(height-hh)/2,ww,hh);
+          ctx.globalCompositeOperation='source-in';ctx.fillStyle='#fff';ctx.fillRect(0,0,canvas.width,canvas.height);ctx.globalCompositeOperation='source-over';
+          if(key==='wii'){
+            // A shallow molded edge stays legible against the white shell.
+            ctx.globalCompositeOperation='destination-over';ctx.shadowColor='rgba(0,0,0,.6)';
+            ctx.shadowBlur=3;ctx.shadowOffsetX=1.5;ctx.shadowOffsetY=2;ctx.drawImage(canvas,0,0);
+            ctx.shadowColor='transparent';ctx.shadowBlur=ctx.shadowOffsetX=ctx.shadowOffsetY=0;ctx.globalCompositeOperation='source-over';
+          }
+          labelTextures[i].needsUpdate=true;
+        });changed();
+      };image.src=path;
+    }
+  }
+  function selectArtwork(images) {
+    if(profile.variant!=='genesis')return;
+    const label=images.some(image=>image.kind==='cart_label'&&image.path),cartW=Math.min(110,h-28),cartH=Math.min(70,w-40);
+    scene.traverse(mesh=>{if(mesh.material===cartLabel)mesh.scale.set(label?1:cartH/(cartH-18),label?1:cartW/(cartW-18),1);});
   }
   function update(next) {
     plastic.color.set(plasticColor(next.color));raised.color.copy(plastic.color);
@@ -366,7 +416,7 @@ export function convertLegacyCase(sourceFactory,templateKey) {
     return canvas;
   }
   return {scene,animations:[],manifest:{dimensions:[w,h,d],spine_fraction:d/total},pose,createManual,fitManual,clearManual,update,
-    configureLighting,beforeRender,releaseLighting,
+    configureLighting,beforeRender,releaseLighting,selectArtwork,
     ...(clear?{clearSpine:true,paperReverse}:{}),
     sourceFaceCount:template?.sourceFaceCount||snapshot.faces.length,materials:surfaceMaterials,parts,get manualSize(){return lastSize;},
     onChange(callback){changed=callback;},dispose(){disposed=true;brandObserver.disconnect();releaseLighting();}};

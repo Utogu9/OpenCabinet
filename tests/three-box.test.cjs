@@ -25,12 +25,12 @@ function router(load,{switchModel=false,pspModel=false}={}) {
     model=>load(make,model));
   return {api,viewers};
 }
-test('Dreamcast switches to Three.js; Wii keeps the existing viewer',async()=>{
+test('Dreamcast switches to Three.js; generic DVD keeps the existing viewer',async()=>{
   let imports=0;const app=router(async make=>{imports++;return {createViewer:()=>make('three')};});
-  app.api.update({id:1,platform:'Wii'},[]);assert.equal(imports,0);assert.equal(app.viewers[0].type,'css');
+  app.api.update({id:1,platform:'PC'},[]);assert.equal(imports,0);assert.equal(app.viewers[0].type,'css');
   app.api.update({id:2,platform:'Dreamcast'},[]);await tick();
   assert.equal(imports,1);assert.equal(app.viewers[0].disposed,true);assert.equal(app.viewers[1].type,'three');
-  app.api.update({id:3,platform:'Wii'},[]);assert.equal(app.viewers[1].disposed,true);assert.equal(app.viewers[2].type,'css');
+  app.api.update({id:3,platform:'PC'},[]);assert.equal(app.viewers[1].disposed,true);assert.equal(app.viewers[2].type,'css');
 });
 
 test('PS2 uses converted geometry and preserves explicit non-DVD overrides',async()=>{
@@ -80,6 +80,19 @@ test('Xbox and Xbox 360 reuse the DVD conversion while other Xbox generations an
   fallback.api.update({id:7,platform:'Microsoft Xbox'},[]);await tick();assert.equal(fallback.viewers[0].type,'css');fallback.api.dispose();
 });
 
+test('Sega and Nintendo conversions select their own geometry, regional dimensions and explicit overrides',async()=>{
+  const loaded=[],app=router(async(make,model)=>{loaded.push(model);return {createViewer:()=>make(model)};});
+  for(const [id,platform,rom_path,model] of [[1,'Sega Mega Drive / Genesis','Game (USA).md','genesis'],[2,'Sega Genesis','Other.bin','genesis'],
+    [3,'Nintendo Wii','Game.iso','wii'],[4,'Nintendo Wii U','Game.wud','wiiu'],[5,'Nintendo GameCube','Game (USA).iso','gamecube'],
+    [6,'Nintendo GameCube','Game (Japan).iso','gamecube-japan'],[7,'Nintendo DS','Game (USA).nds','ds'],
+    [8,'Nintendo DS','Game (Europe).nds','ds-pal'],[9,'Nintendo 3DS','Game.3ds','3ds']]){
+    app.api.update({id,platform,rom_path},[]);await tick();assert.equal(app.viewers.at(-1).type,model);
+  }
+  assert.deepEqual(loaded,['genesis','wii','wiiu','gamecube','gamecube-japan','ds','ds-pal','3ds']);
+  app.api.update({id:10,platform:'Nintendo Wii'},[],{base:{model:'bluray'}});await tick();assert.equal(app.viewers.at(-1).type,'css');app.api.dispose();
+  const missing=router(async()=>{throw Error('WebGL unavailable');});missing.api.update({id:11,platform:'Nintendo 3DS'},[]);await tick();assert.equal(missing.viewers[0].type,'css');missing.api.dispose();
+});
+
 test('Switch 2 shares the optional Switch backend without rebuilding it between generations',async()=>{
   let imports=0;const app=router(async(make,model)=>{imports++;assert.equal(model,'switch');return {createViewer:()=>make('switch')};},{switchModel:true});
   app.api.update({id:1,platform:'Nintendo Switch'},[]);await tick();const viewer=app.viewers[0];
@@ -90,7 +103,7 @@ test('Switch 2 shares the optional Switch backend without rebuilding it between 
 
 test('Cached CSS viewers pause without disposal and a loading WebGL viewer inherits its parked state',async()=>{
   let finish;const app=router(make=>new Promise(resolve=>{finish=()=>resolve({createViewer:()=>make('three')});}));
-  app.api.update({id:1,platform:'Wii'},[]);const css=app.viewers[0];
+  app.api.update({id:1,platform:'PC'},[]);const css=app.viewers[0];
   app.api.suspend();assert.deepEqual(css.calls.at(-1),['suspend',false]);assert.equal(css.disposed,false);
   app.api.resume();assert.deepEqual(css.calls.at(-1),['resume']);
   app.api.update({id:2,platform:'Dreamcast'},[]);app.api.suspend(true);finish();await tick();
@@ -139,22 +152,22 @@ test('PSP loads its own optional model and preserves the CSS fallback and other 
 });
 test('Late module responses cannot replace a newly selected platform',async()=>{
   let resolve;const app=router(make=>new Promise(done=>{resolve=()=>done({createViewer:()=>make('three')});}));
-  app.api.update({id:1,platform:'Dreamcast'},[]);app.api.update({id:2,platform:'Wii'},[]);
+  app.api.update({id:1,platform:'Dreamcast'},[]);app.api.update({id:2,platform:'PC'},[]);
   resolve();await tick();assert.equal(app.viewers.length,1);assert.equal(app.viewers[0].type,'css');assert.equal(app.viewers[0].disposed,false);
 });
 
 test('Warm artwork updates reuse a ready backend and reject geometry/backend changes',async()=>{
   const app=router(async make=>({createViewer:()=>make('three')}));
-  app.api.update({id:1,platform:'Wii'},[]);
+  app.api.update({id:1,platform:'PC'},[]);
   app.viewers[0].updateCachedArtwork=(game,images)=>{app.viewers[0].calls.push(['cached',game,images]);return true;};
-  assert.equal(app.api.updateCachedArtwork({id:2,platform:'Wii'},[{kind:'cover',path:'ram'}]),true);
+  assert.equal(app.api.updateCachedArtwork({id:2,platform:'PC'},[{kind:'cover',path:'ram'}]),true);
   assert.equal(app.viewers[0].calls.at(-1)[0],'cached');
   assert.equal(app.api.updateCachedArtwork({id:3,platform:'Dreamcast'},[]),false);
   assert.equal(app.viewers[0].disposed,false);
   app.api.update({id:3,platform:'Dreamcast'},[]);await tick();
   assert.equal(app.api.updateCachedArtwork({id:4,platform:'Dreamcast'},[{kind:'cover',path:'ram'}]),true);
   assert.equal(app.viewers.at(-1).calls.at(-1)[1].id,4);
-  assert.equal(app.api.updateCachedArtwork({id:5,platform:'Wii'},[]),false);
+  assert.equal(app.api.updateCachedArtwork({id:5,platform:'PC'},[]),false);
   app.api.dispose();
 });
 test('Updates and controls during loading apply to the most recently selected game',async()=>{
@@ -167,7 +180,7 @@ test('Updates and controls during loading apply to the most recently selected ga
 });
 test('Incremental rotation is forwarded to CSS and queued for a loading Three.js model',async()=>{
   let finish;const app=router(make=>new Promise(resolve=>{finish=()=>resolve({createViewer:()=>make('three')});}));
-  app.api.update({id:1,platform:'Wii'},[]);app.api.rotate(2,-3);
+  app.api.update({id:1,platform:'PC'},[]);app.api.rotate(2,-3);
   assert.deepEqual(app.viewers[0].calls.at(-1),['rotate',2,-3]);
   app.api.update({id:2,platform:'Dreamcast'},[]);app.api.rotate(-4,5);finish();await tick();
   assert.deepEqual(app.viewers[1].calls.at(-1),['rotate',-4,5]);app.api.dispose();
@@ -176,7 +189,7 @@ test('Incremental rotation is forwarded to CSS and queued for a loading Three.js
 test('An in-flight model load can check cancellation before touching a replacement viewer',async()=>{
   let finish,options;const app=router(async make=>({createViewer:(_host,config)=>{options=config;return new Promise(resolve=>{finish=()=>resolve(config.isCurrent()?make('three'):null);});}}));
   app.api.update({id:1,platform:'Dreamcast'},[]);await tick();assert.equal(options.isCurrent(),true);
-  app.api.update({id:2,platform:'Wii'},[]);assert.equal(options.isCurrent(),false);finish();await tick();assert.equal(app.viewers.length,1);
+  app.api.update({id:2,platform:'PC'},[]);assert.equal(options.isCurrent(),false);finish();await tick();assert.equal(app.viewers.length,1);
 });
 test('Full covers retain contiguous UV windows; separate back and spine images each use their entire image',async()=>{
   const {artworkWindow,chooseArtwork}=await import('../src/three-box-artwork.js');

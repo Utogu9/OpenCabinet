@@ -8,7 +8,8 @@
 <script src="/src/cover-cache.js"></script><script src="/src/carousel-boxes.js"></script>
 <script type="module">
 window.platform=new URLSearchParams(location.search).get('platform')||'Sony PlayStation 3';
-const modelLabel=/xbox/i.test(platform)?(/360/.test(platform)?'Xbox 360':'Xbox'):'PS'+platform.match(/[345]/)[0];
+window.romPath=new URLSearchParams(location.search).get('rom')||'Game (USA).iso';
+const modelLabel=/playstation/i.test(platform)?'PS'+platform.match(/[345]/)[0]:platform.replace(/^(Microsoft|Nintendo|Sega) /,'');
 window.solid=(color,w=300,h=420)=>{
   const canvas=document.createElement('canvas');canvas.width=w;canvas.height=h;
   const context=canvas.getContext('2d');context.fillStyle=color;context.fillRect(0,0,w,h);
@@ -21,11 +22,13 @@ for(const [color,x,width,text] of [['#bf3f36',0,face,'FRONT INSIDE'],['#3255c3',
 }
 window.art=[['cover','#2264b8'],['back_cover','#c95b27'],['spine','#f4ba2f'],['disc','#57962e']]
   .map(([kind,color])=>({kind,path:solid(color).toDataURL()}));art.push({kind:'inlay',path:inlay.toDataURL()});
-window.manualFixture={front:solid('#d8393f'),back:solid('#e6b52f'),aspectRatio:300/420,pageCount:32,path:'test.pdf',dispose(){}};
+if(/genesis|mega drive|\b[23]?ds\b/i.test(platform))art.push({kind:'cart_front',path:solid('#216599').toDataURL()},{kind:'cart_label',path:solid('#c84fbe',60,75).toDataURL()});
+const square=/\b[23]?ds\b/i.test(platform);
+window.manualFixture={front:solid('#d8393f',square?309:300,square?300:420),back:solid('#e6b52f',square?309:300,square?300:420),aspectRatio:square?1.03:300/420,pageCount:32,path:'test.pdf',dispose(){}};
 window.viewer=OpenCabinet3D.createViewer(document.getElementById('stage'),{
   debug:state=>window.debug=state,loadManual:async()=>manualFixture,
   onManualActivate:()=>{window.reading=true;return true;},onManualDeactivate:()=>window.reading=false
 });
-window.select=(id=1,images=art,settings=null)=>viewer.update({id,title:modelLabel+' conversion',platform,rom_path:'Game (USA).iso'},images,settings);
+window.select=(id=1,images=art,settings=null)=>viewer.update({id,title:modelLabel+' conversion',platform,rom_path:romPath},images,settings);
 select();
 </script>

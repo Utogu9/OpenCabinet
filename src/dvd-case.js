@@ -689,7 +689,7 @@
     }
     function setManual(manual) {
       manualFaces.forEach(removeFace); manualFaces = []; manualLift = 0;
-      if ((!ps2 && !jewel && !['psp','xbox','xbox360','ds','gamecube','wii','wiiu','ps3','ps4','genesis'].includes(variant)) || !manual) return null;
+      if ((!ps2 && !jewel && !['psp','xbox','xbox360','ds','threeDs','gamecube','wii','wiiu','ps3','ps4','genesis'].includes(variant)) || !manual) return null;
       const size = globalThis.OpenCabinetManualPDF.dimensions(profile, manual);
       const { width, height, thickness, x, y, sheets } = size;
       if(jewel) {

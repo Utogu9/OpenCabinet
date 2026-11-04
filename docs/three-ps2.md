@@ -23,8 +23,9 @@ retirement releases the maps and recreates them on resume. An overlapping inner
 closing lip blocks views through the seam without filling the finger recess.
 
 `three-ps2-viewer.js` connects the adapter to the shared Three.js controls,
-fullscreen and couch-mode lifecycle. Other legacy consoles retain their current
-viewer. The router falls back to the CSS case if WebGL or conversion fails.
+fullscreen and couch-mode lifecycle. Related conversions share this adapter;
+see the PS3, PS4, Xbox and [Sega/Nintendo cases](three-sega-nintendo.md) notes.
+The router falls back to the CSS case if WebGL or conversion fails.
 
 Run the browser integration test with `playwright-core` and Chromium available:
 
@@ -32,6 +33,5 @@ Run the browser integration test with `playwright-core` and Chromium available:
 node --test tests/three-ps2-browser.test.cjs
 ```
 
-The conversion is a first implementation for PS2. Other families need their
-own material and artwork mappings before being enabled through this adapter;
-the construction and triangle conversion can be reused.
+Each family supplies its own material and artwork mappings while reusing the
+construction and triangle conversion.

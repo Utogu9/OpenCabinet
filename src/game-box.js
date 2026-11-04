@@ -1159,7 +1159,7 @@
     document.body.appendChild(host);
     const blank = 'data:image/gif;base64,R0lGODlhAQABAAD/ACwAAAAAAQABAAACADs=';
     const viewer = createViewer(host, {geometryOnly:true,deferArtwork:true,imageSource:()=>blank});
-    viewer.update(game, ['cover','back_cover','spine','disc'].map(kind=>({kind,path:blank})), settings);
+    viewer.update(game, ['cover','back_cover','spine','disc','cart_label'].map(kind=>({kind,path:blank})), settings);
     return {capture:manual=>viewer.captureGeometry(manual),dispose(){viewer.dispose();host.remove();}};
   }
   globalThis.OpenCabinet3D = { resolveSettings, geometrySource,

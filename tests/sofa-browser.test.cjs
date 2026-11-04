@@ -25,6 +25,7 @@ test('Couch mode carousels, controller selectors, launch return and cleanup work
   await page.evaluate(messages=>{window.OpenCabinetI18n={t:(key,...values)=>(messages[key]||key).replace(/\{(\d+)\}/g,(token,index)=>values[index]??token)};},messages);
   for(const name of ['local-models.js','dvd-case.js','image-fallbacks.js','cover-cache.js','pdf-manual.js','manual-reader.js','game-box.js','carousel-boxes.js','three-box-router.js','game-discs.js','game-regions.js','sofa-mode.js'])await page.addScriptTag({url:`/src/${name}`});
   await page.evaluate(messages=>{
+    OpenCabinetLocalModels.psp=false;
     window.OpenCabinetI18n={t:(key,...values)=>(messages[key]||key).replace(/\{(\d+)\}/g,(token,index)=>values[index]??token)};
     const image=(text,color)=>'data:image/svg+xml,'+encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="480" height="680"><rect width="480" height="680" fill="${color}"/><path d="M0 140 480 430V680H0Z" fill="#0003"/><text x="35" y="75" font-family="sans-serif" font-size="22" fill="white">OpenCabinet</text><text x="35" y="320" font-family="sans-serif" font-size="34" fill="white">${text}</text></svg>`);
     const disc=(id,label)=>({id,label,rom_path:`/fixture/disc${id}.iso`,available:true});
@@ -44,7 +45,7 @@ test('Couch mode carousels, controller selectors, launch return and cleanup work
     window.fixtureOptions={document,window,games:()=>fixtureGames,platforms:()=>platforms,
       // This section exercises the CSS carousel; GPU families are tested below
       // and in their dedicated browser fixtures.
-      images:game=>game.images||[],sourceGame:game=>{const source=game.regions?.[0].game||game;return source.platform==='Sony PlayStation 2'?{...source,platform:'Nintendo Wii'}:source;},imageSource:path=>path,
+      images:game=>game.images||[],sourceGame:game=>{const source=game.regions?.[0].game||game;return ['Sony PlayStation 2','Nintendo Wii'].includes(source.platform)?{...source,platform:'PSP'}:source;},imageSource:path=>path,
       formatPlayTime:game=>`${game.session_count} sessions`,variantLabel:game=>game.regions?'2 regions':game.discs?.length>1?'2 discs':'',
       sortGames:games=>[...games].sort((a,b)=>a.title.localeCompare(b.title)),
       platformDetails:async platform=>({images:[{kind:'logo',path:image(platform.name.includes('Sony')?'PS2':'Wii','#252c3c')}]}),
@@ -369,7 +370,7 @@ test('Couch mode carousels, controller selectors, launch return and cleanup work
     const bitmap=document.createElement('canvas');bitmap.width=96;bitmap.height=136;bitmap.getContext('2d').fillRect(0,0,96,136);
     fixture.cacheLoads=0;fixture.cacheStage=stage;
     fixture.cacheViewer=OpenCabinet3D.createViewer(stage,{carousel:true,getCoverPreview:()=>bitmap,imageSource:path=>{fixture.cacheLoads++;return path;}});
-    fixture.cacheViewer.update({...fixtureGames[0],platform:'Nintendo GameCube'},fixtureGames[0].images);
+    fixture.cacheViewer.update({...fixtureGames[0],platform:'PSP'},fixtureGames[0].images);
   });
   await page.waitForFunction(()=>fixture.cacheStage.dataset.artworkReady==='true');
   assert.equal(await page.evaluate(()=>fixture.cacheLoads),0,'The cached cover is applied to the 3D case before requesting the original');
@@ -381,14 +382,14 @@ test('Couch mode carousels, controller selectors, launch return and cleanup work
   }),true,'Cached and original prints overlap on the same case face before retiring the cache');
   await page.waitForFunction(()=>fixture.cacheLoads>0&&fixture.cacheStage.querySelector('.game-box-front .game-box-wrap-texture').style.backgroundImage.includes('image/svg'));
   assert.equal(await page.evaluate(()=>fixture.cacheStage.querySelector('.game-box-front')===fixture.originalFace),true,'The original replaces only the print, preserving the molded geometry');
-  assert.equal(await page.evaluate(()=>fixture.cacheViewer.updateCachedArtwork({...fixtureGames[0],platform:'Nintendo GameCube',box_3d:{base:{color:'#143fff'}}},fixtureGames[0].images)),true,
+  assert.equal(await page.evaluate(()=>fixture.cacheViewer.updateCachedArtwork({...fixtureGames[0],platform:'PSP',box_3d:{base:{color:'#143fff'}}},fixtureGames[0].images)),true,
     'A plastic color change uses the immediate artwork path');
   assert.equal(await page.evaluate(()=>fixture.cacheStage.querySelector('.game-box-front')===fixture.originalFace),true,'Changing plastic color retains the molded faces');
   assert.equal(await page.evaluate(()=>fixture.cacheStage.querySelector('.game-box-model').style.getPropertyValue('--box-material')),'#143fff');
   await page.evaluate(()=>fixture.cacheViewer.update({...fixtureGames[0],id:999,platform:'Nintendo Switch'},fixtureGames[0].images));
   await page.waitForTimeout(100);
   const heightRatio=await page.evaluate(()=>fixture.cacheStage.querySelector('.game-box-front').getBoundingClientRect().height/fixture.cubeHeight);
-  assert.ok(Math.abs(heightRatio-1)<.1,'Switch and GameCube share a consistent visible height: '+heightRatio);
+  assert.ok(Math.abs(heightRatio-1)<.1,'Switch and PSP share a consistent visible height: '+heightRatio);
   await page.evaluate(()=>{fixture.cacheViewer.dispose();fixture.cacheStage.remove();});
   await page.evaluate(()=>{
     const stage=document.createElement('div');stage.className='game-box-stage';Object.assign(stage.style,{width:'490px',height:'480px'});document.body.append(stage);
@@ -396,7 +397,7 @@ test('Couch mode carousels, controller selectors, launch return and cleanup work
     bitmap.getContext('2d').fillRect(0,0,96,136);fixture.cacheStage=stage;
     fixture.cacheViewer=OpenCabinet3D.createViewer(stage,{carousel:true,imageSource:value=>value,
       getCoverPreview:value=>value===path?bitmap:null,loadCoverPreview:()=>new Promise(resolve=>{fixture.finishWrap=resolve;})});
-    fixture.cacheViewer.update({...fixtureGames[0],platform:'Nintendo GameCube'},[{kind:'box_full',path:'held-full-wrap'},{kind:'cover',path}]);
+    fixture.cacheViewer.update({...fixtureGames[0],platform:'PSP'},[{kind:'box_full',path:'held-full-wrap'},{kind:'cover',path}]);
   });
   assert.equal(await page.evaluate(()=>fixture.cacheStage.dataset.artworkReady), 'true',
     'A resident front cover paints immediately even while the preferred full wrap is still loading');
