@@ -230,7 +230,7 @@ input, textarea, [contenteditable="true"], [contenteditable="plaintext-only"] {
   color: var(--button-text);
 }
 
-.game-card:focus-visible {
+#games-grid .game-card:focus-visible {
   outline: none;
 }
 
