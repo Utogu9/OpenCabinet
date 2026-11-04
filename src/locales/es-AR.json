@@ -1752,6 +1752,17 @@
     "random.choose": "Elegir este juego",
     "random.play": "Jugar",
     "random.again": "Volver a sortear",
-    "random.empty": "No hay juegos que coincidan con estos filtros."
+    "random.empty": "No hay juegos que coincidan con estos filtros.",
+    "metadata.region.world": "Mundial",
+    "metadata.region.northAmerica": "Norteamérica",
+    "metadata.region.europe": "Europa",
+    "metadata.region.japan": "Japón",
+    "metadata.region.korea": "Corea del Sur",
+    "metadata.region.china": "China",
+    "metadata.region.taiwan": "Taiwán",
+    "metadata.region.hongKong": "Hong Kong",
+    "metadata.region.asia": "Asia",
+    "metadata.region.australia": "Australia",
+    "metadata.region.brazil": "Brasil"
   }
 }

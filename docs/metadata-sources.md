@@ -23,8 +23,11 @@ El repositorio proporciona imágenes, nombres de ediciones e identificadores
 comerciales, y fichas opcionales de metadatos compartidas mediante `metadata_id`.
 Al importar ROMs se busca primero su nombre original, conservando región,
 idiomas, revisión y disco, y quitando las extensiones conocidas. Si no coincide,
-se busca por el título revisado. Los resultados muestran su ID comercial;
-si varios IDs coinciden exactamente con el nombre original, se prefiere el más
+se busca por el título revisado. Los resultados muestran su ID comercial.
+También muestran las regiones declaradas por la edición, aunque no aparezcan
+en el título, como ocurre en Switch. `ALL` se muestra como «Mundial»; la región
+de una imagen no se utiliza para deducir la región del juego.
+Si varios IDs coinciden exactamente con el nombre original, se prefiere el más
 corto, manteniendo las demás opciones disponibles. Este comportamiento es
 exclusivo de OpenCabinet-BDD. Los catálogos personales prueban primero el título
 revisado y, si no hay una coincidencia exacta, el nombre original del archivo.

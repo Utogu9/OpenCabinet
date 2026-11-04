@@ -1,0 +1,20 @@
+{
+  "schema_version": 2,
+  "system": "Nintendo Switch",
+  "games": {
+    "AAAAA": {
+      "entries": [{"name":"Switch Example","dat_name":"Switch Example (EN,FR,JA)","region":"ALL"}],
+      "images": {
+        "cover_front":{"path":"AAAAA/cover_front.webp","kind":"cover_front","sources":[{"region":"US"}]},
+        "cover_front2":{"path":"AAAAA/cover_front2.webp","kind":"cover_front","sources":[{"region":"JP"}]}
+      }
+    },
+    "AAAAJ": {"entries":[{"name":"Switch Example","region":"JPN"}]},
+    "AAAAE": {"entries":[{"name":"Switch Example","region":"EUR"}]},
+    "AAAAC": {"entries":[{"name":"Switch Example","region":"USA"}]},
+    "AAUNK": {
+      "entries":[{"name":"Unknown release"}],
+      "images":{"cover_front":{"path":"AAUNK/cover_front.webp","kind":"cover_front","sources":[{"region":"JP"}]}}
+    }
+  }
+}

@@ -290,6 +290,8 @@ pub struct SearchResult {
     exact: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     source_key: Option<String>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    regions: Vec<String>,
 }
 
 #[derive(Serialize)]
@@ -1040,7 +1042,7 @@ fn exact_catalog_matches(
         .map_err(err)?
     {
         let game = repository_metadata::read_game(&json.map_err(err)?)?;
-        results.push(SearchResult { game, exact: true, source_key: None });
+        results.push(SearchResult { game, exact: true, source_key: None, regions: Vec::new() });
     }
     repository::finish_search_results(conn, results)
 }
@@ -1090,7 +1092,7 @@ fn search_catalog_scope(
             let (id, json) = entry.map_err(err)?;
             if seen.insert(id) {
                 let game = repository_metadata::read_game(&json)?;
-                results.push(SearchResult { game, exact: false, source_key: None });
+                results.push(SearchResult { game, exact: false, source_key: None, regions: Vec::new() });
             }
         }
         if !results.is_empty() {
@@ -1758,6 +1760,7 @@ pub async fn search_metadata_games(
                 game: repository_metadata::read_game(&json)?,
                 exact: true,
                 source_key: None,
+                regions: Vec::new(),
             }])?
         } else {
             catalog_search_operation(&conn, &job, Duration::from_secs(20), || (), || {

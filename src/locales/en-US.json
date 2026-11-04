@@ -1752,6 +1752,17 @@
     "random.choose": "Choose this game",
     "random.play": "Play",
     "random.again": "Pick again",
-    "random.empty": "No games match these filters."
+    "random.empty": "No games match these filters.",
+    "metadata.region.world": "Worldwide",
+    "metadata.region.northAmerica": "North America",
+    "metadata.region.europe": "Europe",
+    "metadata.region.japan": "Japan",
+    "metadata.region.korea": "South Korea",
+    "metadata.region.china": "China",
+    "metadata.region.taiwan": "Taiwan",
+    "metadata.region.hongKong": "Hong Kong",
+    "metadata.region.asia": "Asia",
+    "metadata.region.australia": "Australia",
+    "metadata.region.brazil": "Brazil"
   }
 }

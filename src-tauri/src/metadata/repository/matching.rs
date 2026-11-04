@@ -73,13 +73,16 @@ pub(in crate::metadata) fn finish_search_results(
 ) -> Result<Vec<SearchResult>> {
     if catalog_is_repository(conn) {
         let mut statement = conn
-            .prepare("SELECT source_key FROM repository_keys WHERE id=?1")
+            .prepare("SELECT k.source_key,g.details FROM repository_keys k JOIN games g ON g.id=k.id WHERE k.id=?1")
             .map_err(err)?;
         for result in &mut results {
-            let key: String = statement
-                .query_row([result.game.id], |row| row.get(0))
+            let (key,details): (String,String) = statement
+                .query_row([result.game.id], |row| Ok((row.get(0)?,row.get(1)?)))
                 .map_err(err)?;
             result.source_key = Some(key.rsplit('/').next().unwrap_or(&key).to_owned());
+            let json:serde_json::Value=serde_json::from_str(&details).map_err(err)?;
+            result.regions=json["_regions"].as_array().into_iter().flatten()
+                .filter_map(|value|value.as_str().map(str::to_owned)).collect();
         }
     }
     Ok(results)

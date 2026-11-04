@@ -2579,7 +2579,10 @@ function setupModalBackdropClose(modal, close) {
 
 // --- Edición de juegos ---
 function metadataResultLabel(game) {
-  return `${game.title} · ${game.platform}${game.source_key ? ` · ${game.source_key}` : ""}${game.release_date ? ` · ${game.release_date}` : ""}`;
+  const regionKeys={World:'world','North America':'northAmerica',Europe:'europe',Japan:'japan',Korea:'korea',China:'china',Taiwan:'taiwan','Hong Kong':'hongKong',Asia:'asia',Australia:'australia',Brazil:'brazil'};
+  const regions=(game.regions||[]).map(region=>regionKeys[region]
+    ?globalThis.OpenCabinetI18n.t('metadata.region.'+regionKeys[region]):region).join(' / ');
+  return `${game.title} · ${game.platform}${regions ? ` · ${regions}` : ""}${game.source_key ? ` · ${game.source_key}` : ""}${game.release_date ? ` · ${game.release_date}` : ""}`;
 }
 
 function preferredMetadataMatch(games) {

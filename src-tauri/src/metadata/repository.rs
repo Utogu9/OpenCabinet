@@ -1,14 +1,15 @@
 //! Default artwork source and explicitly imported personal catalogs.
 use super::*;
 mod matching;
+mod regions;
 mod sources;
 pub(super) use matching::{finish_search_results, search_candidate};
 const ROOT_URL: &str = "https://api.github.com/repos/Utogu9/OpenCabinet-BDD/contents?ref=main";
 const RAW_URL: &str = "https://raw.githubusercontent.com/Utogu9/OpenCabinet-BDD/main/";
 const CONFIG: &str = "metadata/source.json";
 const MIN_REPOSITORY_ID: i64 = 1_000_000_000_000;
-// Reindex once to include downloadable PDF/CBZ manuals.
-const REPOSITORY_GAME_VERSION: i64 = 3;
+// Reindex older platform catalogs once to retain explicit release regions.
+const REPOSITORY_GAME_VERSION: i64 = 4;
 
 #[derive(Default, Serialize, Deserialize)]
 struct Settings {
@@ -358,6 +359,8 @@ struct RepoEntry {
     name: String,
     #[serde(default)]
     dat_name: String,
+    #[serde(default)]
+    region: Option<String>,
 }
 #[derive(Deserialize)]
 struct RepoImage {
@@ -552,6 +555,7 @@ fn insert_platform(
         };
         let metadata=game.metadata_id.as_ref().and_then(|id|data.metadata.get(id));
         let mut json=serde_json::to_value(&details).map_err(err)?;
+        json["_regions"]=serde_json::to_value(regions::from_entries(&game.entries)).map_err(err)?;
         if let Some(metadata)=metadata {
             let region=rom_regions(&game.entries[0].name);
             let mut languages=serde_json::Map::new();
@@ -933,6 +937,37 @@ mod tests {
     use super::*;
     const SUBMODULES: &str = include_str!("../../tests/fixtures/repository-submodules.json");
     #[test]
+    fn switch_search_results_keep_release_regions_separate_from_artwork_and_localized_titles() {
+        let files=Sandbox::new();let mut conn=files.catalog();let source="Nintendo - Switch";
+        conn.execute("INSERT INTO platforms VALUES(?1)",[source]).unwrap();
+        let path=files.job.directory.join("switch-regions.json");
+        fs::write(&path,include_str!("../../tests/fixtures/repository-switch-regions.json")).unwrap();
+        insert_platform(&mut conn,&files.job,source,&path,|_|()).unwrap();
+        for (serial,region) in [("AAAAA","World"),("AAAAJ","Japan"),("AAAAE","Europe"),("AAAAC","North America")] {
+            let result=search_catalog(&conn,serial,source).unwrap();assert_eq!(result.len(),1);
+            assert_eq!(result[0].game.title,"Switch Example");assert_eq!(result[0].regions,vec![region]);
+        }
+        let unknown=search_catalog(&conn,"AAUNK",source).unwrap();assert!(unknown[0].regions.is_empty());
+        assert!(serde_json::to_value(&unknown[0]).unwrap().get("regions").is_none());
+        let found=search_candidate(&conn,"Switch Example",source,"renamed.nsp").unwrap();
+        assert_eq!(found.len(),4);assert!(found.iter().all(|result|result.regions.len()==1));
+        let fuzzy=search_catalog(&conn,"Switch Examp",source).unwrap();
+        assert!(!fuzzy.is_empty());assert!(fuzzy.iter().all(|result|result.regions.len()==1));
+        // Older indexed platforms are rebuilt once, retaining the same game IDs.
+        conn.execute("UPDATE repository_versions SET version=3 WHERE name=?1",[source]).unwrap();
+        insert_platform(&mut conn,&files.job,source,&path,|_|()).unwrap();
+        assert_eq!(conn.query_row("SELECT version FROM repository_versions WHERE name=?1",[source],|r|r.get::<_,i64>(0)).unwrap(),REPOSITORY_GAME_VERSION);
+        drop(conn);
+        let conn=open_catalog(&files.job.catalog_path()).unwrap();
+        let result=search_catalog(&conn,"AAAAA",source).unwrap();
+        assert_eq!(result[0].game.id,token("Nintendo - Switch/AAAAA"));
+        assert_eq!(result[0].regions,vec!["World"]);
+        // The editor's preferred-match path uses the same persisted regions.
+        let selected=finish_search_results(&conn,vec![SearchResult{game:result[0].game.clone(),exact:true,source_key:None,regions:Vec::new()}]).unwrap();
+        assert_eq!(selected[0].regions,vec!["World"]);
+    }
+
+    #[test]
     fn repository_indexes_pdf_and_cbz_as_manuals_separately_from_artwork() {
         let sandbox = Sandbox::new();
         let mut conn = sandbox.catalog();
@@ -1139,7 +1174,7 @@ mod tests {
             let id=found[0].game.id;
             let url:String=conn.query_row("SELECT u.url FROM images i JOIN image_urls u USING(filename) WHERE i.game_id=?1 LIMIT 1",[id],|r|r.get(0)).unwrap();
             assert!(url.starts_with(&format!("https://raw.githubusercontent.com/Utogu9/{repo}/main/")));
-            if source=="Nintendo - Switch" {assert!(found[0].game.description.is_some());assert!(found[0].game.developer.is_some());}
+            if source=="Nintendo - Switch" {assert!(found[0].game.description.is_some());assert!(found[0].game.developer.is_some());assert_eq!(found[0].regions,vec!["World"]);}
         }
     }
     #[test]
