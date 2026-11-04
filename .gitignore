@@ -34,7 +34,7 @@ src/vendor/three/
 
 # Optional authoring sources and local conversion artifacts.
 /_modelos/
-# Optional PSP assets remain local while their redistribution terms are verified.
+# Retired PSP model assets must not be reintroduced into the project.
 /src/models/psp/
 src/models/dreamcast/.source-hash
 src/models/dreamcast/ribs-height.png

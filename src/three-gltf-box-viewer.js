@@ -125,30 +125,14 @@ export async function createModelViewer(host,options={},definition) {
     redCartridge.normalScale.copy(cartridgePlastic.normalScale);materials.set(redCartridge.name,redCartridge);
   }
   if(switchShells){materials.set('Switch 2 Shell',switchShells.outer);materials.set('Switch 2 Inner Sheet',switchShells.inner);}
-  // PSP keeps its PDF booklet inside the lid, separate from the external wrap.
+  // Each converted family supplies its booklet geometry and physical placement.
   const manualGroup=new THREE.Group(),manualMeshes=[];
-  const manualWidth=.096,manualHeight=.170;
   const manualFront=new THREE.MeshBasicMaterial({color:0xffffff,toneMapped:false});
   const manualBack=manualFront.clone(),manualPages=new THREE.MeshBasicMaterial({color:0xe9e5dc,toneMapped:false});
   if(procedural?.createManual) {
     procedural.createManual({manualGroup,manualMeshes,manualFront,manualBack,manualPages,meshes});
-  } else if(definition.manual) {
-    const hinge=model.getObjectByName('PSP_Lid_Hinge');
-    if(hinge) {
-      manualGroup.name='PSP Booklet';manualGroup.position.set(.04934,-.0013,0);hinge.add(manualGroup);
-      const body=new THREE.Mesh(new THREE.BoxGeometry(1,.0008,1),manualPages);
-      function sheet(material,y,reverse) {
-        const geometry=new THREE.BufferGeometry();
-        geometry.setAttribute('position',new THREE.Float32BufferAttribute([-.5,y,.5,.5,y,.5,.5,y,-.5,-.5,y,-.5],3));
-        geometry.setAttribute('uv',new THREE.Float32BufferAttribute(reverse?[0,1,1,1,1,0,0,0]:[1,1,0,1,0,0,1,0],2));
-        geometry.setIndex(reverse?[0,1,2,0,2,3]:[0,2,1,0,3,2]);geometry.computeVertexNormals();
-        return new THREE.Mesh(geometry,material);
-      }
-      manualMeshes.push(body,sheet(manualFront,-.00041,false),sheet(manualBack,.00041,true));
-      manualMeshes.forEach(mesh=>{mesh.name='PSP Booklet '+manualMeshes.indexOf(mesh);manualGroup.add(mesh);meshes.push(mesh);});
-    }
   }
-  if(!procedural)manualGroup.scale.set(manualWidth,1,manualHeight);manualGroup.visible=false;
+  manualGroup.visible=false;
   // Evaluate a few poses once; rotating the case never scans every vertex.
   function pose(amount) {
     procedural?.pose?.(amount);
@@ -182,8 +166,7 @@ export async function createModelViewer(host,options={},definition) {
     const old=material.map;material.map=texture;material.needsUpdate=true;
     if(manualTextures.delete(old))old.dispose();
     if(material===manualFront){
-      if(procedural?.fitManual)procedural.fitManual(copy,manual);
-      else {const ratio=copy.width/copy.height,h=Math.min(manualHeight,manualWidth/ratio);manualGroup.scale.set(h*ratio,1,h);}
+      procedural?.fitManual?.(copy,manual);
       if(procedural?.manualCover)compose();
     }
     manualGroup.visible=!manualExtracted;schedule();

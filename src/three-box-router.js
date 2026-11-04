@@ -30,8 +30,9 @@
         : profile.id==='bluray'&&profile.variant==='ps4' ? 'ps4'
         : profile.id==='dvd'&&['xbox','xbox360'].includes(profile.variant) ? 'xbox'
         : profile.id==='dvd'&&['wii','wiiu','gamecube'].includes(profile.variant) ? profile.variant
+        : profile.id==='psp' ? 'psp'
         : ({genesis:'genesis',gameCubeJapan:'gamecube-japan',ds:'ds',dsPal:'ds-pal',threeDs:'3ds',longbox:'longbox'})[profile.id]
-          || (['switch','psp'].includes(profile.id) && globalThis.OpenCabinetLocalModels?.[profile.id] ? profile.id : null);
+          || (profile.id==='switch' && globalThis.OpenCabinetLocalModels?.switch ? 'switch' : null);
       return model ? `three:${model}` : 'css';
     }
     const api = {

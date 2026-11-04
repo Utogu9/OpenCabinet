@@ -25,7 +25,12 @@ test('Couch mode carousels, controller selectors, launch return and cleanup work
   await page.evaluate(messages=>{window.OpenCabinetI18n={t:(key,...values)=>(messages[key]||key).replace(/\{(\d+)\}/g,(token,index)=>values[index]??token)};},messages);
   for(const name of ['local-models.js','dvd-case.js','image-fallbacks.js','cover-cache.js','pdf-manual.js','manual-reader.js','game-box.js','carousel-boxes.js','three-box-router.js','game-discs.js','game-regions.js','sofa-mode.js'])await page.addScriptTag({url:`/src/${name}`});
   await page.evaluate(messages=>{
-    OpenCabinetLocalModels.psp=false;
+    // Keep the explicit CSS lifecycle checks independent of GPU conversions.
+    // Only the router's test profile changes; the legacy builder still uses PSP.
+    const createRouter=OpenCabinetThreeBoxes.createRouter;
+    OpenCabinetThreeBoxes.createRouter=(host,options,createLegacy,profileFor,resolveSettings)=>createRouter(host,options,createLegacy,(...args)=>{
+      const profile=profileFor(...args);return profile.id==='psp'?{...profile,id:'dvd',variant:'dvd'}:profile;
+    },resolveSettings);
     window.OpenCabinetI18n={t:(key,...values)=>(messages[key]||key).replace(/\{(\d+)\}/g,(token,index)=>values[index]??token)};
     const image=(text,color)=>'data:image/svg+xml,'+encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="480" height="680"><rect width="480" height="680" fill="${color}"/><path d="M0 140 480 430V680H0Z" fill="#0003"/><text x="35" y="75" font-family="sans-serif" font-size="22" fill="white">OpenCabinet</text><text x="35" y="320" font-family="sans-serif" font-size="34" fill="white">${text}</text></svg>`);
     const disc=(id,label)=>({id,label,rom_path:`/fixture/disc${id}.iso`,available:true});

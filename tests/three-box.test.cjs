@@ -8,8 +8,8 @@ function dreamcastModel() {
   const directory=path.join(__dirname,'../src/models/dreamcast');
   return {manifest:JSON.parse(fs.readFileSync(path.join(directory,'case.json'),'utf8')),binary:fs.readFileSync(path.join(directory,'case.bin'))};
 }
-function router(load,{switchModel=false,pspModel=false}={}) {
-  const context=vm.createContext({console,OpenCabinetI18n:{t:key=>key},OpenCabinetLocalModels:{switch:switchModel,psp:pspModel}});
+function router(load,{switchModel=false}={}) {
+  const context=vm.createContext({console,OpenCabinetI18n:{t:key=>key},OpenCabinetLocalModels:{switch:switchModel}});
   vm.runInContext(fs.readFileSync(path.join(__dirname,'../src/game-box.js'),'utf8'),context);
   vm.runInContext(fs.readFileSync(path.join(__dirname,'../src/three-box-router.js'),'utf8'),context);
   const viewers=[];
@@ -156,10 +156,10 @@ test('Local Switch and bundled Dreamcast models use separate viewers and preserv
   assert.deepEqual(models,['switch','dreamcast']);
 });
 
-test('PSP loads its own optional model and preserves the CSS fallback and other model families',async()=>{
-  const missing=router(async()=>{throw Error('A missing PSP must not load Three.js');});
+test('PSP uses converted geometry without optional assets and preserves the WebGL failure fallback',async()=>{
+  const missing=router(async()=>{throw Error('WebGL unavailable');});
   missing.api.update({id:1,platform:'PSP'},[]);await tick();assert.equal(missing.viewers[0].type,'css');
-  const loaded=[],app=router(async(make,model)=>{loaded.push(model);return {createViewer:()=>make(model)};},{switchModel:true,pspModel:true});
+  const loaded=[],app=router(async(make,model)=>{loaded.push(model);return {createViewer:()=>make(model)};},{switchModel:true});
   app.api.update({id:1,platform:'PSP'},[]);app.api.setOpen(true);await tick();
   assert.equal(app.viewers[0].type,'psp');assert.equal(app.viewers[0].isOpen,true);
   app.api.update({id:2,platform:'Switch'},[]);await tick();assert.equal(app.viewers[0].disposed,true);

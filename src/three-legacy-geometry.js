@@ -170,18 +170,20 @@ export function convertLegacyCase(sourceFactory,templateKey) {
   const snapshot=template||source.capture(),profile=snapshot.profile,{width:w,height:h,depth:d}=profile;
   let changed=()=>{},disposed=false,acrylicRibs=null;
   const longbox=profile.id==='longbox';
-  const clear=['ps3','ps4','xbox','xbox360'].includes(profile.variant);
+  const psp=profile.id==='psp';
+  const clear=['ps3','ps4','xbox','xbox360','psp'].includes(profile.variant);
   const handheld=['ds','threeDs'].includes(profile.variant),cartridgeCase=handheld||profile.variant==='genesis';
   const dvdClips=profile.id==='dvd'||profile.variant==='gamecube'||handheld;
   const securityClips=profile.variant==='gamecube'||handheld;
-  const bodyOpacity=variant=>({ps3:.07,ps4:.14,xbox:.20,xbox360:.12}[variant]??.07);
+  const bodyOpacity=variant=>({ps3:.07,ps4:.14,xbox:.20,xbox360:.12,psp:.18}[variant]??.07);
   const scene=new THREE.Group(),parts={},batches=new Map();
   for(const name of ['tray','spine','lid']){const group=new THREE.Group();group.name=`Case ${name}`;scene.add(group);parts[name]=group;}
   const plasticColor=color=>['#16191f','#202328','#282c32'].includes(color.toLowerCase())||longbox&&color.toLowerCase()==='#30343a'
-    ||profile.variant==='gamecube'&&color.toLowerCase()==='#8b8f96'?'#343537':color;
+    ||profile.variant==='gamecube'&&color.toLowerCase()==='#8b8f96'?'#343537':psp&&color.toLowerCase()==='#b9bdc3'?'#d9dcdf':color;
   const plastic=clear?clearCasePlastic(profile.color):new THREE.MeshPhysicalMaterial({color:plasticColor(profile.color),roughness:.84,metalness:0,
     specularIntensity:.16,envMapIntensity:.24,clearcoat:0,side:THREE.DoubleSide});plastic.name='Case Plastic';
   if(clear)plastic.opacity=bodyOpacity(profile.variant);
+  plastic.color.set(plasticColor(profile.color));
   const raised=plastic.clone();raised.name='Case Raised Plastic';raised.roughness=clear?.30:.80;
   if(clear){raised.onBeforeCompile=plastic.onBeforeCompile;raised.customProgramCacheKey=plastic.customProgramCacheKey;}
   const acrylic=longbox?new THREE.MeshPhysicalMaterial({color:0xcddde5,roughness:.13,metalness:0,
@@ -217,7 +219,11 @@ export function convertLegacyCase(sourceFactory,templateKey) {
   const cart=new THREE.MeshPhysicalMaterial({color:profile.variant==='threeDs'?0xeeeae5:genesis?0x202020:0x34363a,
     roughness:genesis?.8:.7,metalness:0,specularIntensity:genesis?.12:.16,envMapIntensity:genesis?.12:.2,side:THREE.DoubleSide});cart.name='Cartridge Plastic';
   const cartLabel=paper.clone();cartLabel.name='Cartridge Cover';
-  const surfaceMaterials=[plastic,raised,paper,cover,disc,silver,film,...(inside?[inside]:[]),...(cartridgeCase?[cart,cartLabel]:[]),...(acrylic?[acrylic,ribbedPlastic,ribbedAcrylic]:[])],decals=template?.decals||[];
+  const umdHousing=psp?new THREE.MeshPhysicalMaterial({name:'UMD Housing',color:0xe5e6e2,roughness:.38,metalness:0,
+    specularIntensity:.18,envMapIntensity:.35,side:THREE.DoubleSide}):null;
+  const umdWindow=psp?new THREE.MeshPhysicalMaterial({name:'UMD Window',color:0xffffff,roughness:.13,metalness:0,
+    transparent:true,opacity:.10,depthWrite:false,specularIntensity:.3,envMapIntensity:.35,side:THREE.DoubleSide}):null;
+  const surfaceMaterials=[plastic,raised,paper,cover,disc,silver,film,...(inside?[inside]:[]),...(cartridgeCase?[cart,cartLabel]:[]),...(acrylic?[acrylic,ribbedPlastic,ribbedAcrylic]:[]),...(psp?[umdHousing,umdWindow]:[])],decals=template?.decals||[];
   const faceWidth=snapshot.paperLayout.width,total=faceWidth*2+d;
   function artUV(kind,u,v) {
     return [(kind==='back_cover'?u*faceWidth:kind==='spine'?faceWidth+u*d:faceWidth+d+u*faceWidth)/total,v];
@@ -280,6 +286,7 @@ export function convertLegacyCase(sourceFactory,templateKey) {
       continue;
     }
     let mat=/dvd-cartridge-label/.test(name)?cartLabel:/dvd-cartridge(?:\s|$)/.test(name)?cart:
+      psp&&/dvd-umd-shell/.test(name)?umdHousing:psp&&/dvd-umd-window/.test(name)?umdWindow:
       /dvd-disc(?:\s|$)/.test(name)?(/underside/.test(name)?silver:disc):/disc-edge/.test(name)?silver:/hub|clip|cradle/.test(name)?raised:plastic;
     const ribbed=longbox&&/game-box-jewel-inset|jewel-lid-rail/.test(name);
     if(longbox){
@@ -366,7 +373,7 @@ export function convertLegacyCase(sourceFactory,templateKey) {
     for(const mesh of [body,front,back]){manualGroup.add(mesh);manualMeshes.push(mesh);meshes.push(mesh);}
     if(profile.variant!=='genesis'&&!longbox){
       const footGeometry=new THREE.BoxGeometry(dvdClips?4.5:4,dvdClips?10.4:16,1),footParts=[];
-      for(const sign of [-1,1]){const g=footGeometry.clone();g.translate(w/2-(securityClips?12.25:dvdClips?5.75:4.5),sign*h*(dvdClips?.415:.34),0);footParts.push(g);}
+      for(const sign of psp?[0]:[-1,1]){const g=footGeometry.clone();g.translate(w/2-(securityClips?12.25:dvdClips?5.75:4.5),sign*h*(dvdClips?.415:.34),0);footParts.push(g);}
       feet=new THREE.Mesh(mergeGeometries(footParts),raised);footGeometry.dispose();footParts.forEach(g=>g.dispose());
       feet.name='Booklet Retainer Feet';
       feet.castShadow=feet.receiveShadow=true;feet.visible=false;parts.lid.add(feet);meshes.push(feet);

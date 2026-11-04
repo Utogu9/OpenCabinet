@@ -26,7 +26,7 @@ function validateRuntime(directory) {
 
 export function prepare({projectRoot=root,dependencyRoot=path.join(projectRoot,'node_modules/three')}={}) {
   // Optional locally supplied models are never downloaded or required by builds.
-  const localModels=Object.fromEntries(['switch','psp'].map(model=>[model,
+  const localModels=Object.fromEntries(['switch'].map(model=>[model,
     ['case.json','case.glb'].every(file=>fs.existsSync(path.join(projectRoot,'src/models',model,file)))]));
   writeChanged(path.join(projectRoot,'src/local-models.js'),'// Generated locally by prepare:three.\nglobalThis.OpenCabinetLocalModels = '+JSON.stringify(localModels)+';\n');
   const vendor=path.join(projectRoot,'src/vendor/three');fs.mkdirSync(vendor,{recursive:true});
