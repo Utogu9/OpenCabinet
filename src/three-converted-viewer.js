@@ -10,6 +10,7 @@ const families={
   ds:{model:'ds',platform:'Nintendo DS'},
   dsPal:{model:'ds-pal',platform:'Nintendo DS',rom:'Game (Europe).nds'},
   threeDs:{model:'3ds',platform:'Nintendo 3DS'},
+  longbox:{model:'longbox',platform:'Sega Saturn'},
 };
 export function createViewer(host,options={}) {
   const game=options.initialGame,settings=globalThis.OpenCabinet3D.resolveSettings(options.initialSettings,game.box_3d);

@@ -4,7 +4,7 @@
   const isJewelBooklet = game => /^(sony)?playstation(1)?$|^ps1?$|^(sega)?dreamcast$/.test(String(game?.platform || '').toLowerCase().replace(/[^a-z0-9]/g, ''));
   const isPSP = game => /^(sony)?(playstationportable|psp)$/.test(String(game?.platform || '').toLowerCase().replace(/[^a-z0-9]/g, ''));
   const supportsGame = game => isPS2(game) || isJewelBooklet(game) || isPSP(game)
-    || /^(microsoft)?xbox(360)?$|^(nintendo)?(ds|dsi|3ds|2ds|gamecube|wii|wiiu)$|^(sony)?(playstation[345]|ps[345])$|^(sega)?(megadrive(genesis)?|genesis(megadrive)?)$/.test(String(game?.platform || '').toLowerCase().replace(/[^a-z0-9]/g, ''));
+    || /^(microsoft)?xbox(360)?$|^(nintendo)?(ds|dsi|3ds|2ds|gamecube|wii|wiiu)$|^(sony)?(playstation[345]|ps[345])$|^(sega)?(megadrive(genesis)?|genesis(megadrive)?|cd|megacd|saturn)$/.test(String(game?.platform || '').toLowerCase().replace(/[^a-z0-9]/g, ''));
   const isCoverSpread = (ratio,platform) => /^(nintendo)?(ds|dsi|3ds|2ds)$/.test(String(platform).toLowerCase().replace(/[^a-z0-9]/g,''))
     ? ratio>=1.8&&ratio<=2.4 : ratio>=1.05&&ratio<=1.7;
   let library;
@@ -20,7 +20,7 @@
     if (!Number.isFinite(info.aspectRatio) || info.aspectRatio <= 0 || !Number.isInteger(info.pageCount) || info.pageCount < 1) {
       throw new Error(globalThis.OpenCabinetI18n.t("msg.18885412bf"));
     }
-    if(['jewel','jewelPal'].includes(profile.id)) {
+    if(['jewel','jewelPal','longbox'].includes(profile.id)) {
       const width=profile.width-14.6,height=profile.height-2.6,sheets=Math.ceil(info.pageCount/2);
       return {width,height,sheets,thickness:Math.min(2.5,.26+sheets*.06),x:6,y:0};
     }

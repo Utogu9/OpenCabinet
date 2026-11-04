@@ -121,8 +121,11 @@ test('PlayStation jewel cases share the bundled Dreamcast viewer and respect exp
   }
   assert.deepEqual(models,['dreamcast']);
   app.api.update({id:6,platform:'Sony PlayStation'},[],{base:{model:'longbox'}});await tick();
-  assert.equal(app.viewers[0].disposed,true);assert.equal(app.viewers[1].type,'css');
-  app.api.update({id:7,platform:'Sega Saturn'},[]);assert.equal(app.viewers.length,2);
+  assert.equal(app.viewers[0].disposed,true);assert.equal(app.viewers[1].type,'longbox');
+  for(const platform of ['Sega Saturn','Sega CD','Sega Mega CD']){
+    app.api.update({id:7,platform},[]);await tick();assert.equal(app.viewers.length,2);
+  }
+  assert.deepEqual(models,['dreamcast','longbox']);
   app.api.dispose();
 });
 

@@ -1,7 +1,7 @@
 import * as THREE from './vendor/three/three.module.js';
 import { mergeGeometries } from './vendor/three/BufferGeometryUtils.js';
 import { clearCasePlastic } from './three-case-plastic.js';
-import { wallShadowGeometry } from './three-box-relief.js';
+import { wallShadowGeometry, configureAcrylicOptics, maskClearPanels } from './three-box-relief.js';
 import { createDiscMaterial } from './three-disc-material.js';
 
 // CSS faces use X right, Y down, Z out of the cover. Convert both the local
@@ -168,6 +168,8 @@ export function faceGeometry(face,{style=getComputedStyle(face.element),uv=(x,y)
 export function convertLegacyCase(sourceFactory,templateKey) {
   const template=templates.get(templateKey),source=template?null:sourceFactory();
   const snapshot=template||source.capture(),profile=snapshot.profile,{width:w,height:h,depth:d}=profile;
+  let changed=()=>{},disposed=false,acrylicRibs=null;
+  const longbox=profile.id==='longbox';
   const clear=['ps3','ps4','xbox','xbox360'].includes(profile.variant);
   const handheld=['ds','threeDs'].includes(profile.variant),cartridgeCase=handheld||profile.variant==='genesis';
   const dvdClips=profile.id==='dvd'||profile.variant==='gamecube'||handheld;
@@ -175,15 +177,34 @@ export function convertLegacyCase(sourceFactory,templateKey) {
   const bodyOpacity=variant=>({ps3:.07,ps4:.14,xbox:.20,xbox360:.12}[variant]??.07);
   const scene=new THREE.Group(),parts={},batches=new Map();
   for(const name of ['tray','spine','lid']){const group=new THREE.Group();group.name=`Case ${name}`;scene.add(group);parts[name]=group;}
-  const plasticColor=color=>['#16191f','#202328','#282c32'].includes(color.toLowerCase())
+  const plasticColor=color=>['#16191f','#202328','#282c32'].includes(color.toLowerCase())||longbox&&color.toLowerCase()==='#30343a'
     ||profile.variant==='gamecube'&&color.toLowerCase()==='#8b8f96'?'#343537':color;
   const plastic=clear?clearCasePlastic(profile.color):new THREE.MeshPhysicalMaterial({color:plasticColor(profile.color),roughness:.84,metalness:0,
     specularIntensity:.16,envMapIntensity:.24,clearcoat:0,side:THREE.DoubleSide});plastic.name='Case Plastic';
   if(clear)plastic.opacity=bodyOpacity(profile.variant);
   const raised=plastic.clone();raised.name='Case Raised Plastic';raised.roughness=clear?.30:.80;
   if(clear){raised.onBeforeCompile=plastic.onBeforeCompile;raised.customProgramCacheKey=plastic.customProgramCacheKey;}
+  const acrylic=longbox?new THREE.MeshPhysicalMaterial({color:0xcddde5,roughness:.13,metalness:0,
+    transparent:true,opacity:.035,depthWrite:false,forceSinglePass:true,ior:1.49,
+    clearcoat:1,clearcoatRoughness:.08,side:THREE.DoubleSide,envMapIntensity:.45}):null;
+  let ribbedPlastic=null,ribbedAcrylic=null;
+  if(acrylic){
+    acrylic.name='Case Acrylic';
+    const ribs=new THREE.DataTexture(new Uint8Array([32,32,32,255,190,190,190,255,255,255,255,255,90,90,90,255]),4,1);
+    ribs.wrapS=ribs.wrapT=THREE.RepeatWrapping;ribs.needsUpdate=true;
+    ribbedPlastic=plastic.clone();ribbedPlastic.name='Case Ribbed Plastic';ribbedPlastic.bumpMap=ribs;ribbedPlastic.bumpScale=.12;
+    ribbedAcrylic=acrylic.clone();ribbedAcrylic.name='Case Ribbed Acrylic';ribbedAcrylic.bumpMap=ribs;ribbedAcrylic.bumpScale=.18;
+    ribbedAcrylic.opacity=.22;ribbedAcrylic.roughness=.22;ribbedAcrylic.clearcoat=.35;
+    acrylicRibs=new THREE.TextureLoader().load(new URL('./models/dreamcast/ribs-height.svg',import.meta.url).href,texture=>{
+      if(disposed){texture.dispose();return;}
+      texture.colorSpace=THREE.NoColorSpace;texture.wrapS=texture.wrapT=THREE.RepeatWrapping;
+      ribbedAcrylic.bumpMap=ribbedAcrylic.alphaMap=texture;ribbedAcrylic.needsUpdate=true;changed();
+    },undefined,()=>{/* Keep the initial molded ridges if the SVG cannot be loaded. */});
+    configureAcrylicOptics(acrylic,{reliefMask:true});
+  }
   const paper=new THREE.MeshBasicMaterial({color:0xffffff,side:THREE.FrontSide,toneMapped:false});paper.name='Paper Reverse';
   const cover=paper.clone();cover.name='Cover Outside';
+  if(longbox)cover.alphaTest=.02;
   const inside=clear?paper.clone():null;if(inside){inside.name='Cover Inside';inside.alphaTest=.02;cover.alphaTest=.02;}
   // Add only the thin sleeve's reflections over the unlit print. Ordinary
   // alpha blending with a dark film dulls the scan instead of adding sheen.
@@ -196,7 +217,7 @@ export function convertLegacyCase(sourceFactory,templateKey) {
   const cart=new THREE.MeshPhysicalMaterial({color:profile.variant==='threeDs'?0xeeeae5:genesis?0x202020:0x34363a,
     roughness:genesis?.8:.7,metalness:0,specularIntensity:genesis?.12:.16,envMapIntensity:genesis?.12:.2,side:THREE.DoubleSide});cart.name='Cartridge Plastic';
   const cartLabel=paper.clone();cartLabel.name='Cartridge Cover';
-  const surfaceMaterials=[plastic,raised,paper,cover,disc,silver,film,...(inside?[inside]:[]),...(cartridgeCase?[cart,cartLabel]:[])],decals=template?.decals||[];
+  const surfaceMaterials=[plastic,raised,paper,cover,disc,silver,film,...(inside?[inside]:[]),...(cartridgeCase?[cart,cartLabel]:[]),...(acrylic?[acrylic,ribbedPlastic,ribbedAcrylic]:[])],decals=template?.decals||[];
   const faceWidth=snapshot.paperLayout.width,total=faceWidth*2+d;
   function artUV(kind,u,v) {
     return [(kind==='back_cover'?u*faceWidth:kind==='spine'?faceWidth+u*d:faceWidth+d+u*faceWidth)/total,v];
@@ -219,12 +240,12 @@ export function convertLegacyCase(sourceFactory,templateKey) {
       batch(face,faceGeometry(face,{style,offset:.025,uv:(x,y)=>artUV(t.art,(t.u+(x-face.width/2)/t.sx)/t.width,(t.v+(y-face.height/2)/t.sy)/t.height)}),cover);
       batch(face,faceGeometry(face,{style,offset:.065}),film);continue;
     }
-    if(kind&&['front','back','left'].includes(kind)) {
+    if(kind&&['front','back','left',...(longbox?['right']:[])].includes(kind)) {
       const transform=face.transform;
       // CSS expands each plane by a display pixel to hide compositing cracks.
       // The GPU shares one depth buffer and must keep the physical dimensions.
       const shell={...face,transform:s=>transform(s).replace(/ scale\([^)]*\)/g,'')};
-      batch(shell,faceGeometry(shell,{style}),plastic);
+      if(!longbox||kind!=='front')batch(shell,faceGeometry(shell,{style}),acrylic||plastic);
       const image=element.querySelector('img');
       if(image) {
         const x=length(image.style.left,face.width),y=length(image.style.top,face.height);
@@ -260,7 +281,16 @@ export function convertLegacyCase(sourceFactory,templateKey) {
     }
     let mat=/dvd-cartridge-label/.test(name)?cartLabel:/dvd-cartridge(?:\s|$)/.test(name)?cart:
       /dvd-disc(?:\s|$)/.test(name)?(/underside/.test(name)?silver:disc):/disc-edge/.test(name)?silver:/hub|clip|cradle/.test(name)?raised:plastic;
-    batch(face,faceGeometry(face,{style}),mat,/manual-clip|manual-pressure|manual-frame/.test(name)?'clips':'body');
+    const ribbed=longbox&&/game-box-jewel-inset|jewel-lid-rail/.test(name);
+    if(longbox){
+      const transparent=/game-box-acrylic-lid|game-box-jewel-hinge-ear|jewel-lid-rail|jewel-bearing|jewel-pin/.test(name)
+        ||/lid-interior/.test(name);
+      if(transparent)mat=ribbed?ribbedAcrylic:acrylic;
+      else if(ribbed)mat=ribbedPlastic;
+    }
+    // The shared SVG contains 32 ridges per tile. Keep their physical pitch
+    // at 0.85 mm instead of repeating the entire tile for every single ridge.
+    batch(face,faceGeometry(face,{style,...(ribbed?{uv:(x,y)=>[x/(mat===ribbedAcrylic?32*.85:.95),y/face.height]}:{})}),mat,/manual-clip|manual-pressure|manual-frame/.test(name)?'clips':'body');
   }
   const clipMeshes=[];
   const compiled=template?.meshes||[...batches].map(([key,entry])=>{
@@ -269,7 +299,10 @@ export function convertLegacyCase(sourceFactory,templateKey) {
   });
   const byName=new Map(surfaceMaterials.map(mat=>[mat.name,mat]));
   for(const entry of compiled) {
-    const mesh=new THREE.Mesh(entry.geometry.clone(),byName.get(entry.material));mesh.name=entry.key;parts[entry.part].add(mesh);
+    const geometry=entry.geometry.clone();
+    if(entry.material==='Case Acrylic')maskClearPanels(geometry,[-1,1].map(side=>
+      new THREE.Box3(new THREE.Vector3(side*w/2-1.5,-h/2-1.5,-d/2-1.5),new THREE.Vector3(side*w/2+1.5,h/2+1.5,d/2))));
+    const mesh=new THREE.Mesh(geometry,byName.get(entry.material));mesh.name=entry.key;parts[entry.part].add(mesh);
     mesh.userData.sourceFaces=entry.count;
     if(entry.category==='clips')clipMeshes.push(mesh);
   }
@@ -298,11 +331,11 @@ export function convertLegacyCase(sourceFactory,templateKey) {
     const caster=new THREE.Mesh(walls,casterMaterial);caster.name='Clear Relief Shadow Caster';caster.castShadow=true;
     parts[part].add(caster);shadowCasters.push(caster);
   }
-  const lip=new THREE.Mesh(closingLip(profile),plastic);lip.name='Closing Lip';parts.tray.add(lip);
+  if(!longbox){const lip=new THREE.Mesh(closingLip(profile),plastic);lip.name='Closing Lip';parts.tray.add(lip);}
   scene.traverse(node=>{if(node.isMesh&&!shadowReceivers.includes(node)&&!shadowCasters.includes(node)){node.castShadow=!node.material.transparent&&!node.material.isMeshBasicMaterial;
     node.receiveShadow=!!node.material.isMeshStandardMaterial;}});
   if(!template){templates.set(templateKey,{profile,paperLayout:snapshot.paperLayout,meshes:compiled,decals,sourceFaceCount:snapshot.faces.length});source.dispose();}
-  let changed=()=>{},disposed=false;const brandURLs=new Map();
+  const brandURLs=new Map();
   const labelTextures=[],labelMaterials=[],labelCanvases=[];
   for(const decal of decals) {
     const canvas=document.createElement('canvas');canvas.width=Math.max(128,Math.ceil(decal.width*12));canvas.height=Math.max(64,Math.ceil(decal.height*12));
@@ -328,10 +361,10 @@ export function convertLegacyCase(sourceFactory,templateKey) {
     const body=new THREE.Mesh(new THREE.BoxGeometry(1,1,1),manualPages);body.castShadow=true;
     const sheet=material=>{const geometry=new THREE.PlaneGeometry(1,1),uv=geometry.attributes.uv;
       for(let i=0;i<uv.count;i++)uv.setY(i,1-uv.getY(i));return new THREE.Mesh(geometry,material);};
-    const front=sheet(manualFront);front.rotation.y=Math.PI;front.position.z=-.52;
-    const back=sheet(manualBack);back.position.z=.52;
+    const front=sheet(manualFront);front.rotation.y=longbox?0:Math.PI;front.position.z=longbox?.52:-.52;
+    const back=sheet(manualBack);back.rotation.y=longbox?Math.PI:0;back.position.z=longbox?-.52:.52;
     for(const mesh of [body,front,back]){manualGroup.add(mesh);manualMeshes.push(mesh);meshes.push(mesh);}
-    if(profile.variant!=='genesis'){
+    if(profile.variant!=='genesis'&&!longbox){
       const footGeometry=new THREE.BoxGeometry(dvdClips?4.5:4,dvdClips?10.4:16,1),footParts=[];
       for(const sign of [-1,1]){const g=footGeometry.clone();g.translate(w/2-(securityClips?12.25:dvdClips?5.75:4.5),sign*h*(dvdClips?.415:.34),0);footParts.push(g);}
       feet=new THREE.Mesh(mergeGeometries(footParts),raised);footGeometry.dispose();footParts.forEach(g=>g.dispose());
@@ -343,8 +376,8 @@ export function convertLegacyCase(sourceFactory,templateKey) {
     const size=globalThis.OpenCabinetManualPDF.dimensions(profile,{aspectRatio:image.width/image.height,pageCount:data?.pageCount||16});
     const {width,height,thickness,x,y}=size;
     booklet.group.scale.set(width,height,thickness);
-    booklet.group.position.set(x,-y,d/2-1.15-.18-thickness/2);
-    clipLift=profile.variant==='genesis'?0:Math.max(0,thickness-.55);clipMeshes.forEach(mesh=>mesh.position.z=-clipLift);
+    booklet.group.position.set(x,-y,d/2-(longbox?.3:1.33)-thickness/2);
+    clipLift=profile.variant==='genesis'||longbox?0:Math.max(0,thickness-.55);clipMeshes.forEach(mesh=>mesh.position.z=-clipLift);
     if(feet){feet.scale.z=Math.max(.001,clipLift);feet.position.z=d/2-1.15-clipLift/2;feet.visible=clipLift>0;}
     lastSize=size;
   }
@@ -382,6 +415,7 @@ export function convertLegacyCase(sourceFactory,templateKey) {
   }
   function update(next) {
     plastic.color.set(plasticColor(next.color));raised.color.copy(plastic.color);
+    ribbedPlastic?.color.copy(plastic.color);
     if(clear)plastic.opacity=raised.opacity=bodyOpacity(next.variant);
     labelMaterials.forEach(mat=>mat.color.copy(plastic.color).lerp(new THREE.Color(0xffffff),.12));refreshBrand();
   }
@@ -392,6 +426,7 @@ export function convertLegacyCase(sourceFactory,templateKey) {
   pose(0);
   let lightingKey=null,shadowLight=null;
   function configureLighting({renderer,keyLight}) {
+    if(acrylicRibs)acrylicRibs.anisotropy=Math.min(8,renderer.capabilities.getMaxAnisotropy());
     shadowLight=keyLight;
     renderer.shadowMap.enabled=true;renderer.shadowMap.type=THREE.PCFSoftShadowMap;renderer.shadowMap.autoUpdate=false;
     keyLight.castShadow=true;keyLight.shadow.mapSize.set(2048,2048);
@@ -415,9 +450,15 @@ export function convertLegacyCase(sourceFactory,templateKey) {
     if(!pictures.full&&!pictures.spine){const face=256*faceWidth/total;context.clearRect(face,0,256*d/total,4);}
     return canvas;
   }
+  function onManualCover(image) {
+    // The booklet is the front insert of a jewel case. Its own back replaces
+    // the unprinted paper plane, including while the booklet is extracted.
+    if(longbox)for(const mesh of parts.lid.children)if(mesh.material===paper)mesh.visible=!image;
+  }
   return {scene,animations:[],manifest:{dimensions:[w,h,d],spine_fraction:d/total},pose,createManual,fitManual,clearManual,update,
     configureLighting,beforeRender,releaseLighting,selectArtwork,
+    ...(longbox?{manualCover:true,onManualCover}:{}),
     ...(clear?{clearSpine:true,paperReverse}:{}),
     sourceFaceCount:template?.sourceFaceCount||snapshot.faces.length,materials:surfaceMaterials,parts,get manualSize(){return lastSize;},
-    onChange(callback){changed=callback;},dispose(){disposed=true;brandObserver.disconnect();releaseLighting();}};
+    onChange(callback){changed=callback;},dispose(){disposed=true;brandObserver.disconnect();acrylicRibs?.dispose();releaseLighting();}};
 }

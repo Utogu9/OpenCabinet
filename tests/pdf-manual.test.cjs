@@ -130,7 +130,7 @@ test('PSP manuals are supported and fill the lid height while preserving narrow 
 test('Mega Drive/Genesis manuals fit their original retaining tabs without stretching the artwork',()=>{
   const {api}=fixture();
   for(const platform of ['Genesis','Sega Genesis','Mega Drive','Sega Mega Drive','Sega - Mega Drive / Genesis'])assert.equal(api.supportsGame({platform}),true,platform);
-  for(const platform of ['Sega CD','Sega 32X','Sega Master System'])assert.equal(api.supportsGame({platform}),false,platform);
+  for(const platform of ['Sega 32X','Sega Master System'])assert.equal(api.supportsGame({platform}),false,platform);
   const profile={id:'genesis',width:135,height:190};
   for(const aspectRatio of [.45,.65,.8,1.2])for(const pageCount of [4,32,500]){
     const size=api.dimensions(profile,{aspectRatio,pageCount});
@@ -140,6 +140,13 @@ test('Mega Drive/Genesis manuals fit their original retaining tabs without stret
     assert.ok(size.thickness+.18<2.6,'page stack stays under the original tongues');
   }
   assert.equal(api.dimensions(profile,{aspectRatio:.65,pageCount:32}).height,178);
+});
+
+test('Sega CD and Saturn booklets occupy the tall jewel lid beside its fixed hinge column',()=>{
+  const {api}=fixture();
+  for(const platform of ['Sega CD','Sega Mega CD','Sega Saturn','Saturn'])assert.equal(api.supportsGame({platform}),true,platform);
+  const size=api.dimensions({id:'longbox',width:142,height:209,depth:21},{aspectRatio:.62,pageCount:48});
+  assert.equal(size.width,127.4);assert.equal(size.height,206.4);assert.equal(size.x,6);assert.equal(size.y,0);assert.ok(size.thickness<=2.5);
 });
 
 test('DVD, DS, GameCube and PS3/PS4/PS5 manuals preserve their page proportions and respect lid clearances',()=>{

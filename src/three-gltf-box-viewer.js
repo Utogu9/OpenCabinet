@@ -184,6 +184,7 @@ export async function createModelViewer(host,options={},definition) {
     if(material===manualFront){
       if(procedural?.fitManual)procedural.fitManual(copy,manual);
       else {const ratio=copy.width/copy.height,h=Math.min(manualHeight,manualWidth/ratio);manualGroup.scale.set(h*ratio,1,h);}
+      if(procedural?.manualCover)compose();
     }
     manualGroup.visible=!manualExtracted;schedule();
   }
@@ -309,8 +310,9 @@ export async function createModelViewer(host,options={},definition) {
     };
     // A late spine only changes the outside atlas. Do not recreate/upload the
     // inlay, cartridge, disc or fallback label for every arriving image.
-    if(changed('outside',pictures.full?[pictures.full,null,null,null]:[null,pictures.cover,pictures.back_cover,pictures.spine])) {
-      if(pictures.full)assign('Cover Outside',pictures.full);
+    const booklet=procedural?.manualCover?manualFront.map?.image:null;
+    if(changed('outside',[...(pictures.full?[pictures.full,null,null,null]:[null,pictures.cover,pictures.back_cover,pictures.spine]),booklet,!!(booklet&&manualExtracted)])) {
+      if(pictures.full&&!booklet)assign('Cover Outside',pictures.full);
       else {
         const whitePaper=['wii','wiiu','threeDs'].includes(profile.variant);
         const atlas=document.createElement('canvas');atlas.width=options.carousel?1024:2048;atlas.height=options.carousel?790:1580;
@@ -326,8 +328,14 @@ export async function createModelViewer(host,options={},definition) {
           } else ctx.drawImage(image,face,0,spine,atlas.height);
         }else if(procedural?.clearSpine)ctx.clearRect(face,0,spine,atlas.height);
         else {ctx.fillStyle=whitePaper?'#ffffff':'#252b36';ctx.fillRect(face,0,spine,atlas.height);}
+        if(pictures.full)ctx.drawImage(pictures.full,0,0,atlas.width,atlas.height);
+        if(booklet){
+          ctx.clearRect(face+spine,0,face,atlas.height);
+          if(!manualExtracted)ctx.drawImage(booklet,face+spine,0,face,atlas.height);
+        }
         assign('Cover Outside',atlas);
       }
+      procedural?.onManualCover?.(booklet);
     }
     if(changed('inside',[pictures.inlay,...(procedural?.paperReverse?[!!pictures.full,!!pictures.spine]:[])]))
       assign('Cover Inside',pictures.inlay||procedural?.paperReverse?.(pictures)||null);
@@ -492,8 +500,8 @@ export async function createModelViewer(host,options={},definition) {
     toggleSide(){const back=side==='front'&&!openTarget;api.setOpen(false,false);rotation=back?math.axisAngle([0,1,0],180):initialRotation();side=back?'back':'front';schedule();},
     readManual(){if(!manual||!openTarget||manualExtracted)return false;
       if(!options.onManualActivate||options.onManualActivate({manual,game,origin:canvas})===false)return false;
-      manualExtracted=true;manualGroup.visible=false;schedule();return true;},
-    returnManual(){manualExtracted=false;manualGroup.visible=!!manual;schedule();},
+      manualExtracted=true;manualGroup.visible=false;if(procedural?.manualCover)compose();schedule();return true;},
+    returnManual(){manualExtracted=false;manualGroup.visible=!!manual;if(procedural?.manualCover&&game)compose();schedule();},
     refreshManual(){if(game)void preloadManual();},
     clear(){revision++;controller?.abort();controller=null;stopDrag();closeMenu();key=null;game=null;composed.clear();
       clearManual();
