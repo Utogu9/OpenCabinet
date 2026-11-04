@@ -249,4 +249,30 @@ pub(crate) mod tests {
     pub(crate) fn fixture(path: &Path) {
         archive(path, &[("page1.png", b"test page")]);
     }
+
+    #[test]
+    fn avif_pages_keep_natural_order_and_original_encoded_bytes() {
+        let root=std::env::temp_dir().join(format!("opencabinet-cbz-avif-{}-{}",std::process::id(),std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos()));
+        fs::create_dir_all(&root).unwrap();
+        let path=root.join("avif.cbz");
+        let avif=include_bytes!("../../tests/fixtures/manual-page.avif");
+        archive(&path,&[("10.avif",avif),("2.AVIF",avif),("1.avif",avif),("__MACOSX/._1.avif",b"metadata")]);
+        let manifest=inspect(&path).unwrap();
+        assert_eq!(manifest.pages.iter().map(|page|page.name.as_str()).collect::<Vec<_>>(),vec!["1.avif","2.AVIF","10.avif"]);
+        for page in &manifest.pages {assert_eq!(read_page(&path,page.index,&manifest.fingerprint).unwrap(),avif);}
+        assert_eq!(fs::read_dir(&root).unwrap().count(),1,"AVIF pages are not extracted or reencoded");
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    #[ignore="Reads OPENCABINET_CBZ_SAMPLE without changing the archive or user library"]
+    fn validates_local_cbz_sample_without_extracting_pages() {
+        let path=std::env::var_os("OPENCABINET_CBZ_SAMPLE").expect("Set OPENCABINET_CBZ_SAMPLE to a local CBZ");
+        let path=Path::new(&path);let before=fs::read(path).unwrap();
+        let manifest=inspect(path).unwrap();
+        assert!(!manifest.pages.is_empty());
+        for page in &manifest.pages {assert!(!read_page(path,page.index,&manifest.fingerprint).unwrap().is_empty(),"{}",page.name);}
+        assert_eq!(fs::read(path).unwrap(),before);
+        eprintln!("Validated {} pages; archive unchanged",manifest.pages.len());
+    }
 }

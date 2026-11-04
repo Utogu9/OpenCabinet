@@ -1,0 +1,19 @@
+<!doctype html><meta charset="utf-8"><title>CBZ AVIF manual check</title>
+<link rel="stylesheet" href="/src/styles.css">
+<style>body{margin:0;background:#191d26}#stage{width:800px;height:650px}</style>
+<div id="stage" class="game-box-stage" tabindex="0"></div>
+<script src="/src/locales/catalogs.js"></script><script src="/src/i18n.js"></script>
+<script src="/src/image-fallbacks.js"></script><script src="/src/dvd-case.js"></script>
+<script src="/src/cbz-manual.js"></script><script src="/src/pdf-manual.js"></script>
+<script src="/src/manual-reader.js"></script><script src="/src/three-box-router.js"></script><script src="/src/game-box.js"></script>
+<script>
+window.reader=OpenCabinetManualReader.create({onClose:()=>viewer.returnManual()});
+window.viewer=OpenCabinet3D.createViewer(document.getElementById('stage'),{
+  debug:state=>window.debug=state,
+  loadManual:async(game,signal)=>window.manual=await OpenCabinetManualPDF.render('manual.cbz',{signal,platform:game.platform}),
+  onManualState:state=>window.manualState=state,
+  onManualActivate:({manual,game,origin})=>reader.open(manual,{title:game.title,origin}),
+  onManualDeactivate:()=>reader.close(false,false)
+});
+viewer.update({id:1,title:'AVIF manual',platform:'Sony PlayStation 2',rom_path:'Game.iso'},[]);
+</script>
