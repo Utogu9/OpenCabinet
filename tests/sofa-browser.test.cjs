@@ -1,6 +1,6 @@
 const {test}=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path'),http=require('node:http');
 
-test('Couch mode carousels, controller selectors, launch return and cleanup work in a real browser',async t=>{
+test('Couch mode carousels, controller selectors, launch return and cleanup work in a real browser',{timeout:process.env.CI?600000:180000},async t=>{
   let chromium;try{({chromium}=require('playwright-core'));}catch{t.skip('Optional visual test requires playwright-core.');return;}
   const executable=process.env.OPENCABINET_CHROMIUM||(process.platform==='win32'?'C:/Program Files/Google/Chrome/Application/chrome.exe':chromium.executablePath());
   if(!fs.existsSync(executable)){t.skip('Chromium is not installed.');return;}
@@ -15,9 +15,14 @@ test('Couch mode carousels, controller selectors, launch return and cleanup work
       res.setHeader('Content-Type',({'.js':'text/javascript','.css':'text/css','.svg':'image/svg+xml','.webp':'image/webp'})[path.extname(file)]||'application/octet-stream');res.end(bytes);});
   });
   await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));t.after(()=>new Promise(resolve=>{server.closeAllConnections();server.close(resolve);}));
-  const browser=await chromium.launch({executablePath:executable,headless:true,args:['--enable-unsafe-swiftshader']});t.after(()=>browser.close());
+  const args=['--enable-unsafe-swiftshader'];
+  // CI has no physical GPU. Exercise the same renderer locally when requested.
+  if(process.env.OPENCABINET_SOFTWARE_WEBGL==='1')args.push('--use-angle=swiftshader');
+  const browser=await chromium.launch({executablePath:executable,headless:true,args});t.after(()=>browser.close());
   const page=await browser.newPage({viewport:{width:1440,height:900}}),errors=[],graphicsErrors=[];
-  page.setDefaultTimeout(10000);
+  // These waits include preparing nine complete GPU scenes. Keep the same
+  // readiness assertions on CPU-rendered runners without a 10-second GPU budget.
+  page.setDefaultTimeout(process.env.CI?60000:10000);
   page.on('pageerror',error=>errors.push(error.message));
   page.on('console',message=>{if(/GL_INVALID_(?:VALUE|OPERATION)|WebGL:.*INVALID_/.test(message.text()))graphicsErrors.push(message.text());if(message.type()==='warning'||message.type()==='error')console.log(message.text());});
   await page.goto(`http://127.0.0.1:${server.address().port}/`);
@@ -78,7 +83,12 @@ test('Couch mode carousels, controller selectors, launch return and cleanup work
     window.fixtureSofa=window.OpenCabinetSofa.create(window.fixtureOptions);
     document.getElementById('open').onclick=()=>fixtureSofa.open();
   },messages);
-  async function press(index){await page.evaluate(index=>{fixturePad.buttons[index]={pressed:true,value:1};},index);await page.waitForTimeout(85);await page.evaluate(index=>{fixturePad.buttons[index]={pressed:false,value:0};},index);await page.waitForTimeout(65);}
+  async function press(index){
+    await page.evaluate(index=>{fixture.targetReads=fixture.reads+1;fixturePad.buttons[index]={pressed:true,value:1};},index);
+    await page.waitForFunction(()=>fixture.reads>=fixture.targetReads);
+    await page.evaluate(index=>{fixture.targetReads=fixture.reads+1;fixturePad.buttons[index]={pressed:false,value:0};},index);
+    await page.waitForFunction(()=>fixture.reads>=fixture.targetReads);
+  }
   await page.click('#open');await page.waitForTimeout(120);
   assert.equal(await page.locator('.sofa-platform').count(),3);
   assert.equal(await page.locator('#sofa-game-title').textContent(),'Gran Turismo');
@@ -86,18 +96,29 @@ test('Couch mode carousels, controller selectors, launch return and cleanup work
   await press(15);assert.equal(await page.locator('#sofa-game-title').textContent(),'Regional fixture');
   await page.waitForFunction(()=>document.getElementById('sofa-mode').dataset.hasBox==='true');
   await page.waitForFunction(()=>document.querySelectorAll('.sofa-card[data-has-box="true"]').length===4);
-  await page.waitForFunction(()=>document.querySelector('.sofa-card.is-selected').dataset.boxReady==='true');
+  // Neighbor initialization can change its transform independently of input.
+  // Snapshot rotation only after every visible viewer is actually ready.
+  await page.waitForFunction(()=>document.querySelectorAll('.sofa-card[data-box-ready="true"]').length===4);
+  await page.waitForFunction(()=>[...document.querySelectorAll('.sofa-card .game-box-model')].every(node=>node.style.transform.startsWith('matrix3d(')));
+  await page.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))));
   await page.evaluate(()=>{
-    fixture.rotatedCard=document.querySelector('.sofa-card.is-selected');fixture.rotationStart=fixture.rotatedCard.querySelector('.game-box-model').style.transform;
-    fixture.neighborTransforms=[...document.querySelectorAll('.sofa-card:not(.is-selected) .game-box-model')].map(node=>({node,transform:node.style.transform}));
+    window.fixtureRotation=node=>node.querySelector('.game-box-model').style.transform.match(/^matrix3d\([^)]+\)/)?.[0]||'';
+    fixture.rotatedCard=document.querySelector('.sofa-card.is-selected');fixture.rotationStart=fixtureRotation(fixture.rotatedCard);
+    fixture.neighborRotationCalls=0;
+    for(const card of document.querySelectorAll('.sofa-card:not(.is-selected)')) {
+      const viewer=card._viewer,rotate=viewer.rotate;
+      viewer.rotate=function(...args){fixture.neighborRotationCalls++;return rotate.apply(this,args);};
+    }
     fixturePad.axes=[0,0,.8,-.6];
   });
-  await page.waitForFunction(()=>fixture.rotatedCard.querySelector('.game-box-model').style.transform!==fixture.rotationStart);
-  await page.evaluate(()=>{fixturePad.axes=[0,0,.05,-.04];});await page.waitForTimeout(80);
+  await page.waitForFunction(()=>fixtureRotation(fixture.rotatedCard)!==fixture.rotationStart);
+  await page.evaluate(()=>{fixture.targetReads=fixture.reads+2;fixturePad.axes=[0,0,.05,-.04];});
+  await page.waitForFunction(()=>fixture.reads>=fixture.targetReads);
+  await page.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))));
   const neutral=await page.evaluate(()=>fixture.rotatedCard.querySelector('.game-box-model').style.transform);
   await page.waitForTimeout(100);
   assert.equal(await page.evaluate(()=>fixture.rotatedCard.querySelector('.game-box-model').style.transform),neutral,'Stick drift does not rotate the box');
-  assert.equal(await page.evaluate(()=>fixture.neighborTransforms.every(({node,transform})=>node.style.transform===transform)),true,'Only the selected box rotates');
+  assert.equal(await page.evaluate(()=>fixture.neighborRotationCalls),0,'Right-stick input only rotates the selected box, independently of neighbor layout animations');
   assert.equal(await page.locator('#sofa-game-title').textContent(),'Regional fixture','Right-stick movement never navigates games');
   await page.locator('.sofa-search').focus();await page.evaluate(()=>{fixturePad.axes=[0,0,1,0];});await page.waitForTimeout(100);
   assert.equal(await page.evaluate(()=>fixture.rotatedCard.querySelector('.game-box-model').style.transform),neutral,'Typing in search pauses rotation');
@@ -110,8 +131,9 @@ test('Couch mode carousels, controller selectors, launch return and cleanup work
   assert.equal(await page.locator('.sofa-card.is-selected').evaluate(node=>node._scale),1.2);
   assert.equal(await page.evaluate(()=>fixture.liveViewers),4,'Every visible game has its own 3D viewer');
   const created=await page.evaluate(()=>fixture.createdViewers);
-  await page.keyboard.press('ArrowRight');await page.waitForTimeout(350);
-  assert.equal(await page.evaluate(()=>fixture.rotatedCard.querySelector('.game-box-model').style.transform===fixture.rotationStart),true,'Changing games resets controller rotation');
+  await page.keyboard.press('ArrowRight');
+  await page.waitForFunction(()=>fixtureRotation(fixture.rotatedCard)===fixture.rotationStart);
+  assert.equal(await page.evaluate(()=>fixtureRotation(fixture.rotatedCard)),await page.evaluate(()=>fixture.rotationStart),'Changing games resets controller rotation independently of its new layout scale');
   assert.equal(await page.evaluate(()=>fixture.createdViewers),created,'Moving selection reuses neighboring viewers');
   await page.keyboard.press('ArrowLeft');
   await page.waitForFunction(()=>document.querySelectorAll('.sofa-platform-art img').length===2);
@@ -338,9 +360,13 @@ test('Couch mode carousels, controller selectors, launch return and cleanup work
     'A context that must retire keeps its last complete frame visible');
   await page.waitForFunction(()=>fixture.savedModel.renderer.getContext().isContextLost());
   await page.evaluate(()=>fixture.savedModel.node._viewer.resume());
-  await page.waitForFunction(()=>fixture.modelRestores>0&&!fixture.savedModel.renderer.getContext().isContextLost()
+  try { await page.waitForFunction(()=>fixture.modelRestores>0&&!fixture.savedModel.renderer.getContext().isContextLost()
     &&fixture.savedModel.node._preview._debug.scene.environment!==fixture.savedModel.environment
-    &&!fixture.savedModel.node._preview.querySelector('[data-frozen-frame]'));
+    &&!fixture.savedModel.node._preview.querySelector('[data-frozen-frame]')); }
+  catch(error) {
+    console.log('Couch restoration state',await page.evaluate(()=>({restores:fixture.modelRestores,lost:fixture.savedModel.renderer.getContext().isContextLost(),held:!!fixture.savedModel.node._preview.querySelector('[data-frozen-frame]'),environment:!!fixture.savedModel.node._preview._debug.scene.environment,draws:fixture.savedModel.renderer.info.render.calls})));
+    throw error;
+  }
   await page.waitForFunction(()=>fixture.savedModel.renderer.info.render.calls>0);
   assert.equal(await page.evaluate(()=>fixture.createdViewers),cachedViewers,'Returning restores GPU resources without rebuilding or reparsing the model');
   if(await page.evaluate(()=>!!OpenCabinetLocalModels.switch)) {
@@ -462,6 +488,7 @@ test('Couch mode carousels, controller selectors, launch return and cleanup work
     // Hardware states advance independently of JS timers, so a blocked poll
     // really can miss a tap instead of merely postponing a synthetic event.
     Object.defineProperty(navigator,'getGamepads',{configurable:true,value:()=>{
+      fixture.reads++;
       const elapsed=performance.now()-start,pressed=elapsed>=0&&elapsed<450&&elapsed%150<70;
       fixturePad.buttons[5]={pressed,value:Number(pressed)};return [fixturePad];
     }});
