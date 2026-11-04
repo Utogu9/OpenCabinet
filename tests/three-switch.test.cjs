@@ -141,13 +141,31 @@ test('The optional Switch rig opens both folds, keeps the cartridge fixed and re
   const red=await page.evaluate(()=>{
     const plastic=debug.materials.get('Switch 2 Shell'),inside=debug.materials.get('Switch 2 Inner Sheet'),film=debug.materials.get('Plastic Film');
     return {sameRenderer:debug.renderer===switchRenderer,color:plastic.color.getHexString(),
-      opaque:!plastic.transparent&&plastic.depthWrite&&plastic.transmission===0,inside:inside.opacity,insideTransmission:inside.transmission,toneMapped:plastic.toneMapped,
+      opacity:plastic.opacity,transparent:plastic.transparent,depthWrite:plastic.depthWrite,transmission:plastic.transmission,inside:inside.opacity,insideTransmission:inside.transmission,toneMapped:plastic.toneMapped,
       shellGroups:debug.meshes.filter(mesh=>Array.isArray(mesh.material)).map(mesh=>mesh.geometry.groups.length),film:film.attenuationColor.getHexString(),cartridge:debug.materials.get('Switch 2 Cartridge').color.getHexString(),
-      cartridgePhysical:debug.materials.get('Switch 2 Cartridge').isMeshPhysicalMaterial&&debug.meshes.some(mesh=>mesh.material===debug.materials.get('Switch 2 Cartridge'))};
+      cartridgePhysical:debug.materials.get('Switch 2 Cartridge').isMeshPhysicalMaterial&&debug.meshes.some(mesh=>mesh.material===debug.materials.get('Switch 2 Cartridge')),
+      cartridgeOpaque:!debug.materials.get('Switch 2 Cartridge').transparent&&debug.materials.get('Switch 2 Cartridge').opacity===1};
   });
-  assert.equal(red.sameRenderer,true);assert.equal(red.color,'a40000');assert.equal(red.opaque,true);assert.equal(red.inside,.384);assert.equal(red.toneMapped,false);assert.equal(red.insideTransmission,0);assert.ok(red.shellGroups.every(count=>count<=2));assert.equal(red.film,'f1f5f7');
+  assert.equal(red.sameRenderer,true);assert.equal(red.color,'a40000');assert.equal(red.opacity,.8);assert.equal(red.transparent,true);assert.equal(red.depthWrite,true);assert.equal(red.transmission,0);assert.equal(red.inside,.384);assert.equal(red.toneMapped,false);assert.equal(red.insideTransmission,0);assert.ok(red.shellGroups.every(count=>count<=2));assert.equal(red.film,'f1f5f7');
   assert.equal(red.cartridge,'a40000','Switch 2 uses red cartridge plastic without tinting its label');
-  assert.equal(red.cartridgePhysical,true,'The cartridge uses the same opaque physical finish as the shell');
+  assert.equal(red.cartridgePhysical,true,'The cartridge retains the red physical finish');
+  assert.equal(red.cartridgeOpaque,true,'Exterior shell transparency does not change the cartridge');
+  const openingLedges=await page.evaluate(()=>{
+    const result={left:0,right:0,clear:0};
+    for(const mesh of debug.meshes.filter(mesh=>Array.isArray(mesh.material))){
+      const g=mesh.geometry,p=g.attributes.position,n=g.attributes.normal,index=g.index;
+      for(const group of g.groups)for(let i=group.start;i<group.start+group.count;i+=3){
+        const triangle=[0,1,2].map(j=>index.getX(i+j));
+        if(!triangle.every(j=>n.getY(j)>.85&&p.getY(j)>.001&&p.getY(j)<.0019&&Math.abs(p.getZ(j))<.037))continue;
+        const side=triangle.every(j=>p.getX(j)>.0449)?'right':triangle.every(j=>p.getX(j)<-.1582)?'left':null;
+        if(!side)continue;
+        if(mesh.material[group.materialIndex].name==='Switch 2 Shell')result[side]++;else result.clear++;
+      }
+    }
+    return result;
+  });
+  assert.ok(openingLedges.left>0&&openingLedges.right>0,'Both authored opening ledges use the solid shell');
+  assert.equal(openingLedges.clear,0,'Neither opening ledge is assigned to the translucent inlay sheet');
   await page.waitForFunction(()=>debug.materials.get('Cover Inside').map?.image);
   await page.evaluate(()=>{viewer.reset();viewer.rotate(-80,0);});await page.waitForTimeout(100);
   const lighting=await page.evaluate(()=>{

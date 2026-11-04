@@ -3,8 +3,17 @@ test('Switch 2 partitions whole triangles into clear inner floors and opaque she
   const {splitSwitchShell}=await import('../src/three-switch-shell.js');
   const y=[.0015,.0015,.0015,.0005,.0005,.0005,.0055,.0055,.0055],ny=[1,1,1,-1,-1,-1,1,1,1],indices=[3,4,5,0,1,2,6,7,8];
   const index={count:indices.length,getX:i=>indices[i]},groups=[{start:0,count:9,materialIndex:0}];
-  const geometry={getAttribute:name=>name==='position'?{count:y.length,getY:i=>y[i]}:{getY:i=>ny[i]},getIndex:()=>index,groups};
+  const geometry={getAttribute:name=>name==='position'?{count:y.length,getY:i=>y[i],getX:()=>0,getZ:()=>0}:{getY:i=>ny[i]},getIndex:()=>index,groups};
   const split=splitSwitchShell(geometry);
   assert.equal(split.opaqueCount,6);assert.equal(split.insideCount,3);assert.deepEqual(split.indices,[3,4,5,6,7,8,0,1,2]);
   assert.equal(split.originalIndex,index);assert.deepEqual(geometry.groups,groups);assert.deepEqual(indices,[3,4,5,0,1,2,6,7,8]);
+});
+test('Switch 2 keeps both inlay-facing opening ledges opaque while retaining the clear floor',async()=>{
+  const {splitSwitchShell}=await import('../src/three-switch-shell.js');
+  const x=[0,.01,0,.044936,.0459,.044936,-.159172,-.158208,-.159172];
+  const position={count:9,getX:i=>x[i],getY:()=>.0015,getZ:i=>i%3===2?.02:-.02};
+  const geometry={getAttribute:name=>name==='position'?position:{getY:()=>1},getIndex:()=>null,groups:[]};
+  const split=splitSwitchShell(geometry);
+  assert.deepEqual(split.indices,[3,4,5,6,7,8,0,1,2]);
+  assert.equal(split.opaqueCount,6);assert.equal(split.insideCount,3);
 });

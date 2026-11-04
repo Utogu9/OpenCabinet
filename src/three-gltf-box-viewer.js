@@ -120,6 +120,7 @@ export async function createModelViewer(host,options={},definition) {
   const cartridgeMeshes=cartridgePlastic?meshes.filter(mesh=>mesh.material===cartridgePlastic):[];
   const redCartridge=switchShells&&cartridgePlastic?switchShells.outer.clone():null;
   if(redCartridge){
+    redCartridge.transparent=false;redCartridge.opacity=1;
     redCartridge.name='Switch 2 Cartridge';redCartridge.normalMap=cartridgePlastic.normalMap;
     redCartridge.normalScale.copy(cartridgePlastic.normalScale);materials.set(redCartridge.name,redCartridge);
   }

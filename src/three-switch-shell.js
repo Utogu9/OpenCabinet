@@ -1,12 +1,17 @@
 // The authored open case has its inner paper-facing floor at Y = 1.5 mm.
-// Separate real triangle groups instead of mixing opaque and refractive pixels
+// Separate real triangle groups instead of mixing shell and inlay-facing pixels
 // in one transparent material. Vertex order, skin weights and morphs stay intact.
 export function splitSwitchShell(geometry) {
   const position=geometry.getAttribute('position'),normal=geometry.getAttribute('normal'),originalIndex=geometry.getIndex();
   const opaque=[],inside=[],count=originalIndex?.count||position.count;
   for(let i=0;i<count;i+=3){
     const triangle=[0,1,2].map(offset=>originalIndex?originalIndex.getX(i+offset):i+offset);
-    const floor=triangle.every(index=>normal.getY(index)>.85&&position.getY(index)>.001&&position.getY(index)<.0019);
+    // The two inward-facing ledges of the finger recess share the floor's
+    // height and normal. They belong to the solid rim, not the inlay sheet.
+    // Bounds are in the authored open pose (metres), before skinning.
+    const openingRim=triangle.every(index=>Math.abs(position.getZ(index))<.037
+      &&(position.getX(index)>.0449||position.getX(index)<-.1582));
+    const floor=!openingRim&&triangle.every(index=>normal.getY(index)>.85&&position.getY(index)>.001&&position.getY(index)<.0019);
     (floor?inside:opaque).push(...triangle);
   }
   return {originalIndex,originalGroups:geometry.groups.map(group=>({...group})),indices:[...opaque,...inside],opaqueCount:opaque.length,insideCount:inside.length};
@@ -15,7 +20,7 @@ export function splitSwitchShell(geometry) {
 export function createSwitchShells(THREE,meshes) {
   const outer=new THREE.MeshPhysicalMaterial({name:'Switch 2 Shell',color:0xa40000,roughness:.42,metalness:0,
     toneMapped:false,specularIntensity:.015,envMapIntensity:.08,clearcoat:0,clearcoatRoughness:.4,
-    side:THREE.FrontSide,transparent:false,depthWrite:true,transmission:0});
+    side:THREE.FrontSide,transparent:true,opacity:.8,depthWrite:true,transmission:0});
   const inner=new THREE.MeshPhysicalMaterial({name:'Switch 2 Inner Sheet',color:0xa40000,roughness:.4,metalness:0,
     toneMapped:false,specularIntensity:.015,envMapIntensity:.08,
     // Reduce the former 88% transparency by 30%: 88% * 0.7 = 61.6%.

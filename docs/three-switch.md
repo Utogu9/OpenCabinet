@@ -6,7 +6,7 @@ completa y la vista previa de configuración. Si el modelo o WebGL no están
 disponibles, se utiliza el visor CSS.
 
 Nintendo Switch 2 reutiliza el mismo modelo, sus texturas y su animación. Su
-perfil aplica por defecto plástico rojo saturado, opaco en la cara exterior y
+perfil aplica por defecto plástico rojo saturado, con 80% de opacidad en la cara exterior y
 en los bordes; las caras internas planas sobre el inlay siguen siendo
 translúcidas. Las caras se separan en grupos de triángulos con materiales
 distintos: el exterior escribe profundidad y no usa transmisión; la lámina
