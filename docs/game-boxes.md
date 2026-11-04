@@ -495,7 +495,7 @@ ni la resolución de las texturas. Al completar la iluminación pendiente el vis
 vuelve a quedar inactivo.
 
 Los manuales PDF y CBZ también se muestran dentro de las cajas de Xbox, Xbox 360,
-Nintendo DS (fina y PAL), GameCube (incluida la japonesa), Wii, Wii U y PS3.
+Nintendo DS (fina y PAL), GameCube (incluida la japonesa), Wii, Wii U, PS3 y Mega Drive/Genesis.
 Conservan la proporción de la página y se apoyan bajo las pestañas de la tapa;
 en DS y GameCube dejan libre la franja de seguridad. En PS3 quedan por debajo
 del espacio superior reservado para el logo de Blu-ray.
@@ -507,6 +507,11 @@ En DS, la detección automática considera que el manual es cuadrado: un escaneo
 de portada y contraportada de aproximadamente 2:1 se divide por la mitad.
 Una portada cuadrada individual se conserva completa. El lector recibe la misma
 plataforma para mantener coherentes el recorte y la detección de hojas plegadas.
+En Mega Drive/Genesis el librito queda centrado entre los topes laterales y
+bajo las pestañas superior e inferior. Se conserva la proporción del papel y
+se limita el espesor del bloque de páginas para que entre sin desplazar ni
+agregar soportes a las pestañas existentes. El lector y los controles de
+Couch Mode usan el mismo flujo que las otras cajas compatibles.
 
 La sección de la muesca abierta tiene un escalón rectangular, con un hombro y
 paredes a 90°, en lugar de una rampa diagonal. El hombro mantiene el espesor del

@@ -784,12 +784,13 @@ test('The CSS PSP viewer prefetches its manual, keeps the exterior cover and ope
   app.viewer.dispose();assert.equal(data.disposed(),1);
 });
 
-test('Xbox, Xbox 360, DS, GameCube, Wii, Wii U and PS3 keep a prefetched booklet on their lid and open the reader',async()=>{
+test('Xbox, Xbox 360, DS, GameCube, Wii, Wii U, PS3 and Genesis keep a prefetched booklet on their lid and open the reader',async()=>{
   for(const [platform,rom_path] of [
     ['Microsoft Xbox','Game (USA).iso'],['Microsoft Xbox 360','Game.iso'],
     ['Nintendo DS','Game (USA).nds'],['Nintendo DS','Game (Europe).nds'],
     ['Nintendo GameCube','Game.iso'],['Nintendo GameCube','Game (Japan).iso'],
     ['Nintendo Wii','Game.iso'],['Nintendo Wii U','Game.wud'],['Sony PlayStation 3','EBOOT.BIN'],
+    ['Sega Genesis','Game (USA).md'],['Sega Mega Drive','Game (Europe).bin'],['Sega Mega Drive / Genesis','Game.md'],
   ]){
     const data=booklet(32,platform==='Nintendo DS'?1.03:.65),activated=[];let loads=0;
     const app=scene({loadManual:async()=>{loads++;return data;},onManualActivate:info=>{activated.push(info);return true;}});

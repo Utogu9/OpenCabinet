@@ -127,10 +127,25 @@ test('PSP manuals are supported and fill the lid height while preserving narrow 
   assert.ok(wide.width<=93);assert.ok(wide.height<=162);assert.ok(Math.abs(wide.width/wide.height-1.2)<1e-9);
 });
 
+test('Mega Drive/Genesis manuals fit their original retaining tabs without stretching the artwork',()=>{
+  const {api}=fixture();
+  for(const platform of ['Genesis','Sega Genesis','Mega Drive','Sega Mega Drive','Sega - Mega Drive / Genesis'])assert.equal(api.supportsGame({platform}),true,platform);
+  for(const platform of ['Sega CD','Sega 32X','Sega Master System'])assert.equal(api.supportsGame({platform}),false,platform);
+  const profile={id:'genesis',width:135,height:190};
+  for(const aspectRatio of [.45,.65,.8,1.2])for(const pageCount of [4,32,500]){
+    const size=api.dimensions(profile,{aspectRatio,pageCount});
+    assert.ok(Math.abs(size.width/size.height-aspectRatio)<1e-9);
+    assert.equal(size.x,0);assert.equal(size.y,0);
+    assert.ok(size.width<=119&&size.height<=178);
+    assert.ok(size.thickness+.18<2.6,'page stack stays under the original tongues');
+  }
+  assert.equal(api.dimensions(profile,{aspectRatio:.65,pageCount:32}).height,178);
+});
+
 test('DVD, DS, GameCube and PS3 manuals preserve their page proportions and respect lid clearances',()=>{
   const {api}=fixture();
   for(const platform of ['Xbox','Microsoft Xbox','Xbox 360','Microsoft Xbox 360','DS','Nintendo DS','GameCube','Nintendo GameCube','Wii','Nintendo Wii','Wii U','Nintendo Wii U','PS3','Sony PlayStation 3'])assert.equal(api.supportsGame({platform}),true,platform);
-  for(const platform of ['Xbox One','Xbox Series X','Nintendo Switch','Nintendo 3DS','PS5','Sega Genesis'])assert.equal(api.supportsGame({platform}),false,platform);
+  for(const platform of ['Xbox One','Xbox Series X','Nintendo Switch','Nintendo 3DS','PS5'])assert.equal(api.supportsGame({platform}),false,platform);
   for(const profile of [
     {id:'dvd',variant:'xbox',width:135,height:190},
     {id:'dvd',variant:'xbox360',width:135,height:190},

@@ -684,7 +684,7 @@
     }
     function setManual(manual) {
       manualFaces.forEach(removeFace); manualFaces = []; manualLift = 0;
-      if ((!ps2 && !jewel && !['psp','xbox','xbox360','ds','gamecube','wii','wiiu','ps3'].includes(variant)) || !manual) return null;
+      if ((!ps2 && !jewel && !['psp','xbox','xbox360','ds','gamecube','wii','wiiu','ps3','genesis'].includes(variant)) || !manual) return null;
       const size = globalThis.OpenCabinetManualPDF.dimensions(profile, manual);
       const { width, height, thickness, x, y, sheets } = size;
       if(jewel) {
@@ -700,7 +700,7 @@
         edge.dataset.manualBooklet='true';manualFaces.push(edge);
         return size;
       }
-      manualLift = Math.max(0, thickness - 0.55);
+      manualLift = variant==='genesis'?0:Math.max(0, thickness - 0.55);
       const frontZ = -base - 0.18 - thickness, backZ = -base - 0.18;
       const bookFace = (...args) => {
         const element = face(...args); manualFaces.push(element);

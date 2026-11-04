@@ -4,7 +4,7 @@
   const isJewelBooklet = game => /^(sony)?playstation(1)?$|^ps1?$|^(sega)?dreamcast$/.test(String(game?.platform || '').toLowerCase().replace(/[^a-z0-9]/g, ''));
   const isPSP = game => /^(sony)?(playstationportable|psp)$/.test(String(game?.platform || '').toLowerCase().replace(/[^a-z0-9]/g, ''));
   const supportsGame = game => isPS2(game) || isJewelBooklet(game) || isPSP(game)
-    || /^(microsoft)?xbox(360)?$|^(nintendo)?(ds|dsi|gamecube|wii|wiiu)$|^(sony)?(playstation3|ps3)$/.test(String(game?.platform || '').toLowerCase().replace(/[^a-z0-9]/g, ''));
+    || /^(microsoft)?xbox(360)?$|^(nintendo)?(ds|dsi|gamecube|wii|wiiu)$|^(sony)?(playstation3|ps3)$|^(sega)?(megadrive(genesis)?|genesis(megadrive)?)$/.test(String(game?.platform || '').toLowerCase().replace(/[^a-z0-9]/g, ''));
   const isCoverSpread = (ratio,platform) => /^(nintendo)?dsi?$/.test(String(platform).toLowerCase().replace(/[^a-z0-9]/g,''))
     ? ratio>=1.8&&ratio<=2.4 : ratio>=1.05&&ratio<=1.7;
   let library;
@@ -23,6 +23,12 @@
     if(['jewel','jewelPal'].includes(profile.id)) {
       const width=profile.width-14.6,height=profile.height-2.6,sheets=Math.ceil(info.pageCount/2);
       return {width,height,sheets,thickness:Math.min(2.5,.26+sheets*.06),x:6,y:0};
+    }
+    if(profile.id==='genesis'){
+      // Center the booklet between the side stops and beneath the top/bottom
+      // tongues. Its page stack must fit the existing 2.6 mm retaining gap.
+      const height=Math.min(profile.height-12,(profile.width-16)/info.aspectRatio),sheets=Math.ceil(info.pageCount/2);
+      return {width:height*info.aspectRatio,height,sheets,thickness:Math.min(2.3,.26+sheets*.075),x:0,y:0};
     }
     const psp = profile.id === 'psp';
     const security = ['gamecube','ds','threeDs'].includes(profile.variant) || ['ds','dsPal','threeDs','gameCubeJapan'].includes(profile.id);
