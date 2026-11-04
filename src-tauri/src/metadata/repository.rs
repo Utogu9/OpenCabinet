@@ -1015,10 +1015,13 @@ mod tests {
         sources::apply(&mut conn,serde_json::from_str(SUBMODULES).unwrap()).unwrap();
         assert_eq!(sources::base(&conn,"Nintendo - Switch").unwrap(),"https://raw.githubusercontent.com/Utogu9/Nintendo_-_Switch/main/");
         assert_eq!(sources::base(&conn,"Sega - Dreamcast").unwrap(),"https://raw.githubusercontent.com/Utogu9/Sega_-_Dreamcast/main/");
+        for (source,repo) in [("Sony - PlayStation 3","Sony_-_PlayStation_3"),("Nintendo - Switch 2","Nintendo_-_Switch_2"),("Sega - Mega Drive - Genesis","Sega_-_Mega_Drive_-_Genesis")] {
+            assert_eq!(sources::base(&conn,source).unwrap(),format!("https://raw.githubusercontent.com/Utogu9/{repo}/main/"));
+        }
         assert_eq!(sources::base(&conn,"Sony - PlayStation 2").unwrap(),format!("{RAW_URL}Sony%20-%20PlayStation%202/"));
         let names:Vec<String>=conn.prepare("SELECT name FROM platforms ORDER BY name").unwrap()
             .query_map([],|r|r.get(0)).unwrap().collect::<rusqlite::Result<_>>().unwrap();
-        assert_eq!(names,vec!["Nintendo - Switch","Sega - Dreamcast","Sony - PlayStation 2"]);
+        assert_eq!(names,vec!["Nintendo - Switch","Nintendo - Switch 2","Sega - Dreamcast","Sega - Mega Drive - Genesis","Sony - PlayStation 2","Sony - PlayStation 3"]);
         let file=files.job.directory.join("switch.json");fs::write(&file,include_str!("../../tests/fixtures/repository-switch.json")).unwrap();
         insert_platform(&mut conn,&files.job,"Nintendo - Switch",&file,|_|()).unwrap();
         let result=search_candidate(&conn,"wrong title","Nintendo - Switch","Switch Example (EN,ES).nsp").unwrap();
@@ -1041,30 +1044,32 @@ mod tests {
     }
 
     #[test]
-    fn existing_dreamcast_catalogs_relocate_saved_game_and_console_urls_without_changing_identities() {
-        let files=Sandbox::new();let mut conn=files.catalog();let source="Sega - Dreamcast";
-        conn.execute("INSERT INTO platforms VALUES(?1)",[source]).unwrap();
-        let fixture=files.job.directory.join("dreamcast.json");fs::write(&fixture,FIXTURE.replace("Sony - PlayStation 2",source)).unwrap();
-        insert_platform(&mut conn,&files.job,source,&fixture,|_|()).unwrap();
-        fs::write(&fixture,r#"{"schema_version":1,"system":"Sega - Dreamcast","images":{"logo":{"path":"logo.svg","kind":"logo"}}}"#).unwrap();
-        insert_console_artwork(&mut conn,source,&fixture).unwrap();
-        let old_prefix=format!("{RAW_URL}Sega%20-%20Dreamcast/");
-        let rows:Vec<(String,String)>=conn.prepare("SELECT filename,url FROM image_urls WHERE substr(url,1,length(?1))=?1 ORDER BY filename").unwrap()
-            .query_map([&old_prefix],|r|Ok((r.get(0)?,r.get(1)?))).unwrap().collect::<rusqlite::Result<_>>().unwrap();
-        assert!(rows.len()>1);let before=catalog_summary(&files.job.catalog_path()).unwrap().game_count;
-        conn.execute_batch("DROP TABLE repository_sources").unwrap();drop(conn);
-        assert_eq!(image_url(&files.job,IMAGE_BASE,&rows[0].0).unwrap(),rows[0].1);
-        prepare_with_index(&files.job,false,|_|(),|path,_|fs::write(path,SUBMODULES).map_err(err)).unwrap();
-        assert!(files.job.image_urls.lock().unwrap().is_empty());
-        let reopened=open_catalog(&files.job.catalog_path()).unwrap();
-        assert_eq!(catalog_summary(&files.job.catalog_path()).unwrap().game_count,before);
-        for (filename,old) in rows {
-            let expected=old.replacen(&old_prefix,"https://raw.githubusercontent.com/Utogu9/Sega_-_Dreamcast/main/",1);
-            assert_eq!(image_url(&files.job,IMAGE_BASE,&filename).unwrap(),expected);
+    fn existing_platform_catalogs_relocate_saved_game_and_console_urls_without_changing_identities() {
+        for (source,repo) in [("Sega - Dreamcast","Sega_-_Dreamcast"),("Sony - PlayStation 3","Sony_-_PlayStation_3"),("Nintendo - Switch 2","Nintendo_-_Switch_2"),("Sega - Mega Drive - Genesis","Sega_-_Mega_Drive_-_Genesis")] {
+            let files=Sandbox::new();let mut conn=files.catalog();
+            conn.execute("INSERT INTO platforms VALUES(?1)",[source]).unwrap();
+            let fixture=files.job.directory.join("platform.json");fs::write(&fixture,FIXTURE.replace("Sony - PlayStation 2",source)).unwrap();
+            insert_platform(&mut conn,&files.job,source,&fixture,|_|()).unwrap();
+            fs::write(&fixture,serde_json::to_vec(&serde_json::json!({"schema_version":1,"system":source,"images":{"logo":{"path":"logo.svg","kind":"logo"}}})).unwrap()).unwrap();
+            insert_console_artwork(&mut conn,source,&fixture).unwrap();
+            let old_prefix=format!("{RAW_URL}{}/",url_path(source));
+            let rows:Vec<(String,String)>=conn.prepare("SELECT filename,url FROM image_urls WHERE substr(url,1,length(?1))=?1 ORDER BY filename").unwrap()
+                .query_map([&old_prefix],|r|Ok((r.get(0)?,r.get(1)?))).unwrap().collect::<rusqlite::Result<_>>().unwrap();
+            assert!(rows.len()>1);let before=catalog_summary(&files.job.catalog_path()).unwrap().game_count;
+            conn.execute_batch("DROP TABLE repository_sources").unwrap();drop(conn);
+            assert_eq!(image_url(&files.job,IMAGE_BASE,&rows[0].0).unwrap(),rows[0].1);
+            prepare_with_index(&files.job,false,|_|(),|path,_|fs::write(path,SUBMODULES).map_err(err)).unwrap();
+            assert!(files.job.image_urls.lock().unwrap().is_empty());
+            let reopened=open_catalog(&files.job.catalog_path()).unwrap();
+            assert_eq!(catalog_summary(&files.job.catalog_path()).unwrap().game_count,before);
+            for (filename,old) in rows {
+                let expected=old.replacen(&old_prefix,&format!("https://raw.githubusercontent.com/Utogu9/{repo}/main/"),1);
+                assert_eq!(image_url(&files.job,IMAGE_BASE,&filename).unwrap(),expected);
+            }
+            assert_eq!(search_catalog(&reopened,"Example Game",source).unwrap().len(),2);
+            assert!(sources::indexed(&reopened));drop(reopened);
+            ensure_platform(&files.job,source,|_|panic!("migration must preserve prepared games")).unwrap();
         }
-        assert_eq!(search_catalog(&reopened,"Example Game",source).unwrap().len(),2);
-        assert!(sources::indexed(&reopened));drop(reopened);
-        ensure_platform(&files.job,source,|_|panic!("migration must preserve prepared games")).unwrap();
     }
 
     #[test]
@@ -1122,12 +1127,12 @@ mod tests {
 
     #[test]
     #[ignore="Reads the public submodule samples downloaded into target; no network or user library changes"]
-    fn indexes_current_switch_and_dreamcast_submodule_samples() {
+    fn indexes_current_submodule_samples() {
         let files=Sandbox::new();let mut conn=files.catalog();
         let index=Path::new(env!("CARGO_MANIFEST_DIR")).join("../target/bdd-root-index.json");
         let entries=serde_json::from_reader(BufReader::new(File::open(index).unwrap())).unwrap();
         sources::apply(&mut conn,entries).unwrap();
-        for (source,repo,title) in [("Nintendo - Switch","Nintendo_-_Switch","The Legend of Zelda: Breath of the Wild"),("Sega - Dreamcast","Sega_-_Dreamcast","Sonic Adventure")] {
+        for (source,repo,title) in [("Nintendo - Switch","Nintendo_-_Switch","The Legend of Zelda: Breath of the Wild"),("Sega - Dreamcast","Sega_-_Dreamcast","Sonic Adventure"),("Sony - PlayStation 3","Sony_-_PlayStation_3","Uncharted"),("Nintendo - Switch 2","Nintendo_-_Switch_2","Mario Kart World"),("Sega - Mega Drive - Genesis","Sega_-_Mega_Drive_-_Genesis","Sonic")] {
             let path=Path::new(env!("CARGO_MANIFEST_DIR")).join(format!("../target/{repo}-catalog.json"));
             insert_platform(&mut conn,&files.job,source,&path,|_|()).unwrap();
             let found=search_catalog(&conn,title,source).unwrap();assert!(!found.is_empty());
