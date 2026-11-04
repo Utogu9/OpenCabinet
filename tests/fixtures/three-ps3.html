@@ -8,7 +8,7 @@
 <script src="/src/cover-cache.js"></script><script src="/src/carousel-boxes.js"></script>
 <script type="module">
 window.platform=new URLSearchParams(location.search).get('platform')||'Sony PlayStation 3';
-const modelLabel='PS'+platform.match(/[345]/)[0];
+const modelLabel=/xbox/i.test(platform)?(/360/.test(platform)?'Xbox 360':'Xbox'):'PS'+platform.match(/[345]/)[0];
 window.solid=(color,w=300,h=420)=>{
   const canvas=document.createElement('canvas');canvas.width=w;canvas.height=h;
   const context=canvas.getContext('2d');context.fillStyle=color;context.fillRect(0,0,w,h);

@@ -68,6 +68,18 @@ test('PS4 and PS5 reuse one backend and geometry family, with a CSS fallback whe
   fallback.api.update({id:1,platform:'PS5'},[]);await tick();assert.equal(fallback.viewers[0].type,'css');fallback.api.dispose();
 });
 
+test('Xbox and Xbox 360 reuse the DVD conversion while other Xbox generations and case overrides stay independent',async()=>{
+  const loaded=[],app=router(async(make,model)=>{loaded.push(model);return {createViewer:()=>make(model)};});
+  for(const [id,platform] of [[1,'Microsoft Xbox'],[2,'Microsoft Xbox 360'],[3,'Xbox'],[4,'Xbox 360']]){
+    app.api.update({id,platform},[]);await tick();assert.equal(app.viewers.length,1);assert.equal(app.viewers[0].calls.at(-1)[1].platform,platform);
+  }
+  assert.deepEqual(loaded,['xbox']);
+  app.api.update({id:5,platform:'Microsoft Xbox One'},[]);await tick();assert.equal(app.viewers[1].type,'css');
+  app.api.update({id:6,platform:'Microsoft Xbox 360'},[],{base:{model:'bluray'}});await tick();assert.equal(app.viewers.length,2);app.api.dispose();
+  const fallback=router(async()=>{throw Error('WebGL unavailable');});
+  fallback.api.update({id:7,platform:'Microsoft Xbox'},[]);await tick();assert.equal(fallback.viewers[0].type,'css');fallback.api.dispose();
+});
+
 test('Switch 2 shares the optional Switch backend without rebuilding it between generations',async()=>{
   let imports=0;const app=router(async(make,model)=>{imports++;assert.equal(model,'switch');return {createViewer:()=>make('switch')};},{switchModel:true});
   app.api.update({id:1,platform:'Nintendo Switch'},[]);await tick();const viewer=app.viewers[0];

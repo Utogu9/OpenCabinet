@@ -153,13 +153,14 @@ export function faceGeometry(face,{style=getComputedStyle(face.element),uv=(x,y)
 export function convertLegacyCase(sourceFactory,templateKey) {
   const template=templates.get(templateKey),source=template?null:sourceFactory();
   const snapshot=template||source.capture(),profile=snapshot.profile,{width:w,height:h,depth:d}=profile;
-  const clear=['ps3','ps4'].includes(profile.variant);
+  const clear=['ps3','ps4','xbox','xbox360'].includes(profile.variant),dvdClips=profile.id==='dvd';
+  const bodyOpacity=variant=>({ps3:.07,ps4:.14,xbox:.20,xbox360:.12}[variant]??.07);
   const scene=new THREE.Group(),parts={},batches=new Map();
   for(const name of ['tray','spine','lid']){const group=new THREE.Group();group.name=`Case ${name}`;scene.add(group);parts[name]=group;}
   const plasticColor=color=>color.toLowerCase()==='#16191f'?'#343537':color;
   const plastic=clear?clearCasePlastic(profile.color):new THREE.MeshPhysicalMaterial({color:plasticColor(profile.color),roughness:.84,metalness:0,
     specularIntensity:.16,envMapIntensity:.24,clearcoat:0,side:THREE.DoubleSide});plastic.name='Case Plastic';
-  if(profile.variant==='ps4')plastic.opacity=.14;
+  if(clear)plastic.opacity=bodyOpacity(profile.variant);
   const raised=plastic.clone();raised.name='Case Raised Plastic';raised.roughness=clear?.30:.80;
   if(clear){raised.onBeforeCompile=plastic.onBeforeCompile;raised.customProgramCacheKey=plastic.customProgramCacheKey;}
   const paper=new THREE.MeshBasicMaterial({color:0xffffff,side:THREE.FrontSide,toneMapped:false});paper.name='Paper Reverse';
@@ -295,9 +296,10 @@ export function convertLegacyCase(sourceFactory,templateKey) {
     const front=sheet(manualFront);front.rotation.y=Math.PI;front.position.z=-.52;
     const back=sheet(manualBack);back.position.z=.52;
     for(const mesh of [body,front,back]){manualGroup.add(mesh);manualMeshes.push(mesh);meshes.push(mesh);}
-    const footGeometry=new THREE.BoxGeometry(clear?4:4.5,clear?16:10.4,1),footParts=[];
-    for(const sign of [-1,1]){const g=footGeometry.clone();g.translate(w/2-(clear?4.5:5.75),sign*h*(clear?.34:.415),0);footParts.push(g);}
+    const footGeometry=new THREE.BoxGeometry(dvdClips?4.5:4,dvdClips?10.4:16,1),footParts=[];
+    for(const sign of [-1,1]){const g=footGeometry.clone();g.translate(w/2-(dvdClips?5.75:4.5),sign*h*(dvdClips?.415:.34),0);footParts.push(g);}
     feet=new THREE.Mesh(mergeGeometries(footParts),raised);footGeometry.dispose();footParts.forEach(g=>g.dispose());
+    feet.name='Booklet Retainer Feet';
     feet.castShadow=feet.receiveShadow=true;feet.visible=false;parts.lid.add(feet);meshes.push(feet);
   }
   function fitManual(image,data) {
@@ -330,6 +332,7 @@ export function convertLegacyCase(sourceFactory,templateKey) {
   }
   function update(next) {
     plastic.color.set(plasticColor(next.color));raised.color.copy(plastic.color);
+    if(clear)plastic.opacity=raised.opacity=bodyOpacity(next.variant);
     labelMaterials.forEach(mat=>mat.color.copy(plastic.color).lerp(new THREE.Color(0xffffff),.12));refreshBrand();
   }
   // Console artwork can finish loading after the case was selected. Observe
