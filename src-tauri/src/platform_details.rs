@@ -57,6 +57,7 @@ impl BoxSettings {
                     "gbaJapan",
                     "genesis",
                     "masterSystem",
+                    "sega32x",
                     "gameCubeJapan",
                     "custom",
                 ]
@@ -570,7 +571,7 @@ mod tests {
     #[test]
     fn tall_jewel_and_square_master_system_formats_survive_storage() {
         let mut library = Library::new();
-        for model in ["longbox", "masterSystem"] {
+        for model in ["longbox", "masterSystem", "sega32x"] {
             let mut details = library.details();
             details.box_3d = Some(
                 serde_json::from_value(serde_json::json!({

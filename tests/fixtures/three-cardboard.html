@@ -1,0 +1,22 @@
+<!doctype html><meta charset="utf-8"><title>Cardboard cases</title>
+<link rel="stylesheet" href="/src/styles.css">
+<style>body{margin:0;background:#191d26}#stage{width:800px;height:650px}</style>
+<div id="stage" class="game-box-stage" tabindex="0"></div>
+<script>globalThis.OpenCabinetI18n={t:key=>key};</script>
+<script src="/src/image-fallbacks.js"></script><script src="/src/dvd-case.js"></script>
+<script src="/src/pdf-manual.js"></script><script src="/src/three-box-router.js"></script><script src="/src/game-box.js"></script>
+<script src="/src/carousel-boxes.js"></script>
+<script type="module">
+window.profileEvents=[];window.manualLoads=0;
+window.solid=(color,w=300,h=420)=>{
+  const c=document.createElement('canvas');c.width=w;c.height=h;const ctx=c.getContext('2d');
+  ctx.fillStyle=color;ctx.fillRect(0,0,w,h);ctx.fillStyle='#fff';ctx.font='bold 22px sans-serif';ctx.fillText('OpenCabinet',15,35);return c;
+};
+window.viewer=OpenCabinet3D.createViewer(document.getElementById('stage'),{debug:value=>window.debug=value,
+  onProfile:profile=>profileEvents.push(profile),getCoverPreview:path=>path==='cached-cover'?window.preview:null,
+  imageSource:path=>path==='cached-cover'?window.originalCover:path,
+  loadManual:async()=>{manualLoads++;return null;}});
+window.select=(id,platform,w=300,h=420,settings=null,images=null)=>viewer.update({id,title:platform,platform,rom_path:'Game (USA).rom'},
+  images||[{kind:'cover',path:solid('#2264b8',w,h).toDataURL()},{kind:'back_cover',path:solid('#c95b27',w,h).toDataURL()},{kind:'spine',path:solid('#f4ba2f',40,400).toDataURL()}],settings);
+select(1,'NES');
+</script>

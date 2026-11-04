@@ -49,6 +49,18 @@ test('A failed PS2 GPU conversion retains the existing CSS fallback',async()=>{
   assert.equal(app.viewers[0].type,'css');assert.equal(app.viewers[0].calls.at(-1)[1].platform,'PS2');app.api.dispose();
 });
 
+test('All cardboard formats share one non-opening backend, including 32X and explicit case overrides',async()=>{
+  const loaded=[],app=router(async(make,model)=>{loaded.push(model);const viewer=make(model);viewer.canOpen=false;return {createViewer:()=>viewer};});
+  for(const [index,model] of ['nes','snes','sfc','n64','gameBoy','gbaJapan','masterSystem','sega32x'].entries()){
+    app.api.update({id:index,platform:'New console'},[],{base:{model}});
+    assert.equal(app.api.canOpen,false);assert.equal(app.api.setOpen(true),false);await tick();
+    assert.equal(app.viewers.length,1);assert.equal(app.viewers[0].type,'cardboard');
+  }
+  assert.deepEqual(loaded,['cardboard']);app.api.dispose();
+  const fallback=router(async()=>{throw Error('WebGL unavailable');});
+  fallback.api.update({id:1,platform:'Sega 32X'},[]);await tick();assert.equal(fallback.viewers[0].type,'css');fallback.api.dispose();
+});
+
 test('PS3 and PS4 use separate transparent conversions and preserve explicit DVD overrides',async()=>{
   const loaded=[],app=router(async(make,model)=>{loaded.push(model);return {createViewer:()=>make(model)};});
   app.api.update({id:1,platform:'Sony PlayStation 3'},[]);await tick();assert.deepEqual(loaded,['ps3']);

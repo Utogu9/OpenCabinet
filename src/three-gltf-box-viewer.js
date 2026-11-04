@@ -151,7 +151,7 @@ export async function createModelViewer(host,options={},definition) {
   if(!procedural)manualGroup.scale.set(manualWidth,1,manualHeight);manualGroup.visible=false;
   // Evaluate a few poses once; rotating the case never scans every vertex.
   function pose(amount) {
-    procedural?.pose(amount);
+    procedural?.pose?.(amount);
     actions.forEach((action,i)=>{action.time=clips[i].duration*amount;action.enabled=true;});
     mixer.update(0);model.updateMatrixWorld(true);
     for(const node of meshes)node.skeleton?.update();
@@ -218,7 +218,7 @@ export async function createModelViewer(host,options={},definition) {
   function listen(target,name,callback,config){target.addEventListener(name,callback,config);listeners.push([target,name,callback,config]);}
   function initialRotation(){return math.multiply(math.axisAngle([1,0,0],9),math.axisAngle([0,1,0],28));}
   function schedule(){if(!disposed&&!renderLease?.paused&&!renderLease?.lost&&frame===null)frame=requestAnimationFrame(render);}
-  function notify(){onOpenState({canOpen:!!game,open:openTarget});}
+  function notify(){onOpenState({canOpen:!!game&&definition.canOpen!==false,open:openTarget});}
   function render(time) {
     frame=null;if(disposed||renderLease?.paused||renderLease?.lost||!game||!host.clientWidth||!host.clientHeight)return;
     const nextWidth=host.clientWidth,nextHeight=host.clientHeight,surface=canvasViewport(nextWidth,nextHeight,zoom,options.carousel);
@@ -303,6 +303,8 @@ export async function createModelViewer(host,options={},definition) {
     if(line)lines.push(line);lines.slice(0,10).forEach((value,i)=>context.fillText(value,x+w/2,y+h/2+(i-lines.length/2)*h*.045,w*.85));
   }
   function compose() {
+    const artworkProfile=procedural?.prepareArtwork?.(pictures);
+    if(artworkProfile){profile=artworkProfile;host.dataset.format=profile.id;onProfile(profile);}
     const changed=(name,values)=>{
       const previous=composed.get(name);
       if(previous&&values.every((value,i)=>value===previous[i]))return false;
@@ -343,7 +345,7 @@ export async function createModelViewer(host,options={},definition) {
       if(pictures.disc)assign('UMD Label',pictures.disc);
       else {const disc=document.createElement('canvas');disc.width=512;disc.height=512;label(disc.getContext('2d'),game.title,0,0,512,512);assign('UMD Label',disc);}
     }
-    if(changed('cartridge',[pictures.cartridge])) {
+    if(materials.has('Cartridge Cover')&&changed('cartridge',[pictures.cartridge])) {
       if(pictures.cartridge)assign('Cartridge Cover',pictures.cartridge);
       else if(!options.useModelArtwork) {
         const card=document.createElement('canvas');card.width=256;card.height=352;label(card.getContext('2d'),game.title,0,0,256,352,modelId==='genesis'?'#202020':undefined);assign('Cartridge Cover',card);
@@ -464,7 +466,7 @@ export async function createModelViewer(host,options={},definition) {
       if(changed){opened=0;openTarget=false;animation=null;pose(0);rotation=initialRotation();zoom=1;side='front';}
       const resolved=globalThis.OpenCabinet3D.resolveSettings(settings,next.box_3d);
       const style=resolved?.regions?.[globalThis.OpenCabinet3D.regionFor(next.rom_path)]||resolved?.base;
-      procedural?.update(profile,next);
+      procedural?.update(profile,next,resolved);
       procedural?.selectArtwork?.(images);
       const switch2=modelId==='switch'&&profile.generation===2;
       switchShells?.set(switch2,style?.color||profile.color);
@@ -481,9 +483,9 @@ export async function createModelViewer(host,options={},definition) {
       controller=new AbortController();onProfile(profile);options.onManualState?.({status:'none'});void preloadManual();
       if(!options.useModelArtwork&&!options.carousel)compose();void loadArtwork(images,revision);notify();schedule();
     },
-    get canOpen(){return !!game;},get isOpen(){return openTarget;},get rotationLock(){return rotationLock;},
+    get canOpen(){return !!game&&definition.canOpen!==false;},get isOpen(){return openTarget;},get rotationLock(){return rotationLock;},
     setRotationLock(mode){if(['free','x','y'].includes(mode)){stopDrag();rotationLock=mode;host.dataset.rotationLock=mode;}},
-    setOpen(value,animate=true){if(!game)return false;stopDrag();openTarget=!!value;
+    setOpen(value,animate=true){if(!api.canOpen)return false;stopDrag();openTarget=!!value;
       if(openTarget)ensureManualBack();else {if(manualExtracted)options.onManualDeactivate?.();api.returnManual();}
       const reduced=globalThis.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
       animation=animate&&!reduced&&opened!==Number(openTarget)?{from:opened,to:Number(openTarget),start:null}:null;

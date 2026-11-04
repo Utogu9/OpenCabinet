@@ -21,8 +21,10 @@
     gbaJapan: [135, 86, 23, globalThis.OpenCabinetI18n.t("msg.d81ecf11c2"), "#55525a", "top"],
     genesis: [135, 190, 25, "Mega Drive / Genesis", "#202328"],
     masterSystem: [135, 190, 25, globalThis.OpenCabinetI18n.t("msg.e508be04df"), "#343436"],
+    sega32x: [135, 190, 25, "Sega 32X", "#55525a"],
     gameCubeJapan: [107, 149, 17, globalThis.OpenCabinetI18n.t("msg.c0730a8434"), "#8b8f96"],
   };
+  const isCardboard = profile => ["nes", "snes", "sfc", "n64", "gameBoy", "gbaJapan", "masterSystem", "sega32x"].includes(profile?.id);
 
 
   function jewelFamily(platform) {
@@ -67,6 +69,7 @@
     else if (/^(nintendo)?dsi?$/.test(name)) id = europe ? "dsPal" : "ds";
     else if (/playstationportable|psp/.test(name)) id = "psp";
     else if (/playstationvita|psvita/.test(name)) id = "vita";
+    else if (/32x/.test(name)) id = "sega32x";
     else if (/playstation[345]|ps[345]|xboxone|xboxseries/.test(name)) {
       id = "bluray";
       if (/xbox/.test(name)) color = "#216a35";
@@ -511,7 +514,7 @@
       host.dataset.variant = model.dataset.variant = profile.variant;
       host.dataset.format = profile.id;
       host.dataset.spineFace = profile.spineFace;
-      host.dataset.material = ["nes", "snes", "sfc", "n64", "gameBoy", "gbaJapan", "masterSystem"].includes(profile.id) ? "cardboard" : "plastic";
+      host.dataset.material = isCardboard(profile) ? "cardboard" : "plastic";
       onProfile(profile);
       const { width: w, height: h, depth: d } = profile;
       const cardboard = host.dataset.material === "cardboard";
@@ -1162,7 +1165,7 @@
     viewer.update(game, ['cover','back_cover','spine','disc','cart_label'].map(kind=>({kind,path:blank})), settings);
     return {capture:manual=>viewer.captureGeometry(manual),dispose(){viewer.dispose();host.remove();}};
   }
-  globalThis.OpenCabinet3D = { resolveSettings, geometrySource,
+  globalThis.OpenCabinet3D = { resolveSettings, geometrySource, isCardboard,
     createViewer: (host, options = {}) => globalThis.OpenCabinetThreeBoxes
       ? globalThis.OpenCabinetThreeBoxes.createRouter(host, options, legacyViewer, profileFor, resolveSettings)
       : legacyViewer(host, options), profileFor, regionFor, jewelFamily,

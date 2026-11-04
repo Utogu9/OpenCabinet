@@ -1009,7 +1009,7 @@ test("Physical profiles distinguish console generations and their aliases", () =
   const { profileFor } = scene().api;
   for (const [platform, id] of [["PS2", "dvd"], ["Sony Playstation 2", "dvd"], ["PlayStation", "jewel"], ["PS4", "bluray"],
     ["Nintendo DS", "ds"], ["Nintendo 3DS", "threeDs"], ["Nintendo Switch", "switch"], ["SNES", "snes"], ["NES", "nes"], ["Nintendo SNES", "snes"], ["Nintendo NES", "nes"],
-    ["Nintendo 64", "n64"], ["Game Boy Advance", "gameBoy"], ["Sega Mega Drive", "genesis"], ["PSP", "psp"], ["PlayStation Vita", "vita"]]) {
+    ["Nintendo 64", "n64"], ["Game Boy Advance", "gameBoy"], ["Sega Mega Drive", "genesis"], ["Sega 32X", "sega32x"], ["Sega Genesis 32X", "sega32x"], ["PSP", "psp"], ["PlayStation Vita", "vita"]]) {
     assert.equal(profileFor(platform).id, id, platform);
   }
   assert.equal(profileFor("PS2").height / profileFor("PS2").width, 190 / 135);
@@ -1020,6 +1020,13 @@ test("Physical profiles distinguish console generations and their aliases", () =
   assert.equal(profileFor("PS1", null, "game (Europe).chd").id, "jewelPal");
   assert.equal(profileFor("Arcade", 1.2).id, "generic");
   assert.ok(profileFor("Custom console", 1.2).width > profileFor("Custom console", 0.6).width);
+});
+
+test('32X uses a square-cornered cardboard case with no plastic recess or opening',()=>{
+  const app=scene();app.viewer.update({...game,platform:'Sega 32X'},artwork);app.flush();
+  assert.equal(app.host.dataset.material,'cardboard');assert.equal(app.viewer.canOpen,false);
+  assert.equal(app.api.isCardboard(app.api.profileFor('Sega Mega Drive 32X')),true);
+  app.viewer.dispose();
 });
 
 test('Switch 2 reuses Switch geometry with red plastic and preserves explicit color overrides',()=>{

@@ -8,7 +8,8 @@
       ? import('./three-ps2-viewer.js') : model==='ps3'
       ? import('./three-ps3-viewer.js') : model==='ps4'
       ? import('./three-ps4-viewer.js') : model==='xbox'
-      ? import('./three-xbox-viewer.js') : ['genesis','wii','wiiu','gamecube','gamecube-japan','ds','ds-pal','3ds','longbox'].includes(model)
+      ? import('./three-xbox-viewer.js') : model==='cardboard'
+      ? import('./three-cardboard-viewer.js') : ['genesis','wii','wiiu','gamecube','gamecube-japan','ds','ds-pal','3ds','longbox'].includes(model)
       ? import('./three-converted-viewer.js') : import('./three-box-viewer.js'))
       .catch(error=>{moduleTasks.delete(model);throw error;}));
     return moduleTasks.get(model);
@@ -22,7 +23,8 @@
     function legacy() { backend='css';viewer=createLegacy(host,options);viewer.setRotationLock?.(lock);if(suspended)viewer.suspend?.(releaseContext);viewer.update(...pending); }
     function backendFor(game,settings) {
       const profile=profileFor(game.platform,null,game.rom_path,resolveSettings(settings,game.box_3d));
-      const model=globalThis.OpenCabinet3D.jewelFamily(game.platform) && ['jewel','jewelPal'].includes(profile.id) ? 'dreamcast'
+      const model=globalThis.OpenCabinet3D.isCardboard(profile) ? 'cardboard'
+        : globalThis.OpenCabinet3D.jewelFamily(game.platform) && ['jewel','jewelPal'].includes(profile.id) ? 'dreamcast'
         : profile.id==='dvd'&&profile.variant==='ps2' ? 'ps2'
         : profile.id==='bluray'&&profile.variant==='ps3' ? 'ps3'
         : profile.id==='bluray'&&profile.variant==='ps4' ? 'ps4'
@@ -64,13 +66,13 @@
           legacy();
         });
       },
-      get canOpen() {return viewer?.canOpen ?? !!isThree();},
+      get canOpen() {return viewer?.canOpen ?? (isThree()&&backend!=='three:cardboard');},
       suspend(release=false) {suspended=true;releaseContext ||= release;viewer?.suspend?.(releaseContext);},
       resume() {suspended=false;releaseContext=false;viewer?.resume?.();},
       get isOpen() {return viewer?.isOpen ?? open;},
       get rotationLock() {return lock;},
       setRotationLock(value) {if(['free','x','y'].includes(value)){lock=value;viewer?.setRotationLock(value);}},
-      setOpen(value,animate=true) {open=!!value;return viewer?.setOpen(open,animate) ?? !!isThree();},
+      setOpen(value,animate=true) {if(backend==='three:cardboard')return false;open=!!value;return viewer?.setOpen(open,animate) ?? !!isThree();},
       toggleOpen() {return api.setOpen(!api.isOpen);},
       readManual(...args) {return viewer?.readManual?.(...args) ?? false;},
       clear() {release();pending=null;open=false;options.onOpenState?.({canOpen:false,open:false});},
