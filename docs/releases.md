@@ -98,6 +98,11 @@ releases. Sus artefactos permiten probar Linux antes de crear una etiqueta. Las 
 automáticas de Windows y Linux se ejecutan al publicar un tag de versión mediante el
 workflow de release. Ver [Linux](linux.md).
 
+`npm test` descubre las pruebas dentro de `tests/`: primero ejecuta las pruebas
+normales en paralelo y después las de navegador, una suite por vez. Esto evita
+que varios Chrome con WebGL por software compitan por los recursos del runner
+y fallen por tiempo de espera. No se incluyen copias temporales de `target/`.
+
 Para compilar localmente los paquetes firmados en PowerShell:
 
 ```powershell

@@ -13,7 +13,7 @@
     "prepare:pdf": "node scripts/prepare-pdfjs.cjs",
     "prepare:icons": "node scripts/prepare-icons.cjs",
     "postinstall": "npm run prepare:locales && npm run prepare:pdf && npm run prepare:three",
-    "test": "node --test",
+    "test": "node scripts/test.cjs",
     "dev": "tauri dev",
     "build": "tauri build",
     "prepare:locales": "node scripts/prepare-locales.cjs",
