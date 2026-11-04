@@ -20,6 +20,8 @@ mod game_availability;
 mod library_files;
 mod session_history;
 mod library_features;
+mod launch_actions;
+mod playlists;
 mod steam;
 mod epic;
 mod media_library;
@@ -109,6 +111,8 @@ pub struct Emulator {
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct GameDetails {
+    #[serde(default)]
+    launch_actions: Option<launch_actions::Actions>,
     #[serde(default)]
     personal: Option<library_features::Personal>,
     #[serde(default)]
@@ -311,6 +315,8 @@ fn init_database(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>> {
 }
 
 fn init_game_metadata(conn: &Connection) -> rusqlite::Result<()> {
+    launch_actions::init(conn)?;
+    playlists::init(conn)?;
     library_features::init(conn)?;
     linux_execution::init(conn)?;
     game_order::init(conn)?;
@@ -739,6 +745,7 @@ fn save_game_details_in_transaction(conn: &Connection, details: GameDetails) -> 
         return Err(crate::i18n::text("msg.66087bc5c8").to_string());
     }
     if let Some(ref personal) = details.personal { library_features::save(tx,details.id,personal)?; }
+    if let Some(ref actions) = details.launch_actions { launch_actions::save(tx,details.id,actions)?; }
     if let Some(ref variables) = details.variables {
         entity_variables::save(tx, "game", details.id, variables)?;
     }
@@ -966,10 +973,14 @@ async fn launch_game(game_id: i32, disc_id: Option<i64>, region_id: Option<i32>,
         let source_id = game_regions::selected(&conn,game_id,region_id)?;
         let steam_id = conn.query_row("SELECT rom_path FROM games WHERE id=?1", [source_id], |row| row.get::<_, String>(0)).ok().and_then(|path| steam::app_id(&path));
         let game_path: String = conn.query_row("SELECT rom_path FROM games WHERE id=?1", [source_id], |row| row.get(0)).map_err(|e| e.to_string())?;
+        let actions=launch_actions::read(&conn,source_id)?;
+        let action_title:String=conn.query_row("SELECT title FROM games WHERE id=?1",[source_id],|row|row.get(0)).map_err(|e|e.to_string())?;
+        let action_path=if disc_id.is_some(){discs::selected_path(&conn,source_id,disc_id,&game_path)?}else{game_path.clone()};
         let direct:bool=conn.query_row("SELECT launch_directly FROM games WHERE id=?1",[source_id],|r|r.get(0)).map_err(|e|e.to_string())?;
         let linux_options=linux_execution::read(&conn,source_id)?.unwrap_or_default();
         let epic_directory = if epic::app_id(&game_path).is_some() { Some(epic::launch_plan(&conn, game_id, &game_path)?.install_directory) } else { None };
         let (mut result, (mut child, started, diagnostic_log, process_session, error_output)) = launch_game_record_with_region(&conn, game_id, region_id, disc_id, |emu_path, args, working_directory| {
+            launch_actions::run(&actions.before,&action_path,&action_title)?;
             let mut args=args.to_vec();let log=retroarch::diagnostic_log(emu_path,&mut args,game_id);
             let runtime=if cfg!(target_os="linux")&&direct&&steam_id.is_none()&&epic::app_id(&game_path).is_none(){Some(linux_execution::plan(&data_directory().map_err(|e|e.to_string())?,source_id,emu_path,&args,&linux_options)?)}else{None};
             let mut command = std::process::Command::new(runtime.as_ref().map(|p|p.executable.as_path()).unwrap_or(Path::new(emu_path)));
@@ -1035,6 +1046,8 @@ async fn launch_game(game_id: i32, disc_id: Option<i64>, region_id: Option<i32>,
                 if let Ok(Some(stats)) = playtime::save_elapsed(&conn, source_id, 0, &mut saved, false) {
                     if let Ok(stats) = game_regions::statistics(&conn,game_id,stats) { let _ = app.emit("play-statistics-updated", stats); }
                 }
+            } else if let Err(message)=launch_actions::run(&actions.after,&action_path,&action_title) {
+                let _=app.emit("launch-diagnostic",serde_json::json!({"game_id":game_id,"message":message}));
             }
         });
         Ok(result)
@@ -1899,7 +1912,7 @@ mod game_edit_tests {
     }
 
     fn details() -> GameDetails {
-        GameDetails { personal:None, manual_preference:None, rom_path:None, order_group:None, box_3d:None, regions:None, variables: None, execution: None, discs: None,
+        GameDetails { launch_actions:None, personal:None, manual_preference:None, rom_path:None, order_group:None, box_3d:None, regions:None, variables: None, execution: None, discs: None,
             id: 1, title: "  New Title  ".into(), platform: "genesis".into(),
             release_date: Some("1992-11-24".into()),
             developer: Some("  Developer  ".into()), publisher: Some("Publisher".into()),
@@ -2666,6 +2679,11 @@ pub fn run() {
             storage::restart_app,
             get_games,
             library_features::set_game_personal,
+            launch_actions::get_game_launch_actions,
+            launch_actions::choose_launch_action,
+            playlists::get_playlists,
+            playlists::save_playlist,
+            playlists::delete_playlist,
             library_features::get_library_dashboard,
             library_features::get_library_report,
             library_navigation::get_library_navigation,

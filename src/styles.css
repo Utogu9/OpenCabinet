@@ -3030,3 +3030,21 @@ html[data-i18n-pending] body { visibility: hidden; }
 [data-i18n="msg.6b39d242e1"] { --ui-icon: url("assets/icons/image.svg"); }
 [data-i18n="msg.dcdcf57086"] { --ui-icon: url("assets/icons/pencil.svg"); }
 [data-i18n="sofa.play"] { --ui-icon: url("assets/icons/play.svg"); }
+.play-filter-grid { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 16px; }
+.play-field { display: flex; flex-direction: column; gap: 7px; margin: 12px 0; min-width: 0; }
+.play-field input:not([type=checkbox]), .play-field select, .play-field textarea { width: 100%; min-width: 0; box-sizing: border-box; }
+.play-field input[type=checkbox] { align-self: flex-start; width: auto; }
+.play-columns { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-top: 18px; }
+.play-columns section { min-width: 0; }
+.play-available, .play-chosen { max-height: 340px; overflow: auto; margin-top: 12px; }
+.play-add-game { display: block; width: 100%; text-align: left; margin-bottom: 7px; }
+.play-list-row { display: flex; align-items: center; gap: 5px; margin-bottom: 8px; }
+.play-list-row > span { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.play-list-row > button { padding: 6px 9px; }
+.play-action { padding: 14px; border: 1px solid var(--border-color); border-radius: 8px; margin: 14px 0; }
+.play-action .feature-toolbar { display: flex; flex-wrap: nowrap; width: 100%; }
+.play-action .feature-toolbar input { flex: 1; }
+.play-actions-section { margin-top: 22px; }
+.play-random-result { text-align: center; padding: 18px; }
+.sofa-playlist { max-width: 230px; }
+@media (max-width: 700px) { .play-columns,.play-filter-grid { grid-template-columns: 1fr; } }

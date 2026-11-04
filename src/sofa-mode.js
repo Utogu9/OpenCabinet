@@ -99,6 +99,9 @@
     search.placeholder = t('sofa.search'); search.setAttribute('aria-label', t('sofa.search'));
     const view = button('', () => changeView(), 'sofa-tool'); view.id = 'sofa-view';
     const exit = button(t('sofa.exit'), () => close(), 'sofa-tool'); exit.id = 'sofa-exit';
+    const playlistSelect=element('select','sofa-search sofa-playlist');playlistSelect.setAttribute('aria-label',t('playlists.title'));
+    playlistSelect.addEventListener('change',()=>{playlistId=playlistSelect.value;platformName=null;gameId=null;refresh();focusCurrent();});
+    if(options.getPlaylists)tools.append(playlistSelect);
     tools.append(search, view, exit); header.append(brand, tools);
     const deck = element('section', 'sofa-deck'); deck.id = 'sofa-deck';
     deck.setAttribute('aria-label', t('sofa.games')); deck.setAttribute('aria-roledescription', t('sofa.carousel'));
@@ -127,6 +130,12 @@
 
     let active = false, lease = null, opener = null, generation = 0, selectionVersion = 0;
     let platforms = [], games = [], platformName = null, gameId = null, zone = 'games', query = '';
+    let playlistId='';
+    const activePlaylist=()=>options.getPlaylists?.().find(list=>list.id===playlistId);
+    const playlistGames=()=>{
+      const list=activePlaylist();if(!list)return options.games();
+      const byId=new Map(options.games().map(game=>[game.id,game]));return list.games.map(id=>byId.get(id)).filter(Boolean);
+    };
     let boxMode = true, frame = null, previewTimer = null, previewGeneration = 0, previewWork = null;
     let platformPreviewAt = 0;
     let warmTimer = null, warmAbort = null, lastInteraction = 0;
@@ -596,8 +605,16 @@
       if (!platforms.length || busy) return;
       changePlatform(platforms[wrap(platforms.findIndex(platform => platform.name === platformName) + delta, platforms.length)].name);
     }
-    function randomGame() {
+    async function randomGame() {
       if (!games.length || busy) return;
+      if(options.chooseRandom){
+        const token=generation;
+        const game=await options.chooseRandom({platform:platformName,playlist:playlistId});
+        if(!active||generation!==token||!game)return;
+        if(activePlaylist()&&!activePlaylist().games.includes(game.id)){playlistId='';refresh();}
+        if(!games.some(item=>item.id===game.id)){query='';search.value='';changePlatform(game.platform,false);}
+        chooseGame(game.id,true);return;
+      }
       const other = games.filter(game => game.id !== gameId);
       chooseGame((other.length ? other : games)[Math.floor(Math.random() * (other.length || games.length))].id, true);
     }
@@ -645,16 +662,21 @@
       if (game.id === gameId) { subtitle.textContent = [game.platform, options.formatPlayTime(game)].join(' · '); status(); }
     }
     function refreshGames() {
-      const source = options.games().filter(game => platformName === null || game.platform === platformName)
+      const source = playlistGames().filter(game => platformName === null || game.platform === platformName)
         .filter(game => !query || game.title.toLocaleLowerCase().includes(query.toLocaleLowerCase()));
-      games = options.sortGames(source);
+      games = activePlaylist()?source:options.sortGames(source);
       gameId = games.some(game => game.id === remembered.get(platformName)) ? remembered.get(platformName)
         : games.some(game => game.id === gameId) ? gameId : games[0]?.id ?? null;
     }
     function refresh() {
       if (!active) return;
-      const library = options.games(); platforms = platformsFor(library, options.platforms());
-      options.pruneArtwork?.(new Set(library.flatMap(coverPaths)), new Set(platforms.map(platform => platform.name)));
+      const library = options.games();
+      const savedLists=options.getPlaylists?.()||[];
+      if(!savedLists.some(list=>list.id===playlistId))playlistId='';
+      playlistSelect.replaceChildren();const all=element('option','',t('random.any'));all.value='';playlistSelect.append(all);
+      for(const list of savedLists){const item=element('option','',list.name);item.value=list.id;playlistSelect.append(item);}playlistSelect.value=playlistId;
+      platforms = platformsFor(playlistGames(), options.platforms());
+      options.pruneArtwork?.(new Set(library.flatMap(coverPaths)), new Set(platformsFor(library,options.platforms()).map(platform => platform.name)));
       if (!platforms.some(platform => platform.name === platformName)) platformName = null;
       refreshGames();
       const names = new Set(platforms.map(platform => platform.name));
@@ -695,13 +717,19 @@
         const event = new window.Event('cancel', { cancelable: true });
         if (modal.dispatchEvent(event)) modal.close(); return;
       }
+      if(action==='previousPlatform'||action==='nextPlatform'){
+        controls[wrap(index+(action==='previousPlatform'?-1:1),controls.length)]?.focus();return;
+      }
       if (['left', 'up', 'right', 'down'].includes(action)) {
-        if (current?.tagName === 'SELECT') {
+        if(current?.type==='number'){
+          if(['left','up'].includes(action))current.stepDown();else current.stepUp();
+          current.dispatchEvent(new window.Event('change',{bubbles:true}));
+        }else if (current?.tagName === 'SELECT') {
           current.selectedIndex = wrap(current.selectedIndex + (['left', 'up'].includes(action) ? -1 : 1), current.options.length);
           current.dispatchEvent(new window.Event('change', { bubbles: true }));
         } else controls[wrap(index + (['left', 'up'].includes(action) ? -1 : 1), controls.length)]?.focus();
       } else if (action === 'accept') {
-        if (index < 0) controls[0]?.focus(); else if (current.tagName === 'BUTTON') current.click();
+        if (index < 0) controls[0]?.focus(); else if (current.tagName === 'BUTTON'||current.type==='checkbox') current.click();
       }
     }
     function action(name) {

@@ -1,4 +1,5 @@
 let appFeatures = null;
+let libraryPlay = null;
 const { invoke } = window.__TAURI__.core;
 
 // Estado local
@@ -1266,6 +1267,7 @@ async function loadGames() {
   try {
     const games = await invoke("get_games");
     allGames = games.map(projectRegionalStatistics);
+    await libraryPlay?.load().catch(error=>console.error(error));
     libraryLoading = false; libraryLoadError = false;
     renderPlatformFilters();
     applyLibraryFilters();
@@ -1303,6 +1305,7 @@ function renderGames(gamesToRender) {
   gamesToRender = [...(gamesToRender || [])].sort((a, b) => window.OpenCabinetLibrary
     ? window.OpenCabinetLibrary.compareGames(a, b, libraryGrouping) : a.title.localeCompare(b.title, globalThis.OpenCabinetI18n.locale));
   if (globalThis.OpenCabinetOrder) gamesToRender = globalThis.OpenCabinetOrder.apply(gamesToRender,allGames);
+  if(libraryGrouping==='playlists'&&selectedLibraryGroup)gamesToRender=window.OpenCabinetPlay.ordered(gamesToRender,libraryPlay?.lists.find(list=>`playlist:${list.id}`===selectedLibraryGroup));
   gridContainer.innerHTML = "";
   visibleGameIds = (gamesToRender || []).map((game) => game.id);
   const visibleIds = new Set(visibleGameIds);
@@ -1448,6 +1451,8 @@ function setupGameContextMenu() {
   const history = document.getElementById("context-session-history");
   const statusAction = document.getElementById("context-game-status"), notesAction = document.getElementById("context-game-notes");
   for(const [button,focus] of [[statusAction,"status"],[notesAction,"notes"]]) button?.addEventListener("click",()=>{const game=allGames.find(game=>game.id===targetId);close(true);if(game)appFeatures?.editPersonal(game,focus);});
+  const playlistAction=document.getElementById("context-playlist");
+  playlistAction?.addEventListener('click',()=>{const ids=[...targetIds];close(true);void libraryPlay?.addToPlaylist(ids);});
   const openEmulator = document.getElementById("context-open-emulator");
   const remove = document.getElementById("context-delete-games");
   const downloadImages = document.getElementById("context-download-images");
@@ -1504,7 +1509,7 @@ function setupGameContextMenu() {
     mergeRegions.classList.toggle("hidden", !canMerge);
     const canMergeRecomp=window.OpenCabinetRegions?.canMergeRecomp?.(mergeCandidates)&&mergeCandidates.every(g=>!g.is_running&&!launchingGames.has(g.id));
     mergeRecomp.classList.toggle('hidden',!canMergeRecomp);
-    items = multiple ? [remove, downloadImages, ...(canMergeDiscs ? [mergeDiscs] : []), ...(canMerge ? [mergeRegions] : []),...(canMergeRecomp?[mergeRecomp]:[])] : [play, edit, ...(appFeatures?[statusAction,notesAction]:[]), ...(window.OpenCabinetLibraryTools?[history]:[]), ...(emulator ? [openEmulator] : []), gameFiles, imageFolder, manualFolder, remove];
+    items = multiple ? [remove, downloadImages, playlistAction, ...(canMergeDiscs ? [mergeDiscs] : []), ...(canMerge ? [mergeRegions] : []),...(canMergeRecomp?[mergeRecomp]:[])] : [play, edit, playlistAction, ...(appFeatures?[statusAction,notesAction]:[]), ...(window.OpenCabinetLibraryTools?[history]:[]), ...(emulator ? [openEmulator] : []), gameFiles, imageFolder, manualFolder, remove];
     document.querySelectorAll(".dropdown-menu.show").forEach((dropdown) => dropdown.classList.remove("show"));
     document.querySelectorAll(".menu-item-dropdown.active").forEach((dropdown) => dropdown.classList.remove("active"));
     menu.classList.remove("hidden");
@@ -2910,7 +2915,7 @@ function setupGameEditor() {
   function editorState() {
     return JSON.stringify([[...form.querySelectorAll("input,select,textarea")].filter(input=>input.id!=='game-edit-source-select').map(input => [input.id, input.value, input.checked]), draftImages, draftManuals, draftPreferredManual, personalEditor?.value(), discEditor?.value(), regionEditor?.value()]);
   }
-  const editorTabs = ["details", "order", "execution", "history", "images", "manuals", "discs", "regions", "box", "variables", "personal"].map(name => ({
+  const editorTabs = ["details", "order", "execution", "actions", "history", "images", "manuals", "discs", "regions", "box", "variables", "personal"].map(name => ({
     name, tab: document.getElementById(`game-edit-tab-${name}`),
     panel: document.getElementById(name === "discs" ? "game-discs-section" : `game-edit-panel-${name}`),
   }));
@@ -3043,6 +3048,7 @@ function setupGameEditor() {
   let closing = false;
   let draftImages = [];
   let personalEditor = null, draftPreferredManual = "";
+  let launchActionsEditor = null;
   let savedManuals = [], draftManuals = [];
   let editorManualData=null;
   const editorManualReader=window.OpenCabinetManualReader?.create({imageSource,onClose:()=>{editorManualData?.dispose();editorManualData=null;}});
@@ -3369,6 +3375,7 @@ function setupGameEditor() {
       if (override && editingId !== null) await downloader.release();
       if (!await loadPlatforms()) return;
       editingId = game.id;
+      launchActionsEditor = await libraryPlay?.actionEditor(document.getElementById("game-launch-actions"),game.id);
       const personalHost=document.getElementById("game-personal-editor");personalHost.replaceChildren();
       personalEditor=appFeatures?.fields(personalHost,window.OpenCabinetFeatures.personal(group));
       draftPreferredManual="";
@@ -3478,7 +3485,11 @@ function setupGameEditor() {
     let linuxExecution=null;
     try {linuxExecution=editingDirectly?linuxEditor?.value(draftRomPath||editingSourceGame?.rom_path)??null:null;}
     catch(error){showEditorTab("execution");showToast(String(error),true);return;}
+    let launchActions;
+    try { launchActions=launchActionsEditor?.value(); }
+    catch(error){showEditorTab("actions");showToast(String(error),true);return;}
     const details = {
+      ...(launchActions?{launchActions}:{}),
       ...(personalEditor?{personal:personalEditor.value()}:{}),
       ...(draftPreferredManual?{manualPreference:draftPreferredManual}:{}),
       ...(orderPatch !== undefined ? { orderGroup:orderPatch } : {}),
@@ -4090,7 +4101,7 @@ function setupSearch() {
 
 function renderLibraryNavigation() {
   const list = document.getElementById("platform-list");
-  const tree = window.OpenCabinetLibrary.groups(allGames, libraryGrouping,
+  const tree = libraryGrouping==='playlists' ? (libraryPlay?.lists||[]).map(list=>({id:`playlist:${list.id}`,label:list.name,ids:new Set(list.games.filter(id=>allGames.some(game=>game.id===id))),children:[]})) : window.OpenCabinetLibrary.groups(allGames, libraryGrouping,
     libraryCategories ?? window.OpenCabinetLibrary.defaults(), allPlatforms, libraryManufacturers, libraryVariableContext());
   libraryGroupNodes = new Map();
   function index(nodes) { for (const node of nodes) { libraryGroupNodes.set(node.id, node); index(node.children); } }
@@ -5904,6 +5915,8 @@ function setupSofaMode() {
   sofaMode = window.OpenCabinetSofa.create({
     document, window,
     games: () => allGames, platforms: () => allPlatforms,
+    getPlaylists:()=>libraryPlay?.lists||[],
+    chooseRandom:initial=>libraryPlay?.random({...initial,pickOnly:true}),
     images: displayGameImages, sourceGame: game => ({ ...regionalGame(game), title: game.title }),
     imageSource, formatPlayTime, variantLabel: gameVariantLabel,
     getCoverPreview: getSofaPreview,
@@ -6042,6 +6055,12 @@ window.addEventListener("DOMContentLoaded", async () => {
   appThemes = window.OpenCabinetThemes?.create({ document, window, invoke, confirm: confirmDeletion });
   void appThemes?.load();
   const languageReady = invoke("set_ui_language", { language: preferences.language }).catch(error => console.error(error));
+  libraryPlay=window.OpenCabinetPlay?.create({document,invoke,getGames:()=>allGames,confirm:confirmDeletion,
+    onError:error=>showToast(error,true),launch:game=>launchGame(game.id,game.title),
+    onChanged:()=>{if(libraryGrouping==='playlists'){renderPlatformFilters();applyLibraryFilters();}sofaMode?.refresh();},
+    onPick:game=>{selectedLibraryGroup=null;selectedPlatform=game.platform;libraryGrouping='platform';document.getElementById('library-grouping').value='platform';renderPlatformFilters();applyLibraryFilters();selectGame(game.id);document.querySelector(`.game-card[data-game-id="${game.id}"]`)?.scrollIntoView({block:'nearest'});}});
+  void libraryPlay?.load().catch(error=>console.error(error));
+  for(const [id,action]of [['btn-playlists','playlists'],['btn-random-game','random']])document.getElementById(id)?.addEventListener('click',()=>{document.getElementById('dropdown-tools-menu')?.classList.remove('show');void libraryPlay?.[action]();});
   setupLibraryFeatures();
   setupGameContextMenu();
   setupPlatformContextMenu();

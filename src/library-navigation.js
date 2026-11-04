@@ -1,6 +1,7 @@
 (function (root) {
   "use strict";
   const modes = [
+    ["playlists", globalThis.OpenCabinetI18n.t("playlists.title")],
     ["platform", globalThis.OpenCabinetI18n.t("msg.9f52c41426")], ["categories", globalThis.OpenCabinetI18n.t("msg.7ef4eab73e")], ["developer", globalThis.OpenCabinetI18n.t("msg.38ba62181c")],
     ["publisher", globalThis.OpenCabinetI18n.t("msg.936a161c39")], ["manufacturer", globalThis.OpenCabinetI18n.t("msg.b79530ac7c")], ["date", globalThis.OpenCabinetI18n.t("msg.31b614ced2")],
     ["rating", globalThis.OpenCabinetI18n.t("personal.rating")], ["favorites", globalThis.OpenCabinetI18n.t("personal.favorites")],

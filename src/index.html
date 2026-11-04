@@ -33,6 +33,8 @@
           <button class="dropdown-item" id="btn-scan-roms" type="button">
             <span><span class="ui-icon" data-icon="folder-open" aria-hidden="true"></span></span> <span data-i18n="msg.4f57902244"></span>
           </button>
+          <button class="dropdown-item" id="btn-playlists" type="button"><span class="ui-icon" data-icon="folders" aria-hidden="true"></span><span data-i18n="playlists.title"></span></button>
+          <button class="dropdown-item" id="btn-random-game" type="button"><span class="ui-icon" data-icon="dice-5" aria-hidden="true"></span><span data-i18n="random.title"></span></button>
           <button class="dropdown-item" id="btn-library-dashboard" type="button"><span class="ui-icon" data-icon="history" aria-hidden="true"></span><span data-i18n="insights.title"></span></button>
           <button class="dropdown-item" id="btn-library-report" type="button"><span class="ui-icon" data-icon="triangle-alert" aria-hidden="true"></span><span data-i18n="report.title"></span></button>
           <button class="dropdown-item" id="btn-pending-imports" type="button"><span class="ui-icon" data-icon="download" aria-hidden="true"></span><span data-i18n="resume.title"></span></button>
@@ -81,6 +83,7 @@
           <select id="library-grouping" aria-controls="platform-list">
             <option value="platform" data-i18n="msg.9f52c41426"></option>
             <option value="categories" data-i18n="msg.7ef4eab73e"></option>
+            <option value="playlists" data-i18n="playlists.title"></option>
             <option value="developer" data-i18n="msg.38ba62181c"></option>
             <option value="publisher" data-i18n="msg.936a161c39"></option>
             <option value="manufacturer" data-i18n="msg.b79530ac7c"></option>
@@ -402,6 +405,7 @@
               <button type="button" id="game-edit-tab-details" role="tab" aria-controls="game-edit-panel-details" aria-selected="true"><span data-i18n="msg.c8a74ca68d"></span></button>
               <button type="button" id="game-edit-tab-order" role="tab" aria-controls="game-edit-panel-order" aria-selected="false" tabindex="-1"><span data-i18n="order.title"></span></button>
               <button type="button" id="game-edit-tab-execution" role="tab" aria-controls="game-edit-panel-execution" aria-selected="false" tabindex="-1"><span data-i18n="msg.cbec57c0ee"></span></button>
+              <button type="button" id="game-edit-tab-actions" role="tab" aria-controls="game-edit-panel-actions" aria-selected="false" tabindex="-1" data-i18n="actions.title"></button>
               <button type="button" id="game-edit-tab-history" role="tab" aria-controls="game-edit-panel-history" aria-selected="false" tabindex="-1" data-i18n="sessions.open"></button>
               <button type="button" id="game-edit-tab-images" role="tab" aria-controls="game-edit-panel-images" aria-selected="false" tabindex="-1"><span data-i18n="msg.a7f0af4e37"></span></button>
               <button type="button" id="game-edit-tab-manuals" role="tab" aria-controls="game-edit-panel-manuals" aria-selected="false" tabindex="-1"><span data-i18n="msg.58cb5b9cf5"></span></button>
@@ -494,6 +498,7 @@
             <div id="game-disc-list" class="disc-edit-list"></div>
             <button type="button" class="browse-btn" id="btn-add-game-discs"><span data-i18n="msg.ad0393fcf5"></span></button>
           </section>
+          <section class="hidden" id="game-edit-panel-actions" role="tabpanel" aria-labelledby="game-edit-tab-actions"><h3 data-i18n="actions.title"></h3><div id="game-launch-actions"></div></section>
           <section class="hidden" id="game-edit-panel-history" role="tabpanel" aria-labelledby="game-edit-tab-history"><h3 data-i18n="sessions.open"></h3><div id="game-edit-history"></div></section>
           <section class="game-image-editor hidden" id="game-edit-panel-images" role="tabpanel" aria-labelledby="game-edit-tab-images">
             <h3 id="game-images-title"><span data-i18n="msg.a7f0af4e37"></span></h3>
@@ -1112,6 +1117,7 @@
 
     <div class="game-context-menu hidden" id="game-context-menu" role="menu" aria-label="" data-i18n-aria-label="msg.ab4a89881d">
       <button class="dropdown-item" id="context-play-game" type="button" role="menuitem" tabindex="-1"><span data-i18n="msg.67fa9628c4"></span></button>
+      <button class="dropdown-item" id="context-playlist" type="button" role="menuitem" tabindex="-1"><span class="ui-icon" data-icon="folders" aria-hidden="true"></span><span data-i18n="playlists.add"></span></button>
       <button class="dropdown-item" id="context-edit-game" type="button" role="menuitem" tabindex="-1"><span data-i18n="msg.02f344eb6e"></span></button>
       <button class="dropdown-item" id="context-game-status" type="button" role="menuitem" tabindex="-1"><span class="ui-icon" data-icon="circle-check" aria-hidden="true"></span><span data-i18n="personal.status"></span></button>
       <button class="dropdown-item" id="context-game-notes" type="button" role="menuitem" tabindex="-1"><span class="ui-icon" data-icon="file-text" aria-hidden="true"></span><span data-i18n="personal.notes"></span></button>
@@ -1474,6 +1480,7 @@
     <script src="game-discs.js"></script>
     <script src="library-tools.js"></script>
     <script src="library-features.js"></script>
+    <script src="library-play.js"></script>
     <script src="game-regions.js"></script>
     <script src="game-order.js"></script>
     <script src="keyboard-navigation.js"></script>

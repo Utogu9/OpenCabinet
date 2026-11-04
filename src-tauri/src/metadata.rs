@@ -3887,7 +3887,7 @@ mod tests {
         .unwrap();
         let source = &batch.tasks[0].path;
         fs::write(source, PNG).unwrap();
-        let details = crate::GameDetails { personal:None, manual_preference:None, rom_path:None, order_group:None, box_3d:None, regions: None, variables: None, execution: None, discs: None,
+        let details = crate::GameDetails { launch_actions:None, personal:None, manual_preference:None, rom_path:None, order_group:None, box_3d:None, regions: None, variables: None, execution: None, discs: None,
             manuals: None,
             id,
             title: "Custom title".into(),
