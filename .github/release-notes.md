@@ -1,24 +1,28 @@
-## What's new in v0.4.0
+## What's new in v0.5.0
 
-- Add library statistics, personal notes, favorites, game status and interactive ratings with library filters.
-- Add ordered manual playlists in the library and Couch Mode, and random game selection with combined filters.
-- Configure programs to run before and after playing from the game editor.
-- Download PDF and CBZ manuals, refresh artwork catalogs and resume interrupted imports.
-- Choose Photos, 3D Cases or both in the themed sidebar.
-- Open cases and read manuals in Couch Mode, with controller controls for opening, page turning, panning and zoom.
-- Improve rapid Couch Mode navigation and preload the first nine artwork previews of each console in the background.
-- Fix missing manual back covers in PlayStation/Dreamcast cases and retained 3D textures appearing in cover mode.
+- Move PlayStation 2/3/4/5, Xbox/360, Sega and Nintendo cases, PSP, cardboard boxes and generic DVD cases to Three.js with prebuilt GLB models.
+- Add the red Nintendo Switch 2 case and improve plastic materials, cover reflections and disc highlights.
+- Show Mega Drive/Genesis manuals inside their cases and display cached Dreamcast covers while original artwork loads.
+- Download artwork for multiple games with up to four concurrent workers.
+- Automatically discover artwork repository submodules and follow their main branches, preserving cached catalogs when offline.
+- Show catalog regions in game matches, including Nintendo Switch editions.
+- Add editable diagnostic reports from About → Logs, plus storage usage, thumbnail cache cleanup and retained collection review in Preferences.
+- Keep storage scans optional and allow navigation while they run in the background.
+- Verify that backups preserve session history and regional statistics, and that CBZ manuals with AVIF pages render correctly.
+- Remove the duplicate blue keyboard focus outline from the game grid.
 
-## Novedades de v0.4.0
+## Novedades de v0.5.0
 
-- Estadísticas de biblioteca, notas personales, favoritos, estado y valoración interactiva, con filtros en la biblioteca.
-- Listas manuales ordenadas en la biblioteca y Couch Mode, y selección aleatoria con filtros combinados.
-- Configuración de programas para ejecutar antes y después de jugar desde Editar juego.
-- Descarga de manuales PDF y CBZ, actualización de catálogos y reanudación de importaciones interrumpidas.
-- Elección entre Fotos, Cajas 3D o ambos en el lateral de los temas.
-- Apertura de cajas y lectura de manuales en Couch Mode, con controles de joystick para abrir, pasar páginas, desplazar y hacer zoom.
-- Mejor rendimiento al navegar rápidamente en Couch Mode y precarga en segundo plano de las primeras nueve miniaturas de cada consola.
-- Corrección de las contraportadas de manuales en cajas PlayStation/Dreamcast y de las texturas 3D que quedaban visibles en modo portadas.
+- Cajas de PlayStation 2/3/4/5, Xbox/360, Sega y Nintendo, PSP, cartón y DVD genéricas convertidas a Three.js con modelos GLB preparados.
+- Caja roja de Nintendo Switch 2 y mejoras en los materiales plásticos, reflejos de las carátulas y brillo de los discos.
+- Manuales de Mega Drive/Genesis dentro de sus cajas y portadas cacheadas de Dreamcast mientras cargan las imágenes originales.
+- Descarga de imágenes para varios juegos con hasta cuatro trabajadores simultáneos.
+- Detección automática de submódulos del repositorio de imágenes, usando sus ramas main y conservando los catálogos locales sin conexión.
+- Regiones del catálogo visibles en las coincidencias, incluidas las ediciones de Nintendo Switch.
+- Diagnósticos editables desde Acerca de → Logs y gestión del almacenamiento, limpieza de miniaturas y revisión de colecciones conservadas en Preferencias.
+- Cálculo de almacenamiento opcional que permite seguir navegando mientras trabaja en segundo plano.
+- Verificación de la conservación de sesiones y estadísticas regionales en backups y de la lectura de manuales CBZ con páginas AVIF.
+- Eliminación del doble borde de foco azul en la grilla al navegar con el teclado.
 
 ## Downloads / Descargas
 
