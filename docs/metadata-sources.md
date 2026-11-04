@@ -91,6 +91,12 @@ y la cancelación. Solo se solicitan los archivos de las coincidencias y tipos
 seleccionados. Las rutas del repositorio se validan y codifican antes de formar
 URLs HTTPS bajo el repositorio oficial.
 
+La descarga para varios juegos usa hasta cuatro juegos en paralelo y comparte
+las conexiones HTTP. Cada juego recorre sus imágenes en el orden regional y
+se detiene al obtener la cantidad solicitada de archivos nuevos. Las escrituras
+en la biblioteca se realizan por juego en una única transacción; cancelar conserva
+los juegos ya completados y detiene las transferencias pendientes.
+
 ## Catálogo personal
 
 **Opciones → Preferencias → Datos de juegos** permite seleccionar un catálogo

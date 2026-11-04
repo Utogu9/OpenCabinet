@@ -1787,6 +1787,7 @@ function createBulkImageDownloader() {
           indeterminate = false;
           label.textContent = globalThis.OpenCabinetI18n.t("msg.5316875d36", processed, ids.length, update.current_file ? ` · ${currentGame}` : "");
         } else if (update.phase === "images") {
+          if (update.current_file) currentGame = update.current_file;
           label.textContent = globalThis.OpenCabinetI18n.t("msg.9e48619668", processed, ids.length, currentGame, update.processed);
         } else {
           label.textContent = update.phase === "catalog" ? globalThis.OpenCabinetI18n.t("msg.ee6f83e7f6") : globalThis.OpenCabinetI18n.t("msg.8b34d77997");

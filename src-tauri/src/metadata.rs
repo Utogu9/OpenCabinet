@@ -23,6 +23,7 @@ const IMAGE_BASE: &str = crate::catalog_compat::IMAGE_BASE;
 pub mod platforms;
 pub mod repository;
 mod repository_metadata;
+mod bulk;
 pub(crate) mod resume;
 // Older catalogs merged distinct categories into "artwork" or "other".
 // Reindex once to recover the original types from the source XML.
@@ -2057,17 +2058,26 @@ fn bulk_image_match(conn: &Connection, catalog: &Connection, id: i32) -> Result<
     Ok((selected.ok_or(crate::i18n::text("msg.33b1ebc7e1"))?, platform))
 }
 
+#[cfg(test)]
 fn download_additional_images(
     batch: &mut StagedBatch, options: &MediaOptions, existing: &[GameImage],
-    job: &ImportJob, image_base: &str, mut progress: impl FnMut(MetadataProgress),
+    job: &ImportJob, image_base: &str, progress: impl FnMut(MetadataProgress),
 ) -> Result<()> {
     let client = http_client()?;
+    download_additional_images_with_client(batch, options, existing, job, image_base, &client, progress)
+}
+
+fn download_additional_images_with_client(
+    batch: &mut StagedBatch, options: &MediaOptions, existing: &[GameImage],
+    job: &ImportJob, image_base: &str, client: &reqwest::Client,
+    mut progress: impl FnMut(MetadataProgress),
+) -> Result<()> {
     let limits: HashMap<_, _> = options.entries().into_iter().collect();
     let mut counts: HashMap<String, usize> = HashMap::new();
     for task in &mut batch.tasks {
         job.check()?;
         if counts.get(&task.image.kind).copied().unwrap_or(0) >= limits[task.image.kind.as_str()] { continue; }
-        let outcome = repository::image_url(job,image_base,&task.image.filename).and_then(|url|download(&client, &url, &task.path, MAX_IMAGE_BYTES, job, |_, _| ()))
+        let outcome = repository::image_url(job,image_base,&task.image.filename).and_then(|url|download(client, &url, &task.path, MAX_IMAGE_BYTES, job, |_, _| ()))
             .and_then(|_| super::image_extension(&task.path));
         job.check()?;
         match outcome {
@@ -2128,38 +2138,9 @@ fn append_bulk_images(conn: &mut Connection, job: &ImportJob, id: i32, images: &
 
 fn download_bulk_images(
     conn: &mut Connection, catalog: &Connection, job: &ImportJob, ids: Vec<i32>,
-    options: &MediaOptions, image_base: &str, mut progress: impl FnMut(MetadataProgress),
+    options: &MediaOptions, image_base: &str, progress: impl FnMut(MetadataProgress),
 ) -> Result<BulkImageReport> {
-    options.validate()?;
-    let mut seen = HashSet::new();
-    let ids: Vec<_> = ids.into_iter().filter(|id| seen.insert(*id)).collect();
-    if ids.len() < 2 { return Err(crate::i18n::text("msg.36783a7fcc").into()); }
-    if !options.entries().iter().any(|(_, count)| *count > 0) { return Err(crate::i18n::text("msg.c2af09131f").into()); }
-    let mut report = BulkImageReport::default();
-    let total = ids.len() as u64;
-    for (index, id) in ids.into_iter().enumerate() {
-        if job.check().is_err() { report.cancelled = true; break; }
-        let title: String = conn.query_row("SELECT title FROM games WHERE id=?1", [id], |r| r.get(0)).optional().map_err(err)?.unwrap_or_else(|| crate::i18n::i18n_format!("msg.ceaa5504bb", id = id));
-        progress(job.progress("bulk_images", index as u64, Some(total), Some(title.clone())));
-        let outcome = (|| -> Result<(usize, String)> {
-            let (source, platform) = bulk_image_match(conn, catalog, id)?;
-            let mut existing = super::read_game_images(conn, id)?;
-            for image in &mut existing { image.path = super::resolve_image_path(&job.root, &image.path); }
-            let mut batch = prepare_editor_images(conn, catalog, job, id, source, &platform, options, Some(&existing))?;
-            download_additional_images(&mut batch, options, &existing, job, image_base, &mut progress)?;
-            let failures = download_report(&batch).failures.len();
-            let added = append_bulk_images(conn, job, id, &batch.games[0].images, Some(source))?;
-            let message = if failures > 0 { crate::i18n::i18n_format!("msg.03050f8b4f", failures = failures) }
-                else if added == 0 { crate::i18n::text("msg.cf21d4c4d5").into() } else { String::new() };
-            Ok((added, message))
-        })();
-        if job.check().is_err() && outcome.is_err() { report.cancelled = true; break; }
-        let (added, message) = outcome.unwrap_or_else(|message| (0, message));
-        report.image_count += added;
-        report.results.push(BulkImageResult { game_id: id, title, added, message });
-        progress(job.progress("bulk_images", index as u64 + 1, Some(total), None));
-    }
-    Ok(report)
+    bulk::download_images(conn, catalog, job, ids, options, image_base, progress)
 }
 
 #[derive(Serialize, Default)]
@@ -3615,6 +3596,67 @@ mod tests {
         MediaOptions { screenshot: 1, ..Default::default() }
     }
 
+    fn many_bulk_games(conn: &Connection, count: usize) -> Vec<i32> {
+        let mut ids=bulk_games(conn);
+        for index in ids.len()..count {
+            conn.execute("INSERT INTO games(title,platform,rom_path,launch\u{0062}ox_id) VALUES (?1,'My Genesis',?2,1)",
+                params![format!("Game {index}"),format!("C:/missing/bulk-{index}.rom")]).unwrap();
+            ids.push(conn.last_insert_rowid() as i32);
+        }
+        ids
+    }
+
+    #[test]
+    fn bulk_downloads_use_four_global_workers_without_exceeding_new_image_limits() {
+        let sandbox=Sandbox::new();let mut conn=library();let catalog=sandbox.catalog();
+        let ids=many_bulk_games(&conn,8);
+        let gate=Arc::new(AtomicBool::new(false));let (server,peak)=MockServer::parallel(gate.clone());
+        let mut processed=Vec::new();
+        let report=thread::scope(|scope|{
+            let (job,base)=(&sandbox.job,&server.base);
+            let worker=scope.spawn(move||{
+                let report=download_bulk_images(&mut conn,&catalog,job,ids.clone(),&screenshot_options(),base,|update|{
+                    if update.phase=="bulk_images"{processed.push(update.processed);}
+                }).unwrap();
+                (conn,report,ids,processed)
+            });
+            let deadline=Instant::now()+Duration::from_secs(5);
+            while peak.load(Ordering::Acquire)<IMAGE_DOWNLOAD_WORKERS&&Instant::now()<deadline{thread::sleep(Duration::from_millis(5));}
+            gate.store(true,Ordering::Release);
+            worker.join().unwrap()
+        });
+        let (conn,report,ids,processed)=report;
+        assert_eq!(peak.load(Ordering::Acquire),IMAGE_DOWNLOAD_WORKERS);
+        assert_eq!(server.seen.lock().unwrap().len(),8,"one new image per game, without speculative extra downloads");
+        assert_eq!(report.image_count,8);assert!(!report.cancelled);
+        assert_eq!(report.results.iter().map(|r|r.game_id).collect::<Vec<_>>(),ids);
+        assert_eq!(processed,(0..=8).collect::<Vec<_>>());
+        for id in ids {assert_eq!(super::super::read_game_images(&conn,id).unwrap().len(),1);}
+    }
+
+    #[test]
+    fn cancelling_bulk_downloads_wakes_four_stalled_workers_and_never_saves_partial_games() {
+        let sandbox=Sandbox::new();let mut conn=library();let catalog=sandbox.catalog();
+        let ids=many_bulk_games(&conn,8);
+        let (server,peak)=MockServer::parallel(Arc::new(AtomicBool::new(false)));
+        let outcome=thread::scope(|scope|{
+            let (sender,receiver)=std::sync::mpsc::channel();
+            let (job,base)=(&sandbox.job,&server.base);
+            let all_ids=ids.clone();
+            scope.spawn(move||{sender.send(download_bulk_images(&mut conn,&catalog,job,all_ids,&screenshot_options(),base,|_|())).unwrap();});
+            let deadline=Instant::now()+Duration::from_secs(5);
+            while peak.load(Ordering::Acquire)<IMAGE_DOWNLOAD_WORKERS&&Instant::now()<deadline{thread::sleep(Duration::from_millis(5));}
+            sandbox.job.cancel().unwrap();
+            let outcome=receiver.recv_timeout(Duration::from_secs(2));
+            server.stop.store(true,Ordering::Release);
+            outcome
+        }).expect("cancellation should interrupt all four transfers").unwrap();
+        assert_eq!(peak.load(Ordering::Acquire),IMAGE_DOWNLOAD_WORKERS);
+        assert_eq!(server.seen.lock().unwrap().len(),IMAGE_DOWNLOAD_WORKERS);
+        assert!(outcome.cancelled);assert_eq!(outcome.image_count,0);assert!(outcome.results.is_empty());
+        assert!(files_in(&sandbox.root.join("images")).is_empty());
+    }
+
     #[test]
     fn bulk_downloads_add_new_images_for_selected_games_without_changing_metadata_or_history() {
         let sandbox = Sandbox::new();
@@ -3682,9 +3724,9 @@ mod tests {
         assert!(report.cancelled);
         assert_eq!(report.image_count, 1);
         assert_eq!(report.results.len(), 1);
-        assert_eq!(super::super::read_game_images(&conn, ids[0]).unwrap().len(), 1);
-        assert!(super::super::read_game_images(&conn, ids[1]).unwrap().is_empty());
-        assert_eq!(server.seen.lock().unwrap().len(), 1);
+        let completed=report.results[0].game_id;
+        for id in ids {assert_eq!(super::super::read_game_images(&conn,id).unwrap().len(),usize::from(id==completed));}
+        assert!((1..=IMAGE_DOWNLOAD_WORKERS).contains(&server.seen.lock().unwrap().len()));
     }
 
     #[test]
