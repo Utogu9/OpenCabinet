@@ -261,29 +261,46 @@ export async function createViewer(host, options={}) {
       if(signal.aborted){abort();return;}signal.addEventListener('abort',abort,{once:true});image.src=imageSource(path);
     });
   }
-  async function loadArtwork(images,token,manualTask) {
+  async function loadArtwork(images,token,manualTask,manualPresence) {
     const signal=artController.signal,art=chooseArtwork(images),imageTasks=new Map();
+    const individualCover=art.full?chooseArtwork(images.filter(image=>image.kind!=='box_full')).cover:null;
+    function snapshot(image){
+      if(!image?.width||!image?.height)return null;
+      const copy=document.createElement('canvas');copy.width=image.width;copy.height=image.height;
+      copy.getContext('2d').drawImage(image,0,0);return copy;
+    }
+    // Capture RAM pixels synchronously, before manual discovery yields and
+    // another cache request can evict/close the shared ImageBitmap.
+    const cachedCover=!manualPreviewReady&&snapshot(options.getCoverPreview?.(art.cover));
+    const cachedIndividual=!manualPreviewReady&&individualCover&&snapshot(options.getCoverPreview?.(individualCover));
     const frontReady=Promise.resolve(manualTask).catch(()=>{});
-    let originalCoverReady=false;
+    let originalCoverReady=false,previewRank=0;
     function source(path){if(!imageTasks.has(path))imageTasks.set(path,imageAt(path,signal,path===art.cover?'high':'low'));return imageTasks.get(path);}
     const current=()=>!disposed&&token===revision&&!signal.aborted;
     function showPreview(preview,full=!!art.full) {
       if(!preview||!current()||originalCoverReady||manual||manualPreviewReady)return;
-      selectInsertForCover(preview,full);
-      const texture=textureFor(preview,'cover',full);textures.add(texture);assign('cover',texture);
+      const rank=full?2:1;if(rank<previewRank)return;
+      const copy=preview===cachedCover||preview===cachedIndividual?preview:snapshot(preview);
+      if(!copy)return;previewRank=rank;selectInsertForCover(copy,full);
+      const texture=textureFor(copy,'cover',full);textures.add(texture);assign('cover',texture);
     }
     // The booklet is the front artwork when a manual exists. Do not briefly
     // paint the game's cached/original cover while discovering or preparing it.
-    void frontReady.then(()=>{
-      if(!current()||manual||manualPreviewReady)return;
+    let previewStarted=false;
+    function preparePreview(){
+      if(previewStarted||!current()||manual||manualPreviewReady)return;
+      previewStarted=true;
       if(!art.cover){titleInsert();return;}
-      const preview=options.getCoverPreview?.(art.cover);
+      const preview=cachedCover||options.getCoverPreview?.(art.cover);
       if(preview)showPreview(preview);
       else {
-        if(options.carousel&&art.full){const individual=chooseArtwork(images.filter(image=>image.kind!=='box_full')).cover;const cached=individual&&options.getCoverPreview?.(individual);if(cached)showPreview(cached,false);}
+        if(art.full){const cached=cachedIndividual||(individualCover&&options.getCoverPreview?.(individualCover));if(cached)showPreview(cached,false);}
         if(options.loadCoverPreview)Promise.resolve(options.loadCoverPreview(art.cover,signal)).then(preview=>showPreview(preview)).catch(()=>{});
       }
-    }).catch(()=>{});
+    }
+    void (manualPresence||frontReady.then(()=>!!manual)).then(hasManual=>{if(!hasManual)preparePreview();}).catch(()=>{});
+    // A missing/corrupt manual can still fall back to the cached game cover.
+    void frontReady.then(preparePreview).catch(()=>{});
     function put(material,image,kind,full=false,region=null) {
       const texture=textureFor(image,kind,full,region);textures.add(texture);assign(material,texture);
     }
@@ -390,8 +407,9 @@ export async function createViewer(host, options={}) {
       .finally(()=>{if(manualBackTask===task)manualBackTask=null;});
     manualBackTask=task;
   }
-  async function preloadManual(token) {
-    if(!loadManual)return;
+  async function preloadManual(token,onPresence=()=>{}) {
+    if(!loadManual){onPresence(false);return;}
+    if(options.hasManual?.(game)===false)onPresence(false);
     const controller=new AbortController();manualController=controller;onManualState({status:'loading'});
     let shownPreview=null;
     const current=()=>!disposed&&token===revision&&!controller.signal.aborted;
@@ -403,9 +421,10 @@ export async function createViewer(host, options={}) {
         copy.getContext('2d').drawImage(image,0,0);
         const texture=textureFor(copy,'cover');manualTextures.add(texture);assign('cover',texture);
         manualPreviewReady=true;selectInsertForCover(copy);
-      });
+      },onPresence);
       if(!current()){result?.dispose();return;}
       manual=result;
+      onPresence(!!result);
       if(result) {
         selectInsertForCover(result.front);
         const texture=textureFor(result.front,'cover');manualTextures.add(texture);assign('cover',texture);
@@ -413,8 +432,14 @@ export async function createViewer(host, options={}) {
         onManualState({status:'ready',path:result.path,pageCount:result.pageCount,coverMode:result.coverMode});
         ensureManualBack();
       } else onManualState({status:'none'});
-    }catch(error){if(current())onManualState({status:'error',message:String(error)});}
+    }catch(error){onPresence(false);if(current())onManualState({status:'error',message:String(error)});}
     schedule();
+  }
+  function loadGameArtwork(images) {
+    let resolvePresence;
+    const presence=new Promise(resolve=>{resolvePresence=resolve;});
+    const manualTask=preloadManual(revision,resolvePresence);
+    void loadArtwork(images,revision,manualTask,presence);
   }
   function stopDrag(event) {
     if(!drag || (event&&drag.id!==event.pointerId))return;
@@ -514,7 +539,7 @@ export async function createViewer(host, options={}) {
       const style=resolved?.regions?.[globalThis.OpenCabinet3D.regionFor(game.rom_path)]||resolved?.base;
       acrylic.attenuationColor.set(style?.color||0xe4eff6);acrylic.attenuationDistance=style?.color?.length===7 ? 3 : 120;
       ribs.color.set(style?.color||0xcddde5);ribs.opacity=style?.color?.length===7 ? .30 : .22;
-      onProfile(profile);artController=new AbortController();const manualTask=preloadManual(revision);void loadArtwork(images,revision,manualTask);
+      onProfile(profile);artController=new AbortController();loadGameArtwork(images);
       layoutDirty=true;notify();schedule();
     },
     get canOpen(){return !!game;},get isOpen(){return openTarget;},get rotationLock(){return rotationLock;},
@@ -541,7 +566,7 @@ export async function createViewer(host, options={}) {
       if(onManualActivate({manual,game,origin:canvas})===false)return false;
       manualExtracted=true;manualMeshes.forEach(mesh=>mesh.visible=false);schedule();return true;},
     returnManual(){manualExtracted=false;manualMeshes.forEach(mesh=>mesh.visible=true);schedule();},
-    refreshManual(){if(!game)return;revision++;artController?.abort();artController=new AbortController();clearManual();const imageList=JSON.parse(key)[2],manualTask=preloadManual(revision);void loadArtwork(imageList,revision,manualTask);},
+    refreshManual(){if(!game)return;revision++;artController?.abort();artController=new AbortController();clearManual();loadGameArtwork(JSON.parse(key)[2]);},
     clear(){revision++;stopDrag();closeMenu();artController?.abort();artController=null;clearManual();
       for(const kind of ['cover','back_cover','spine_left','spine_right','disc','paper','paper_spine_left','paper_spine_right'])assign(kind,null);
       meshes.find(mesh=>mesh.name==='dreamcast-insert').visible=true;selectInsert();

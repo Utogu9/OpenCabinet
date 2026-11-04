@@ -320,9 +320,10 @@
             // A recycled Three.js viewer keeps its renderer, geometry, lights
             // and materials. update replaces the artwork for the incoming game.
             node._viewer ||= options.createViewer(node._preview, { renderGroup: activeBank,
-              loadManual:options.loadManual? (game,signal,onPreview)=>{
-                if(!active||Number(node.dataset.gameId)!==gameId||!node._wantManual)return Promise.resolve(null);
-                return options.loadManual(game,signal,onPreview);
+              hasManual:game=>node._wantManual?options.hasManual?.(game):false,
+              loadManual:options.loadManual? (game,signal,onPreview,onPresence=()=>{})=>{
+                if(!active||Number(node.dataset.gameId)!==gameId||!node._wantManual){onPresence(false);return Promise.resolve(null);}
+                return options.loadManual(game,signal,onPreview,onPresence);
               }:null,
               onManualState:state=>{node._manualState=state;},
               onManualActivate:({manual,game,origin})=>{

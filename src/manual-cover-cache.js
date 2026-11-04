@@ -116,6 +116,7 @@
     return {
       render:load,
       trackGame(id,paths){if(!disposed)games.set(id,[...paths]);},
+      hasManuals(id){return games.has(id)?games.get(id).length>0:undefined;},
       showGamePreview(id,{path,signal,onPreview}={}) {
         if(disposed||signal?.aborted)return null;
         const paths=games.get(id);if(!paths?.length)return null;

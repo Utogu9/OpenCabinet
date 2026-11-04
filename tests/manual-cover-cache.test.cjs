@@ -122,3 +122,12 @@ test('An evicted prepared manual reads its known disk thumbnail without waiting 
   assert.deepEqual(shown,['9.pdf:v1:auto.webp']);assert.equal(app.calls.filter(call=>call[0]==='lookup').length,queries);
   service.dispose();app.cache.dispose();
 });
+
+test('Manual presence distinguishes an undiscovered game from a known empty folder',()=>{
+  const app=setup(),service=app.create();
+  assert.equal(service.hasManuals(1),undefined);
+  service.trackGame(1,[]);assert.equal(service.hasManuals(1),false);
+  service.trackGame(1,['manual.pdf']);assert.equal(service.hasManuals(1),true);
+  service.trackGame(1,[]);assert.equal(service.hasManuals(1),false);
+  service.dispose();app.cache.dispose();
+});

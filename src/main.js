@@ -1062,6 +1062,7 @@ function createDetailsGameBox() {
     imageSource,
     getCoverPreview: path => catalogCoverCache?.get(path),
     loadCoverPreview: (path, signal) => catalogCoverCache?.load(path, signal),
+    hasManual:game=>manualCoverCache?.hasManuals(game.id),
     onManualCoverChange(mode) {
       if (!manualPath || !["auto", "full", "left", "right"].includes(mode)) return;
       if (mode === "auto") delete manualCoverModes[manualPath];
@@ -1070,7 +1071,7 @@ function createDetailsGameBox() {
       catch { /* Keep the choice for this session if storage is unavailable. */ }
       viewer.refreshManual();
     },
-    async loadManual(game, signal, onPreview) {
+    async loadManual(game, signal, onPreview, onPresence=()=>{}) {
       if (signal.aborted || game.id !== gameId) throw new DOMException(globalThis.OpenCabinetI18n.t("msg.92a2872d72"), "AbortError");
       if(isJewelManualGame(game)) {
         const knownPath=manualCoverCache?.showGamePreview(game.id,{path:manualPath,signal,onPreview});
@@ -1079,6 +1080,7 @@ function createDetailsGameBox() {
       const paths = await invoke("get_game_manuals", { id: game.id });
       if (signal.aborted || game.id !== gameId) throw new DOMException(globalThis.OpenCabinetI18n.t("msg.92a2872d72"), "AbortError");
       if(isJewelManualGame(game))manualCoverCache?.trackGame(game.id,paths);
+      onPresence(paths.length>0);
       manualPaths = paths; manualSelect.replaceChildren();
       paths.forEach(path => {
         const option = document.createElement("option"); option.value = path;
@@ -5916,6 +5918,7 @@ function setupSofaMode() {
     document, window,
     games: () => allGames, platforms: () => allPlatforms,
     getPlaylists:()=>libraryPlay?.lists||[],
+    hasManual:game=>manualCoverCache?.hasManuals(game.id),
     chooseRandom:initial=>libraryPlay?.random({...initial,pickOnly:true}),
     images: displayGameImages, sourceGame: game => ({ ...regionalGame(game), title: game.title }),
     imageSource, formatPlayTime, variantLabel: gameVariantLabel,
@@ -5933,10 +5936,13 @@ function setupSofaMode() {
       return window.OpenCabinetOrder?.apply(sorted, allGames) || sorted;
     },
     platformDetails: getPlatformDetails,
-    async loadManual(game,signal,onPreview) {
-      if(!window.OpenCabinetManualPDF?.supportsGame(game))return null;
+    async loadManual(game,signal,onPreview,onPresence=()=>{}) {
+      if(!window.OpenCabinetManualPDF?.supportsGame(game)){onPresence(false);return null;}
+      if(isJewelManualGame(game))manualCoverCache?.showGamePreview(game.id,{signal,onPreview});
       const paths=await invoke('get_game_manuals',{id:game.id});
       if(signal.aborted)throw new DOMException('Aborted','AbortError');
+      if(isJewelManualGame(game))manualCoverCache?.trackGame(game.id,paths);
+      onPresence(paths.length>0);
       const path=paths[0];if(!path)return null;
       let modes={};try{modes=JSON.parse(window.localStorage.getItem('opencabinet.manualCoverModes')||'{}');}catch{}
       const coverMode=modes?.[path]||'auto';

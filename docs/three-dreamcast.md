@@ -247,3 +247,12 @@ adyacentes sin parpadeo por falta de precisión de profundidad. La comprobación
 visual debe incluir la caja cerrada **de perfil**, una apertura a 90° y la
 apertura completa; ver sólo el frente cerrado y la pose a 180° no permite
 detectar un giro en sentido contrario.
+
+La portada puede usar primero la miniatura en RAM de la cubierta completa o,
+si todavía no está lista, la de la portada individual. Se conservan copias de
+esos píxeles para que una expulsión de caché no deje una textura blanca antes
+de que la GPU la dibuje. La miniatura de la cubierta completa tiene prioridad
+sobre la alternativa individual; la imagen original la reemplaza al terminar.
+La consulta del manual informa su presencia por separado de la lectura del
+PDF/CBZ: los juegos sin manual conocido pueden mostrar la miniatura de inmediato,
+mientras que los que tienen manual mantienen la prioridad de su primera página.
