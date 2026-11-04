@@ -132,5 +132,70 @@ test('The optional Switch rig opens both folds, keeps the cartridge fixed and re
     &&debug.renderer===savedSession.renderer&&debug.materials.get('Cover Outside').map===savedSession.outside),true,
     'Parking a glTF box preserves its prepared model and texture images while restoring lighting');
   assert.equal(await page.evaluate(()=>debug.renderer.getContext().getError()),0);assert.deepEqual(errors,[]);
+  await page.evaluate(()=>{
+    window.switchRenderer=debug.renderer;
+    const solid=color=>{const c=document.createElement('canvas');c.width=512;c.height=800;c.getContext('2d').fillStyle=color;c.getContext('2d').fillRect(0,0,512,800);return c.toDataURL();};
+    window.switch2Inlay=solid('#30b860');
+    viewer.update({id:800,title:'Switch 2 fixture',platform:'Nintendo Switch 2'},[{kind:'cover',path:solid('#274da8')},{kind:'inlay',path:switch2Inlay}]);
+  });
+  const red=await page.evaluate(()=>{
+    const plastic=debug.materials.get('Switch 2 Shell'),inside=debug.materials.get('Switch 2 Inner Sheet'),film=debug.materials.get('Plastic Film');
+    return {sameRenderer:debug.renderer===switchRenderer,color:plastic.color.getHexString(),
+      opaque:!plastic.transparent&&plastic.depthWrite&&plastic.transmission===0,inside:inside.opacity,insideTransmission:inside.transmission,toneMapped:plastic.toneMapped,
+      shellGroups:debug.meshes.filter(mesh=>Array.isArray(mesh.material)).map(mesh=>mesh.geometry.groups.length),film:film.attenuationColor.getHexString(),cartridge:debug.materials.get('Switch 2 Cartridge').color.getHexString(),
+      cartridgePhysical:debug.materials.get('Switch 2 Cartridge').isMeshPhysicalMaterial&&debug.meshes.some(mesh=>mesh.material===debug.materials.get('Switch 2 Cartridge'))};
+  });
+  assert.equal(red.sameRenderer,true);assert.equal(red.color,'a40000');assert.equal(red.opaque,true);assert.equal(red.inside,.384);assert.equal(red.toneMapped,false);assert.equal(red.insideTransmission,0);assert.ok(red.shellGroups.every(count=>count<=2));assert.equal(red.film,'f1f5f7');
+  assert.equal(red.cartridge,'a40000','Switch 2 uses red cartridge plastic without tinting its label');
+  assert.equal(red.cartridgePhysical,true,'The cartridge uses the same opaque physical finish as the shell');
+  await page.waitForFunction(()=>debug.materials.get('Cover Inside').map?.image);
+  await page.evaluate(()=>{viewer.reset();viewer.rotate(-80,0);});await page.waitForTimeout(100);
+  const lighting=await page.evaluate(()=>{
+    const targets=['Switch 2 Shell','Switch 2 Inner Sheet','Switch 2 Cartridge'].map(name=>debug.materials.get(name));
+    function measure(){
+      debug.renderer.render(debug.scene,debug.camera);const gl=debug.renderer.getContext(),pixels=new Uint8Array(gl.drawingBufferWidth*gl.drawingBufferHeight*4);
+      gl.readPixels(0,0,gl.drawingBufferWidth,gl.drawingBufferHeight,gl.RGBA,gl.UNSIGNED_BYTE,pixels);const reds=[];
+      for(let i=0;i<pixels.length;i+=4)if(pixels[i]>60&&pixels[i+1]<pixels[i]*.35&&pixels[i+2]<pixels[i]*.35)reds.push(pixels[i]);
+      reds.sort((a,b)=>a-b);return {median:reds[Math.floor(reds.length*.5)],p95:reds[Math.floor(reds.length*.95)],clipped:reds.filter(r=>r>=250).length,count:reds.length};
+    }
+    const pigment=targets[0].color.getHexString();
+    targets.forEach(material=>{material.envMap=null;material.needsUpdate=true;});const before=measure();
+    targets.forEach(material=>{material.envMap=debug.scene.environment;material.needsUpdate=true;});const after=measure();
+    return {before,after,pigment};
+  });
+  console.log('Switch 2 environment lighting:',JSON.stringify(lighting));
+  assert.equal(lighting.pigment,'a40000');assert.ok(lighting.after.count>1000);
+  assert.ok(lighting.after.median<lighting.before.median,'The same red pigment receives less diffuse environment illumination');
+  assert.ok(lighting.after.p95<250,'The red shell keeps its highlights below channel clipping');
+  await page.locator('#stage').screenshot({path:'target/switch2-solid-side.png'});
+  await page.evaluate(()=>{viewer.reset();viewer.setOpen(true,false);});await page.waitForTimeout(100);
+  await page.locator('#stage').screenshot({path:'target/switch2-solid-inside.png'});
+  await page.evaluate(()=>viewer.zoom(-.35));await page.waitForTimeout(100);
+  await page.locator('#stage').screenshot({path:'target/switch2-solid-inside-far.png'});
+  const visibleInlay=await page.evaluate(()=>{
+    debug.renderer.render(debug.scene,debug.camera);const gl=debug.renderer.getContext(),w=gl.drawingBufferWidth,h=gl.drawingBufferHeight,pixels=new Uint8Array(w*h*4);
+    gl.readPixels(0,0,w,h,gl.RGBA,gl.UNSIGNED_BYTE,pixels);let green=0;
+    for(let i=0;i<pixels.length;i+=4)if(pixels[i+1]>70&&pixels[i+1]>pixels[i]*.7&&pixels[i+1]>pixels[i+2]*1.2)green++;
+    return green;
+  });
+  assert.ok(visibleInlay>10000,'The green inlay remains visible through the inner sheet after zooming out: '+visibleInlay);
+  await page.evaluate(()=>{
+    Object.assign(document.getElementById('stage').style,{width:'320px',height:'250px'});
+    viewer.reset();viewer.setOpen(true,false);viewer.rotate(17,0);viewer.zoom(-.35);
+  });await page.waitForTimeout(100);
+  await page.locator('#stage').screenshot({path:'target/switch2-small-inlay-45.png'});
+  const smallInlay=await page.evaluate(()=>{
+    debug.renderer.render(debug.scene,debug.camera);const gl=debug.renderer.getContext(),pixels=new Uint8Array(gl.drawingBufferWidth*gl.drawingBufferHeight*4);
+    gl.readPixels(0,0,gl.drawingBufferWidth,gl.drawingBufferHeight,gl.RGBA,gl.UNSIGNED_BYTE,pixels);let green=0,uncovered=0;
+    for(let i=0;i<pixels.length;i+=4){const [r,g,b]=pixels.subarray(i,i+3);if(g>50&&g>r*1.2&&g>b*1.2){green++;if(g>160&&r<75&&b>75)uncovered++;}}
+    return {green,uncovered,near:debug.camera.near,far:debug.camera.far,slope:debug.materials.get('Cover Inside').polygonOffsetFactor};
+  });
+  console.log('Small angled Switch 2 inlay:',JSON.stringify(smallInlay));
+  assert.ok(smallInlay.green>500);assert.ok(smallInlay.uncovered/smallInlay.green<.1,'The paper stays behind the translucent plastic at 45 degrees in a small viewport');
+  assert.equal(smallInlay.slope,0);assert.ok(smallInlay.far/smallInlay.near<20,'The fitted depth range preserves thin paper layers');
+  assert.equal(await page.evaluate(()=>viewer.isOpen),true);
+  await page.evaluate(()=>select(801));
+  assert.equal(await page.evaluate(()=>debug.materials.get('Black Plastic Cartridge').color.getHexString()),'131619','Original Switch cartridges return to black');
+  assert.equal(await page.evaluate(()=>debug.meshes.every(mesh=>!Array.isArray(mesh.material))&&!debug.materials.get('Cover Inside').polygonOffset),true,'Switch restores its original material groups and paper depth');
   await page.evaluate(()=>viewer.dispose());assert.equal(await page.locator('#stage canvas').count(),0);
 });

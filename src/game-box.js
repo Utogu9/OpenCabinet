@@ -62,7 +62,7 @@
     const region = regionFor(romPath);
     const europe = region === "europe", japan = region === "japan";
     let id, color;
-    if (/switch/.test(name)) id = "switch";
+    if (/switch/.test(name)) {id = "switch";if(/switch2/.test(name))color="#a40000";}
     else if (/3ds|2ds/.test(name)) id = "threeDs";
     else if (/^(nintendo)?dsi?$/.test(name)) id = europe ? "dsPal" : "ds";
     else if (/playstationportable|psp/.test(name)) id = "psp";
@@ -98,6 +98,7 @@
     if (formats[style.model]) {
       const [width, height, depth, label, color, spineFace = "left"] = formats[style.model];
       profile = { id: style.model, width, height, depth, label, color, spineFace };
+      if(style.model==='switch'&&/switch2/.test(name))profile.color='#a40000';
     } else if (style.model === "custom") {
       const valid = (value, min, max) => Number.isFinite(value) && value >= min && value <= max;
       if (valid(style.width, 20, 500) && valid(style.height, 20, 500) && valid(style.depth, 1, 150)) {
@@ -119,7 +120,8 @@
     } else if (["jewel", "jewelPal"].includes(profile.id)) variant = /dreamcast/.test(name) ? "dreamcast" : "jewel";
     else if (profile.id === "gameCubeJapan") variant = "gamecube";
     else if(profile.id==='dsPal')variant='ds';
-    const translucency = ["ps3", "psp", "switch", "jewel", "dreamcast", "longbox"].includes(variant) ? .18 : variant === "ps4" ? .38 : variant === "xbox360" ? .35 : variant === "xbox" ? .42 : 1;
+    else if(profile.id==='switch'&&/switch2/.test(name))profile={...profile,label:'Nintendo Switch 2',generation:2};
+    const translucency = profile.generation===2?.55:["ps3", "psp", "switch", "jewel", "dreamcast", "longbox"].includes(variant) ? .18 : variant === "ps4" ? .38 : variant === "xbox360" ? .35 : variant === "xbox" ? .42 : 1;
     return { ...profile, variant, translucency, headerHeight: variant === "ps3" ? 14 : 0 };
   }
 

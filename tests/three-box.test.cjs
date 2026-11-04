@@ -33,6 +33,14 @@ test('Dreamcast switches to Three.js; PS2 keeps the existing viewer',async()=>{
   app.api.update({id:3,platform:'PS2'},[]);assert.equal(app.viewers[1].disposed,true);assert.equal(app.viewers[2].type,'css');
 });
 
+test('Switch 2 shares the optional Switch backend without rebuilding it between generations',async()=>{
+  let imports=0;const app=router(async(make,model)=>{imports++;assert.equal(model,'switch');return {createViewer:()=>make('switch')};},{switchModel:true});
+  app.api.update({id:1,platform:'Nintendo Switch'},[]);await tick();const viewer=app.viewers[0];
+  app.api.update({id:2,platform:'Nintendo Switch 2'},[]);await tick();
+  assert.equal(imports,1);assert.equal(viewer.disposed,false);assert.equal(app.viewers.length,1);
+  assert.equal(viewer.calls.at(-1)[1].platform,'Nintendo Switch 2');
+});
+
 test('Cached CSS viewers pause without disposal and a loading WebGL viewer inherits its parked state',async()=>{
   let finish;const app=router(make=>new Promise(resolve=>{finish=()=>resolve({createViewer:()=>make('three')});}));
   app.api.update({id:1,platform:'PS2'},[]);const css=app.viewers[0];

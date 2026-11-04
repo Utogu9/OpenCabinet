@@ -1020,6 +1020,19 @@ test("Physical profiles distinguish console generations and their aliases", () =
   assert.ok(profileFor("Custom console", 1.2).width > profileFor("Custom console", 0.6).width);
 });
 
+test('Switch 2 reuses Switch geometry with red plastic and preserves explicit color overrides',()=>{
+  const {profileFor}=scene().api,original=profileFor('Nintendo Switch');
+  for(const name of ['Nintendo Switch 2','Switch 2']){
+    const profile=profileFor(name);
+    assert.equal(profile.id,'switch');assert.equal(profile.variant,'switch');assert.equal(profile.generation,2);
+    assert.equal(profile.color,'#a40000');assert.equal(profile.label,'Nintendo Switch 2');
+    assert.deepEqual([profile.width,profile.height,profile.depth],[original.width,original.height,original.depth]);
+    assert.equal(profileFor(name,null,'Game.nsp',{base:{model:'switch'}}).color,'#a40000');
+    assert.equal(profileFor(name,null,'Game.nsp',{base:{color:'#112233'}}).color,'#112233');
+  }
+  assert.equal(original.generation,undefined);assert.notEqual(original.color,'#a40000');
+});
+
 test("Console styles preserve automatic regions and allow presets, custom geometry, colors and regional overrides", () => {
   const { profileFor, regionFor } = scene().api;
   assert.equal(regionFor('C:/Games (Japan)/game (USA, Europe).iso'), 'north_america');

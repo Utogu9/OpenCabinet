@@ -1,0 +1,21 @@
+{
+  "version": 1,
+  "model": "switch",
+  "dimensions": [
+    104.6,
+    169.2,
+    11.7
+  ],
+  "source": "nintendo-switch-game-card-case_2K_ebedc73d-7f7a-4eae-8797-493c19fe9a17.blend",
+  "source_sha256": "29fbabd9696778b5011dea8b53a1919882202aab91626d198dbbfcb25560abd2",
+  "author": "Jacopo Visentin",
+  "license": "Royalty Free",
+  "animation": "Nintendo Switch Game Case + Cartridge",
+  "animations": [
+    "Nintendo Switch Game Case + Cartridge",
+    "Cover",
+    "Sleeve"
+  ],
+  "sheet_pose_samples": 25,
+  "source_url": "https://www.blendkit.com/asset-gallery-detail/8f414675-2cd9-4ff6-988d-dec118effbe1/"
+}

@@ -4,6 +4,7 @@ import { RoomEnvironment } from './vendor/three/RoomEnvironment.js';
 import { arcballPoint, canvasViewport } from './three-box-motion.js';
 import { chooseArtwork } from './three-box-artwork.js';
 import { configureAcrylicOptics } from './three-box-relief.js';
+import { createSwitchShells } from './three-switch-shell.js';
 import { prepareRenderGroup, createRenderLease, releaseSceneGpu, createFrameHold } from './three-box-session.js';
 
 // Cache source bytes; individual viewers own their meshes, textures and animations.
@@ -100,6 +101,18 @@ export async function createModelViewer(host,options={},definition) {
     };
     node.material=Array.isArray(node.material)?node.material.map(replace):replace(node.material);
   });
+  const switchShells=modelId==='switch'?createSwitchShells(THREE,meshes):null;
+  // Without an explicit envMap Three.js uses scene.environmentIntensity,
+  // overriding these materials' intentionally lower envMapIntensity.
+  if(switchShells){switchShells.outer.envMap=scene.environment;switchShells.inner.envMap=scene.environment;}
+  const cartridgePlastic=modelId==='switch'?materials.get('Black Plastic Cartridge'):null;
+  const cartridgeMeshes=cartridgePlastic?meshes.filter(mesh=>mesh.material===cartridgePlastic):[];
+  const redCartridge=switchShells&&cartridgePlastic?switchShells.outer.clone():null;
+  if(redCartridge){
+    redCartridge.name='Switch 2 Cartridge';redCartridge.normalMap=cartridgePlastic.normalMap;
+    redCartridge.normalScale.copy(cartridgePlastic.normalScale);materials.set(redCartridge.name,redCartridge);
+  }
+  if(switchShells){materials.set('Switch 2 Shell',switchShells.outer);materials.set('Switch 2 Inner Sheet',switchShells.inner);}
   // PSP keeps its PDF booklet inside the lid, separate from the external wrap.
   const manualGroup=new THREE.Group(),manualMeshes=[];
   const manualWidth=.096,manualHeight=.170;
@@ -209,16 +222,21 @@ export async function createModelViewer(host,options={},definition) {
     root.scale.set(profile.width/manifest.dimensions[0],profile.height/manifest.dimensions[1],profile.depth/manifest.dimensions[2]);
     root.quaternion.fromArray(rotation);
     const center=bounds.getCenter(new THREE.Vector3()),tangent=Math.tan(THREE.MathUtils.degToRad(camera.fov/2));
-    let distance=0;
+    let distance=0,minDepth=Infinity,maxDepth=-Infinity;
     // Eight corners are enough to frame a rotated open box. No mesh or skin
     // vertices are traversed while dragging, and the near lid stays on screen.
     for(const x of [bounds.min.x,bounds.max.x])for(const y of [bounds.min.y,bounds.max.y])for(const z of [bounds.min.z,bounds.max.z]) {
       const p=new THREE.Vector3(x,y,z).sub(center).multiply(root.scale).applyQuaternion(root.quaternion);
+      minDepth=Math.min(minDepth,p.z);maxDepth=Math.max(maxDepth,p.z);
       const fill=options.carousel&&opened===0;
       distance=Math.max(distance,Math.abs(p.y)/(tangent*(fill ? .78 : 1))+p.z,Math.abs(p.x)/(tangent*camera.aspect*(fill ? .9 : 1))+p.z);
     }
     if(!options.carousel||opened!==0)distance*=1.12;
-    camera.position.set(0,0,distance/zoom);camera.lookAt(0,0,0);renderer.render(scene,camera);frameHold.release();
+    const cameraDistance=distance/zoom,switch2=modelId==='switch'&&profile.generation===2;
+    const near=switch2?Math.max(1,(cameraDistance-maxDepth)*.5):5;
+    const far=switch2?Math.max(near+10,cameraDistance-minDepth+25):3000;
+    if(camera.near!==near||camera.far!==far){camera.near=near;camera.far=far;camera.updateProjectionMatrix();}
+    camera.position.set(0,0,cameraDistance);camera.lookAt(0,0,0);renderer.render(scene,camera);frameHold.release();
     retiredTextures.splice(0).forEach(texture=>texture.dispose());
     host.dataset.triangles=String(renderer.info.render.triangles);host.dataset.drawCalls=String(renderer.info.render.calls);
   }
@@ -414,6 +432,15 @@ export async function createModelViewer(host,options={},definition) {
       if(changed){opened=0;openTarget=false;animation=null;pose(0);rotation=initialRotation();zoom=1;side='front';}
       const resolved=globalThis.OpenCabinet3D.resolveSettings(settings,next.box_3d);
       const style=resolved?.regions?.[globalThis.OpenCabinet3D.regionFor(next.rom_path)]||resolved?.base;
+      const switch2=modelId==='switch'&&profile.generation===2;
+      switchShells?.set(switch2,style?.color||profile.color);
+      for(const mesh of cartridgeMeshes)mesh.material=switch2?redCartridge:cartridgePlastic;
+      const inlayMaterial=materials.get('Cover Inside');
+      if(inlayMaterial){
+        // Slope bias can move the paper through the inner plastic at oblique
+        // angles in a small viewport. Use only a single constant depth step.
+        inlayMaterial.polygonOffset=switch2;inlayMaterial.polygonOffsetFactor=0;inlayMaterial.polygonOffsetUnits=switch2?-1:0;
+      }
       for(const name of ['PP','PP Cloudy'].filter(name=>materials.has(name))) {
         const material=materials.get(name);material.attenuationColor.set(style?.color||0xf1f5f7);material.attenuationDistance=style?.color?3:120;
       }
@@ -451,6 +478,7 @@ export async function createModelViewer(host,options={},definition) {
       dynamicTextures.forEach(texture=>texture.dispose());dynamicTextures.clear();
       retiredTextures.splice(0).forEach(texture=>texture.dispose());blankTextures.forEach(texture=>texture.dispose());blankTextures.clear();
       mixer.stopAllAction();mixer.uncacheRoot(model);releaseModel(model);originalMaterials.forEach(value=>value.dispose());
+      new Set(materials.values()).forEach(material=>material.dispose());switchShells?.dispose();
       new Set([manualFront,manualBack,manualPages]).forEach(material=>material.dispose());
       const images=new Set();originalTextures.forEach(value=>{images.add(value.image);value.dispose();});images.forEach(value=>value?.close?.());
       renderLease.dispose();frameHold.release();environmentTarget?.dispose();renderer.dispose();if(!renderer.getContext().isContextLost())renderer.forceContextLoss();canvas.remove();host.classList.remove('game-box-webgl');
@@ -458,7 +486,9 @@ export async function createModelViewer(host,options={},definition) {
   };
   renderLease=createRenderLease(renderer,options.renderGroup,restored=>{
     if(restored){const room=new RoomEnvironment(),generator=new THREE.PMREMGenerator(renderer);
-      environmentTarget=generator.fromScene(room,.04,1,100);scene.environment=environmentTarget.texture;room.dispose();generator.dispose();}
+      environmentTarget=generator.fromScene(room,.04,1,100);scene.environment=environmentTarget.texture;room.dispose();generator.dispose();
+      for(const material of materials.values())if(material.envMap)material.envMap=scene.environment;
+    }
     schedule();
   },()=>{
     releaseSceneGpu(scene);environmentTarget?.dispose();environmentTarget=null;scene.environment=null;

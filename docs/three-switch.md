@@ -5,6 +5,27 @@ Comparte los controles y la selección de imágenes entre el lateral, la pantall
 completa y la vista previa de configuración. Si el modelo o WebGL no están
 disponibles, se utiliza el visor CSS.
 
+Nintendo Switch 2 reutiliza el mismo modelo, sus texturas y su animación. Su
+perfil aplica por defecto plástico rojo saturado, opaco en la cara exterior y
+en los bordes; las caras internas planas sobre el inlay siguen siendo
+translúcidas. Las caras se separan en grupos de triángulos con materiales
+distintos: el exterior escribe profundidad y no usa transmisión; la lámina
+interior se mezcla sin refracción. Se conservan los vértices, huesos y morphs,
+con un máximo de dos grupos por pieza. El inlay lleva un pequeño sesgo de
+profundidad constante de una unidad, sin compensación por pendiente: esa
+compensación adelantaba el papel sobre el plástico en visores pequeños a 45°.
+El rango cercano/lejano de la cámara se ajusta a los límites de Switch 2 para
+conservar la precisión de sus capas al alejarla. El film y el papel
+conservan sus colores. Los ajustes de color por juego o consola tienen prioridad.
+Los parámetros se actualizan sin reconstruir el modelo y vuelven a sus valores
+originales al mostrar nuevamente una caja de Nintendo Switch.
+
+Los materiales rojos usan un `envMap` explícito. Con `envMap = null`, Three.js
+toma `scene.environmentIntensity` e ignora el `envMapIntensity` del material:
+reducir este último no atenúa la iluminación difusa del plástico. Se actualiza
+la referencia al entorno al recuperar un contexto WebGL. La prueba gráfica
+compara los píxeles con el mismo pigmento y ambas configuraciones de entorno.
+
 ## Modelo y animación
 
 La geometría conserva las dos articulaciones de la caja. La tapa y su unión

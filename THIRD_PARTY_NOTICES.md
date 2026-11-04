@@ -128,11 +128,14 @@ notice is preserved in
 OpenCabinet's geometry conversion and the separate replacement textures are
 described in the [asset notes](src/models/dreamcast/README.md).
 
-### Nintendo Switch case
+### Nintendo Switch and Nintendo Switch 2 cases
 
 The Switch geometry and materials in `src/models/switch/case.glb` are adapted
 from **Nintendo Switch Game Card Case** by **Jacopo Visentin**:
 <https://www.blendkit.com/asset-gallery-detail/8f414675-2cd9-4ff6-988d-dec118effbe1/>.
+OpenCabinet converts the model to glTF and adapts its animation, artwork mapping
+and materials. The Nintendo Switch 2 presentation reuses this geometry with
+separate red shell and cartridge materials.
 The source is listed under a **Royalty Free** license; it is not covered by
 OpenCabinet's MIT license. Separate permission to publish and redistribute
 the adapted model with this open-source project is pending.
