@@ -1,18 +1,24 @@
-## What's new in v0.3.1
+## What's new in v0.4.0
 
-- Support Nintendo Switch and Sega Dreamcast catalogs hosted in OpenCabinet-BDD submodules.
-- Read catalogs and artwork from each repository's `main` branch instead of its pinned submodule commit.
-- Migrate saved artwork URLs when a platform moves to a separate repository, preserving existing catalog matches and offline access.
-- Read Switch catalog metadata, descriptions, original filenames and artwork regions.
-- Treat an absent optional console-artwork catalog as no available artwork rather than a download failure.
+- Add library statistics, personal notes, favorites, game status and interactive ratings with library filters.
+- Add ordered manual playlists in the library and Couch Mode, and random game selection with combined filters.
+- Configure programs to run before and after playing from the game editor.
+- Download PDF and CBZ manuals, refresh artwork catalogs and resume interrupted imports.
+- Choose Photos, 3D Cases or both in the themed sidebar.
+- Open cases and read manuals in Couch Mode, with controller controls for opening, page turning, panning and zoom.
+- Improve rapid Couch Mode navigation and preload the first nine artwork previews of each console in the background.
+- Fix missing manual back covers in PlayStation/Dreamcast cases and retained 3D textures appearing in cover mode.
 
-## Novedades de v0.3.1
+## Novedades de v0.4.0
 
-- Soporte para los catálogos de Nintendo Switch y Sega Dreamcast alojados como submódulos de OpenCabinet-BDD.
-- Lectura de catálogos e imágenes desde la rama `main` de cada repositorio, en lugar del commit fijado en el submódulo.
-- Actualización de las URLs guardadas cuando una plataforma cambia de repositorio, conservando las coincidencias existentes y el uso sin conexión.
-- Lectura de metadatos, descripciones, nombres originales y regiones de imágenes del catálogo de Switch.
-- La ausencia de un catálogo opcional de imágenes de consola se considera como falta de imágenes disponibles, sin producir un error de descarga.
+- Estadísticas de biblioteca, notas personales, favoritos, estado y valoración interactiva, con filtros en la biblioteca.
+- Listas manuales ordenadas en la biblioteca y Couch Mode, y selección aleatoria con filtros combinados.
+- Configuración de programas para ejecutar antes y después de jugar desde Editar juego.
+- Descarga de manuales PDF y CBZ, actualización de catálogos y reanudación de importaciones interrumpidas.
+- Elección entre Fotos, Cajas 3D o ambos en el lateral de los temas.
+- Apertura de cajas y lectura de manuales en Couch Mode, con controles de joystick para abrir, pasar páginas, desplazar y hacer zoom.
+- Mejor rendimiento al navegar rápidamente en Couch Mode y precarga en segundo plano de las primeras nueve miniaturas de cada consola.
+- Corrección de las contraportadas de manuales en cajas PlayStation/Dreamcast y de las texturas 3D que quedaban visibles en modo portadas.
 
 ## Downloads / Descargas
 
