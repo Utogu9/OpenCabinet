@@ -43,6 +43,16 @@ pub(super) fn localized(value: &Value, locale: &str) -> Option<String> {
 }
 
 impl Record {
+    pub fn title(&self, locale: &str) -> Option<&str> {
+        let language = locale.split('-').next().unwrap_or("en");
+        [locale, language, "mul", "en", "es"]
+            .into_iter()
+            .find_map(|key| self.labels.get(key).map(|s| s.trim()).filter(|s| !s.is_empty()))
+            .or_else(|| self.labels.iter()
+                .filter(|(_, value)| !value.trim().is_empty())
+                .min_by(|(a, _), (b, _)| a.cmp(b))
+                .map(|(_, value)| value.trim()))
+    }
     pub fn entity(&self) -> Option<&str> {
         self.sources["wikidata"]["wikidata_id"].as_str()
     }
@@ -186,6 +196,23 @@ fn read_game_locale(json: &str, locale: &str) -> super::Result<super::CatalogGam
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn titles_prefer_the_requested_language_and_skip_empty_labels() {
+        let record: Record = serde_json::from_value(serde_json::json!({"labels":{
+            "es-AR":" Título argentino ","es":"Título español","en":"English title","mul":"Shared title"
+        }})).unwrap();
+        assert_eq!(record.title("es-AR"), Some("Título argentino"));
+        assert_eq!(record.title("es-ES"), Some("Título español"));
+        assert_eq!(record.title("en-US"), Some("English title"));
+        assert_eq!(record.title("fr-FR"), Some("Shared title"));
+        let fallback: Record = serde_json::from_value(serde_json::json!({"labels":{
+            "es":" ","mul":"","en":"English title","ja":"日本語"
+        }})).unwrap();
+        assert_eq!(fallback.title("es-AR"), Some("English title"));
+        let other: Record = serde_json::from_value(serde_json::json!({"labels":{"ja":"日本語"}})).unwrap();
+        assert_eq!(other.title("en-US"), Some("日本語"));
+        assert_eq!(Record::default().title("en-US"), None);
+    }
     #[test]
     fn respects_localization_platform_region_and_date_precision_without_inventing_players() {
         let record:Record=serde_json::from_value(serde_json::json!({

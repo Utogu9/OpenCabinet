@@ -8,8 +8,8 @@ const ROOT_URL: &str = "https://api.github.com/repos/Utogu9/OpenCabinet-BDD/cont
 const RAW_URL: &str = "https://raw.githubusercontent.com/Utogu9/OpenCabinet-BDD/main/";
 const CONFIG: &str = "metadata/source.json";
 const MIN_REPOSITORY_ID: i64 = 1_000_000_000_000;
-// Reindex older platform catalogs once to retain explicit release regions.
-const REPOSITORY_GAME_VERSION: i64 = 4;
+// Reindex older platform catalogs once to use localized labels as game titles.
+const REPOSITORY_GAME_VERSION: i64 = 5;
 
 #[derive(Default, Serialize, Deserialize)]
 struct Settings {
@@ -544,9 +544,10 @@ fn insert_platform(
         if title.is_empty() {
             continue;
         }
+        let metadata=game.metadata_id.as_ref().and_then(|id|data.metadata.get(id));
         let details = CatalogGame {
             id,
-            title: title.clone(),
+            title: metadata.and_then(|record| record.title("en")).unwrap_or(&title).to_owned(),
             platform: source.into(),
             release_date: None,
             developer: None,
@@ -556,7 +557,6 @@ fn insert_platform(
             max_players: None,
             description: None,
         };
-        let metadata=game.metadata_id.as_ref().and_then(|id|data.metadata.get(id));
         let mut json=serde_json::to_value(&details).map_err(err)?;
         json["_regions"]=serde_json::to_value(regions::from_entries(&game.entries)).map_err(err)?;
         if let Some(metadata)=metadata {
@@ -567,7 +567,7 @@ fn insert_platform(
                 let mut localized=serde_json::to_value(&fields).map_err(err)?;
                 let object=localized.as_object_mut().unwrap();
                 object.remove("manufacturer");
-                object.insert("id".into(),id.into());object.insert("title".into(),title.clone().into());object.insert("platform".into(),source.into());
+                object.insert("id".into(),id.into());object.insert("title".into(),metadata.title(locale).unwrap_or(&title).into());object.insert("platform".into(),source.into());
                 languages.insert(locale.into(),localized);
             }
             json["_localized"]=languages.into();
@@ -939,6 +939,47 @@ pub(crate) fn retained_console_filename(path: &Path) -> Option<String> {
 mod tests {
     use super::*;
     const SUBMODULES: &str = include_str!("../../tests/fixtures/repository-submodules.json");
+    #[test]
+    fn localized_catalog_titles_preserve_original_filename_and_serial_matching_after_reopening() {
+        let files = Sandbox::new();
+        let mut conn = files.catalog();
+        let source = "Sony - PlayStation 3";
+        let original = "Uncharted - Drake's Fortune (Asia) (En,Zh,Ko)";
+        let fixture = files.job.directory.join("localized-titles.json");
+        let data = serde_json::json!({"schema_version":2,"system":source,
+            "games":{
+                "BCAS-20024":{"entries":[{"name":original,"region":"Asia"}],"metadata_id":"gametdb:BCAS20024"},
+                "EMPTY":{"entries":[{"name":"Unlabelled (USA)"}],"metadata_id":"empty"},
+                "MISSING":{"entries":[{"name":"No metadata (Europe)"}]}
+            },
+            "metadata":{
+                "gametdb:BCAS20024":{"labels":{"en":"Uncharted: Drake's Fortune","es":"Uncharted: El tesoro de Drake","mul":"Uncharted: Drake's Fortune"}},
+                "empty":{"labels":{"en":" ","es":""}}
+            }});
+        fs::write(&fixture, serde_json::to_vec(&data).unwrap()).unwrap();
+        insert_platform(&mut conn, &files.job, source, &fixture, |_| ()).unwrap();
+        drop(conn);
+        let conn = open_catalog(&files.job.catalog_path()).unwrap();
+        let id = token(&format!("{source}/BCAS-20024"));
+        let json: String = conn.query_row("SELECT details FROM games WHERE id=?1", [id], |r| r.get(0)).unwrap();
+        let stored: serde_json::Value = serde_json::from_str(&json).unwrap();
+        assert_eq!(stored["_localized"]["es"]["title"], "Uncharted: El tesoro de Drake");
+        assert_eq!(stored["_localized"]["en"]["title"], "Uncharted: Drake's Fortune");
+        for title in [original, "BCAS-20024", "Uncharted: El tesoro de Drake", "Uncharted: Drake's Fortune"] {
+            let results = search_catalog(&conn, title, source).unwrap();
+            assert_eq!(results.len(), 1);
+            assert!(results[0].exact);
+            assert_eq!(results[0].game.id, id);
+            assert!(!results[0].game.title.contains("(Asia)"));
+        }
+        let matches = search_candidate(&conn, "Wrong title", source, &format!("/roms/{original}.iso")).unwrap();
+        assert_eq!(matches.len(), 1);
+        assert_eq!(matches[0].game.id, id);
+        assert_eq!(matches[0].regions, vec!["Asia"]);
+        for (serial, title) in [("EMPTY", "Unlabelled (USA)"), ("MISSING", "No metadata (Europe)")] {
+            assert_eq!(search_catalog(&conn, serial, source).unwrap()[0].game.title, title);
+        }
+    }
     #[test]
     fn switch_search_results_keep_release_regions_separate_from_artwork_and_localized_titles() {
         let files=Sandbox::new();let mut conn=files.catalog();let source="Nintendo - Switch";
