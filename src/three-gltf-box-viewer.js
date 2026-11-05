@@ -2,7 +2,7 @@ import * as THREE from './vendor/three/three.module.js';
 import { GLTFLoader } from './vendor/three/GLTFLoader.js';
 import { RoomEnvironment } from './vendor/three/RoomEnvironment.js';
 import { arcballPoint, canvasViewport } from './three-box-motion.js';
-import { chooseArtwork } from './three-box-artwork.js';
+import { chooseArtwork, longboxInsertWindows } from './three-box-artwork.js';
 import { configureAcrylicOptics } from './three-box-relief.js';
 import { createSwitchShells } from './three-switch-shell.js';
 import { prepareRenderGroup, createRenderLease, releaseSceneGpu, createFrameHold } from './three-box-session.js';
@@ -297,14 +297,19 @@ export async function createModelViewer(host,options={},definition) {
     // inlay, cartridge, disc or fallback label for every arriving image.
     const booklet=procedural?.manualCover?manualFront.map?.image:null;
     if(changed('outside',[...(pictures.full?[pictures.full,null,null,null]:[null,pictures.cover,pictures.back_cover,pictures.spine]),booklet,!!(booklet&&manualExtracted)])) {
-      if(pictures.full&&!booklet)assign('Cover Outside',pictures.full);
+      if(pictures.full&&!booklet&&!procedural?.separateSpines)assign('Cover Outside',pictures.full);
       else {
         const whitePaper=['wii','wiiu','threeDs'].includes(profile.variant);
         const atlas=document.createElement('canvas');atlas.width=options.carousel?1024:2048;atlas.height=options.carousel?790:1580;
-        const ctx=atlas.getContext('2d'),spine=atlas.width*(manifest.spine_fraction||.046),face=(atlas.width-spine)/2;
+        const separate=!!procedural?.separateSpines,fraction=manifest.spine_fraction||.046;
+        const ctx=atlas.getContext('2d'),spine=atlas.width*fraction/(separate?1+fraction:1),face=(atlas.width-spine*(separate?2:1))/2;
+        const rear=pictures.back_cover,windows=separate&&rear?longboxInsertWindows(rear.naturalWidth||rear.width,rear.naturalHeight||rear.height):null;
+        const drawWindow=(image,window,x,width)=>{const w=image.naturalWidth||image.width,h=image.naturalHeight||image.height;
+          ctx.drawImage(image,window.offset[0]*w,0,window.repeat[0]*w,h,x,0,width,atlas.height);};
         ctx.fillStyle='#f0efe9';ctx.fillRect(0,0,atlas.width,atlas.height);
         for(const [kind,x] of [['back_cover',0],['cover',face+spine]]) {
-          if(pictures[kind])ctx.drawImage(pictures[kind],x,0,face,atlas.height);else label(ctx,game.title,x,0,face,atlas.height,whitePaper?'#ffffff':undefined);
+          if(kind==='back_cover'&&windows?.folded)drawWindow(rear,windows.center,x,face);
+          else if(pictures[kind])ctx.drawImage(pictures[kind],x,0,face,atlas.height);else label(ctx,game.title,x,0,face,atlas.height,whitePaper?'#ffffff':undefined);
         }
         if(pictures.spine) {
           const image=pictures.spine;
@@ -313,7 +318,15 @@ export async function createModelViewer(host,options={},definition) {
           } else ctx.drawImage(image,face,0,spine,atlas.height);
         }else if(procedural?.clearSpine)ctx.clearRect(face,0,spine,atlas.height);
         else {ctx.fillStyle=whitePaper?'#ffffff':'#252b36';ctx.fillRect(face,0,spine,atlas.height);}
-        if(pictures.full)ctx.drawImage(pictures.full,0,0,atlas.width,atlas.height);
+        if(separate) {
+          const right=2*face+spine;
+          ctx.drawImage(atlas,face,0,spine,atlas.height,right,0,spine,atlas.height);
+          if(windows?.folded){drawWindow(rear,windows.left,face,spine);drawWindow(rear,windows.right,right,spine);}
+        }
+        if(pictures.full){
+          ctx.drawImage(pictures.full,0,0,separate?2*face+spine:atlas.width,atlas.height);
+          if(separate)ctx.drawImage(atlas,face,0,spine,atlas.height,2*face+spine,0,spine,atlas.height);
+        }
         if(booklet){
           ctx.clearRect(face+spine,0,face,atlas.height);
           if(!manualExtracted)ctx.drawImage(booklet,face+spine,0,face,atlas.height);

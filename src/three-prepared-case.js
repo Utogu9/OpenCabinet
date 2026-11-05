@@ -4,6 +4,7 @@ import { clearCasePlastic } from './three-case-plastic.js';
 import { configureAcrylicOptics } from './three-box-relief.js';
 import { createDiscMaterial } from './three-disc-material.js';
 import { loadPreparedModel } from './three-prepared-model.js';
+import { longboxArtworkUV } from './three-box-artwork.js';
 
 // Geometry and the opening rig are baked offline. Only materials, downloaded
 // emblems and the variable-size booklet are configured for each viewer.
@@ -83,6 +84,7 @@ function attachCase(scene,animations,manifest) {
     else {
       mesh.material=byName.get(mesh.userData.caseMaterial);
       if(!mesh.material)throw Error('Unsupported prepared case material: '+mesh.userData.caseMaterial);
+      if(longbox&&mesh.material===cover)longboxArtworkUV(mesh.geometry,manifest.spine_fraction);
     }
   });
   const brandURLs=new Map();
@@ -204,7 +206,7 @@ function attachCase(scene,animations,manifest) {
   }
   return {scene,animations,animationNames:['Open Case'],manifest,createManual,fitManual,clearManual,update,
     configureLighting,beforeRender,releaseLighting,selectArtwork,
-    ...(longbox?{manualCover:true,onManualCover}:{}),
+    ...(longbox?{manualCover:true,onManualCover,separateSpines:true}:{}),
     ...(clear?{clearSpine:true,paperReverse}:{}),
     sourceFaceCount:manifest.sourceFaceCount,materials:surfaceMaterials,parts,get manualSize(){return lastSize;},
     onChange(callback){changed=callback;},dispose(){disposed=true;brandObserver.disconnect();acrylicRibs?.dispose();releaseLighting();}};

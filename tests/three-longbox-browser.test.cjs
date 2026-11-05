@@ -38,10 +38,13 @@ test('Sega CD and Saturn share a tall acrylic case, matte tray, two persistent s
       return [-1,1].map(side=>{
         const origin=new THREE.Vector3(side*100,60,-2).applyMatrix4(tray.matrixWorld),direction=new THREE.Vector3(-side,0,0).transformDirection(tray.matrixWorld);
         const hit=new THREE.Raycaster(origin,direction).intersectObject(tray,true).find(hit=>hit.object.material.name!=='Sleeve Film'&&!hit.object.material.transparent);
-        return hit?{material:hit.object.material.name,u:hit.uv.x}:null;
+        if(!hit)return null;
+        const canvas=hit.object.material.map.image;
+        return {material:hit.object.material.name,color:Array.from(canvas.getContext('2d').getImageData(Math.floor(hit.uv.x*canvas.width),Math.floor(hit.uv.y*canvas.height),1,1).data)};
       });
     });
-    assert.ok(hits.every(hit=>hit?.material==='Cover Outside'&&hit.u>.45&&hit.u<.55),JSON.stringify(hits));
+    assert.ok(hits.every(hit=>hit?.material==='Cover Outside'),JSON.stringify(hits));
+    return hits.map(hit=>hit.color);
   }
   await checkSpines();await page.screenshot({path:'target/longbox-three-closed.png'});
   await page.evaluate(()=>viewer.setOpen(true,false));await page.waitForTimeout(100);await checkSpines();
@@ -49,6 +52,27 @@ test('Sega CD and Saturn share a tall acrylic case, matte tray, two persistent s
   await page.screenshot({path:'target/longbox-three-open.png'});assert.equal(await page.evaluate(()=>viewer.readManual()),true);
   assert.equal(await page.evaluate(()=>{const canvas=debug.materials.get('Cover Outside').map.image;return canvas.getContext('2d').getImageData(canvas.width*.9,10,1,1).data[3];}),0,'Extracting the booklet leaves a clear lid');
   await page.screenshot({path:'target/longbox-three-inside.png'});await page.evaluate(()=>viewer.returnManual());
+  await page.evaluate(()=>{
+    const canvas=document.createElement('canvas');canvas.width=2040;canvas.height=2332;
+    const ctx=canvas.getContext('2d');ctx.fillStyle='#20b040';ctx.fillRect(0,0,2040,2332);
+    ctx.fillStyle='#d02030';ctx.fillRect(0,0,2040*.09,2332);
+    ctx.fillStyle='#2050d0';ctx.fillRect(2040*.91,0,2040*.09,2332);
+    window.foldedArt=art.map(image=>image.kind==='back_cover'?{kind:'back_cover',path:canvas.toDataURL()}:image);
+    select(3,foldedArt);
+  });
+  await page.waitForFunction(()=>{const canvas=debug.materials.get('Cover Outside').map?.image;return canvas?.getContext('2d').getImageData(10,10,1,1).data[1]===176;});
+  assert.deepEqual(await checkSpines(),[[32,80,208,255],[208,32,48,255]],'The two folded strips take priority over the standalone spine, with the correct outside orientation');
+  await page.evaluate(()=>viewer.setOpen(true,false));
+  assert.deepEqual(await checkSpines(),[[32,80,208,255],[208,32,48,255]],'Both rear folds remain visible when the box opens');
+  await page.evaluate(()=>select(5,foldedArt.filter(image=>image.kind!=='spine')));
+  await page.waitForFunction(()=>{const canvas=debug.materials.get('Cover Outside').map?.image;return canvas?.getContext('2d').getImageData(10,10,1,1).data[1]===176;});
+  assert.deepEqual(await checkSpines(),[[32,80,208,255],[208,32,48,255]],'Folded rear scans supply both spines even without any standalone spine image');
+  await page.evaluate(()=>select(4,art));
+  await page.waitForFunction(()=>{const canvas=debug.materials.get('Cover Outside').map?.image;return canvas?.getContext('2d').getImageData(10,10,1,1).data[0]===201;});
+  assert.deepEqual(await checkSpines(),[[244,186,47,255],[244,186,47,255]],'Cropped rear artwork still uses the separate spine on both sides');
+  await page.evaluate(()=>select(6,[...foldedArt,{kind:'box_full',path:solid('#8030c0',610,420).toDataURL()}]));
+  await page.waitForFunction(()=>{const canvas=debug.materials.get('Cover Outside').map?.image;return canvas?.getContext('2d').getImageData(10,10,1,1).data[0]===128;});
+  assert.deepEqual(await checkSpines(),[[128,48,192,255],[128,48,192,255]],'Full covers still take priority over rear scans with folded spines');
   await page.evaluate(()=>{window.platform='Sega CD';select(2);});await page.waitForFunction(()=>debug.manualGroup.visible);
   assert.equal(await page.evaluate(()=>debug.model===savedLongbox&&debug.renderer===savedRenderer),true,'Saturn and Sega CD reuse the geometry and renderer');
   await page.evaluate(()=>{viewer.setOpen(true,false);viewer.rotate(-30,12);viewer.zoom(-.35);});await page.waitForTimeout(100);await page.screenshot({path:'target/longbox-three-oblique.png'});

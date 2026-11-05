@@ -27,6 +27,29 @@ export function dreamcastInsertWindows(width,height,{inside=false}={}) {
   return {folded:true,center:{offset:[fold,0],repeat:[1-2*fold,1]},left:inside?left:right,right:inside?right:left};
 }
 
+// Tall Sega tray scans include two narrow folded strips (~9% each).
+// Cropped rear artwork is portrait; a complete insert is close to square.
+export function longboxInsertWindows(width,height) {
+  const ratio=width/height,folded=width>0&&height>0&&Number.isFinite(ratio)&&ratio>=.78&&ratio<=1;
+  const whole={offset:[0,0],repeat:[1,1]};
+  if(!folded)return {folded:false,center:whole,left:null,right:null};
+  const fold=.09;
+  return {folded:true,center:{offset:[fold,0],repeat:[1-2*fold,1]},
+    left:{offset:[1-fold,0],repeat:[fold,1]},right:{offset:[0,0],repeat:[fold,1]}};
+}
+
+// Existing GLBs share a spine window. Reserve another atlas strip for the
+// opening edge so different folded spines survive without rebuilding the model.
+export function longboxArtworkUV(geometry,spineFraction) {
+  const uv=geometry.attributes.uv,normal=geometry.attributes.normal;
+  const face=(1-spineFraction)/2,scale=1/(1+spineFraction);
+  for(let i=0;i<uv.count;i++) {
+    const u=uv.getX(i),other=normal.getX(i)>.9&&u>=face-1e-5&&u<=face+spineFraction+1e-5;
+    uv.setX(i,(other?1+u-face:u)*scale);
+  }
+  uv.needsUpdate=true;
+}
+
 // Narrow curved Dreamcast bands can shrink below 4% of the cover width. Read
 // native 2x2 blocks at 1.5%, rather than averaging the band together with art.
 export const dreamcastInsertProbes=[.2,.4,.6,.8].map(y=>({edge:[.015,y],inside:[.35,y]}));

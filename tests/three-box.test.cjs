@@ -268,6 +268,22 @@ test('Dreamcast recognizes unfolded rear scans and maps distinct left and right 
   assert.equal(chooseArtwork([{kind:'inlay',path:'inside.jpg'}]).inlay,'inside.jpg');
 });
 
+test('Tall Sega rear inserts separate both folds while cropped backs and full wraps stay whole',async()=>{
+  const {longboxInsertWindows,longboxArtworkUV}=await import('../src/three-box-artwork.js');
+  for(const [w,h] of [[2040,2332],[1840,2090],[510,583]]) {
+    const windows=longboxInsertWindows(w,h);assert.equal(windows.folded,true);
+    assert.equal(windows.center.offset[0],.09);assert.ok(Math.abs(windows.center.repeat[0]-.82)<1e-9);
+    assert.equal(windows.left.offset[0],.91);assert.equal(windows.right.offset[0],0);
+  }
+  for(const [w,h] of [[1420,2090],[3050,2090],[0,0],[Infinity,100]])assert.equal(longboxInsertWindows(w,h).folded,false);
+  const fraction=21/305,face=142/305,values=[0,face/2,face+fraction/2,face+fraction/2,1];
+  const geometry={attributes:{uv:{count:values.length,getX:i=>values[i],setX:(i,x)=>values[i]=x},normal:{getX:i=>i===3?1:i===2?-1:0}}};
+  longboxArtworkUV(geometry,fraction);
+  assert.ok(Math.abs(values[2]-(142+10.5)/326)<1e-9);
+  assert.ok(Math.abs(values[3]-(305+10.5)/326)<1e-9);
+  assert.ok(Math.abs(values[4]-305/326)<1e-9);
+});
+
 test('Dreamcast selects white inserts only for a distinct white front-cover band, with black as the conservative fallback',async()=>{
   const {dreamcastInsertTheme}=await import('../src/three-box-artwork.js');
   const block=(rgb,alpha=255)=>new Uint8ClampedArray(Array.from({length:4},()=>[...rgb,alpha]).flat());

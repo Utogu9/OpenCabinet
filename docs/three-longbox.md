@@ -13,6 +13,10 @@ refraction. The upper/lower acrylic rails share PS1/Dreamcast's
 `models/dreamcast/ribs-height.svg` as a repeating bump and alpha map, with a
 0.85 mm ridge pitch. The black hinge column retains its separate molded pattern.
 
+Rear scans that include both folded spines use their center on the back and
+each side strip on its corresponding spine. Cropped backs continue to use the
+separate spine image. Full covers retain priority; source files are unchanged.
+
 The lid and its rails rotate together around the existing jewel hinge until
 their outside plane aligns with the rear shell. Both printed spines remain on
 the stationary tray. The 120 mm CD stays centered within the usable tray area,
