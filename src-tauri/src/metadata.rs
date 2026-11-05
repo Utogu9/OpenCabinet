@@ -3596,6 +3596,14 @@ mod tests {
         MediaOptions { screenshot: 1, ..Default::default() }
     }
 
+    fn successful_screenshot_server(game_count: usize) -> MockServer {
+        // The Europe ROM and the regionless ROM legitimately prefer different
+        // files. Every candidate must be valid for every concurrent game;
+        // otherwise an unrelated 404 can finish before cancellation is tested.
+        MockServer::new(["screen-duplicate.png", "screen-1.png", "screen-2.png"]
+            .into_iter().map(|name|(name,vec![(200, PNG.to_vec());game_count])).collect(),false)
+    }
+
     fn many_bulk_games(conn: &Connection, count: usize) -> Vec<i32> {
         let mut ids=bulk_games(conn);
         for index in ids.len()..count {
@@ -3717,7 +3725,7 @@ mod tests {
         let mut conn = library();
         let catalog = sandbox.catalog();
         let ids = bulk_games(&conn);
-        let server = MockServer::new(vec![("screen-duplicate.png", vec![(200, PNG.to_vec())])], false);
+        let server = successful_screenshot_server(ids.len());
         let report = download_bulk_images(&mut conn, &catalog, &sandbox.job, ids.clone(), &screenshot_options(), &server.base, |update| {
             if update.phase == "bulk_images" && update.processed == 1 { sandbox.job.cancel().unwrap(); }
         }).unwrap();
@@ -3748,7 +3756,7 @@ mod tests {
         let mut conn = library();
         let catalog = sandbox.catalog();
         let ids = bulk_games(&conn);
-        let server = MockServer::new(vec![("screen-duplicate.png", vec![(200, PNG.to_vec())])], false);
+        let server = successful_screenshot_server(ids.len());
         let report = download_bulk_images(&mut conn, &catalog, &sandbox.job, ids.clone(), &screenshot_options(), &server.base, |update| {
             if update.phase == "images" { sandbox.job.cancel().unwrap(); }
         }).unwrap();

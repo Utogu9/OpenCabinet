@@ -13,6 +13,9 @@ test('Couch console scrolling stays centered and supports dragging without selec
   await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));t.after(()=>new Promise(resolve=>{server.closeAllConnections();server.close(resolve);}));
   const browser=await chromium.launch({executablePath:executable,headless:true});t.after(()=>browser.close());
   const page=await browser.newPage({viewport:{width:1440,height:900},reducedMotion:'reduce'});
+  // This mouse/keyboard fixture must not receive input from a real controller
+  // connected to the developer's machine or the runner host.
+  await page.addInitScript(()=>Object.defineProperty(navigator,'getGamepads',{configurable:true,value:()=>[]}));
   await page.goto(`http://127.0.0.1:${server.address().port}/`);
   await page.evaluate(()=>{window.OpenCabinetI18n={t:key=>key};localStorage.setItem('opencabinet.sofaView','cover');});
   await page.addScriptTag({url:'/src/sofa-mode.js'});
@@ -44,7 +47,7 @@ test('Couch console scrolling stays centered and supports dragging without selec
     assertCentered(await layout());
     assert.ok((await layout()).railScroll>0,'Distant consoles scroll inside their own rail');
     for(const name of ['Console 09','Console 00','Console 17']){
-      await page.locator('.sofa-platform').filter({hasText:name}).evaluate(node=>node.click());
+      await page.locator(`.sofa-platform[data-platform="${name}"]`).evaluate(node=>node.click());
       await page.waitForTimeout(50);assertCentered(await layout());
     }
     await page.evaluate(()=>sofa.refresh());await page.waitForTimeout(50);assertCentered(await layout());
