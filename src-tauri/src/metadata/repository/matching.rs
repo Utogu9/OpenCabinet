@@ -1,6 +1,60 @@
 //! Import matching uses indexed title, filename and serial lookups before fuzzy search.
 use super::*;
 
+fn title_key(value: &str) -> String {
+    normalize(&crate::clean_rom_title(value)).split_whitespace()
+        .filter(|word| !["the", "and"].contains(word)).collect::<String>()
+}
+
+pub(super) fn title_aliases(value: &str) -> Vec<String> {
+    let mut aliases=vec![title_key(value)];
+    // A short ROM name often omits a catalog's subtitle. Index those explicit
+    // boundaries, but never truncate the user's query into a different sequel.
+    for separator in [" - ", ": ", " starring "] {
+        if let Some(index)=value.to_ascii_lowercase().find(separator) {
+            let alias=title_key(&value[..index]);
+            if alias.len()>=4 && !aliases.contains(&alias){aliases.push(alias);}
+        }
+    }
+    aliases
+}
+
+pub(super) fn compatible_title(a:&str,b:&str)->bool {
+    let words=|s:&str|normalize(&crate::clean_rom_title(s)).split_whitespace()
+        .filter(|word|!["the","and"].contains(word)).map(str::to_owned).collect::<HashSet<_>>();
+    let a=words(a);let b=words(b);
+    let numbered=|words:&HashSet<String>|words.iter().filter(|word|word.chars().any(|c|c.is_ascii_digit())
+        || ["i","ii","iii","iv","v","vi","vii","viii","ix","x"].contains(&word.as_str())).cloned().collect::<HashSet<_>>();
+    // Only an added/omitted phrase is acceptable. Distinct subtitles or sequel
+    // numbers are never replaced by a merely similar search result.
+    a.intersection(&b).count()>=4 && (a.is_subset(&b)||b.is_subset(&a))
+        && a.len().min(b.len())*3>=a.len().max(b.len())*2 && numbered(&a)==numbered(&b)
+}
+
+fn promote_title_equivalents(conn:&Connection,query:&str,results:&mut [SearchResult])->Result<()> {
+    for result in results.iter_mut().filter(|r|!r.exact) {
+        let json:String=conn.query_row("SELECT details FROM games WHERE id=?1",[result.game.id],|r|r.get(0)).map_err(err)?;
+        let json:serde_json::Value=serde_json::from_str(&json).map_err(err)?;
+        result.exact=compatible_title(query,&result.game.title)||json["_release_names"].as_array().into_iter().flatten()
+            .filter_map(|v|v.as_str()).any(|name|compatible_title(query,name));
+    }
+    Ok(())
+}
+
+pub(super) fn release_rank(name: &str, requested: &str) -> (usize,u32) {
+    let tags=|value:&str|value.split(['(', '[']).skip(1).filter_map(|part|part.split_once([')', ']']).map(|(tag,_)|normalize(tag))).collect::<Vec<_>>();
+    let tags=tags(name);let wanted=|tag:&str|requested.to_ascii_lowercase().contains(tag);
+    let special=tags.iter().filter(|tag|["beta","proto","sample","demo","sega ages","switch online","virtual console","mini","retro bit","collection","alt"]
+        .iter().any(|marker|tag.contains(marker)&&!wanted(marker))).count();
+    fn revision(value:&str)->u32 {
+        value.to_ascii_lowercase().split('(').skip(1).filter_map(|s|s.split_once(')').map(|(tag,_)|tag.trim()))
+            .find_map(|tag|tag.strip_prefix("rev").map(str::trim).and_then(|version|version.parse().ok()
+                .or_else(||(version.len()==1&&version.as_bytes()[0].is_ascii_lowercase()).then(||(version.as_bytes()[0]-b'a'+1) as u32))))
+            .unwrap_or(0)
+    }
+    (special,revision(name).abs_diff(revision(requested)))
+}
+
 pub(super) fn rom_name(path: &str) -> String {
     if path.contains("://") {
         return String::new();
@@ -53,6 +107,9 @@ pub(in crate::metadata) fn search_candidate(
         }
     }
     if !original.is_empty() { queries.push(crate::clean_rom_title(&original)); }
+    if catalog_is_repository(conn) {
+        queries.extend([title_key(title),title_key(&original)]);
+    }
     let mut seen = HashSet::new();
     for query in &queries {
         let key = normalize(query);
@@ -60,7 +117,8 @@ pub(in crate::metadata) fn search_candidate(
         let results = exact_catalog_matches(conn, query, Some(platform))?;
         if !results.is_empty() { return Ok(results); }
     }
-    let results = search_catalog(conn, title, platform)?;
+    let mut results = search_catalog(conn, title, platform)?;
+    if catalog_is_repository(conn){promote_title_equivalents(conn,title,&mut results)?;}
     if !results.is_empty() || original.is_empty() || normalize(&original) == normalize(title) {
         return Ok(results);
     }
@@ -110,6 +168,33 @@ pub(super) fn shortest_match(candidates: &[SearchResult], ids: &[i64]) -> Option
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn equivalent_titles_handle_articles_conjunctions_spacing_and_subtitles_without_dropping_sequel_numbers() {
+        for (rom,catalog) in [
+            ("Adventures of Batman and Robin, The", "The Adventures of Batman & Robin"),
+            ("Wolf Child", "Wolfchild"),
+            ("Quack Shot Starring Donald Duck", "QuackShot Starring Donald Duck"),
+            ("Battle Mania - Dai Gin Jou", "Battle Mania Daiginjou"),
+            ("M.U.S.H.A", "MUSHA - Metallic Uniframe Super Hybrid Armor"),
+        ] {assert!(title_aliases(catalog).contains(&title_key(rom)),"{rom}");}
+        assert!(compatible_title("ESWAT Cyber Police - City Under Siege","ESWAT - City under Siege (USA, Europe) (Rev A)"));
+        assert!(compatible_title("Nigel Mansell's World Championship","Nigel Mansell's World Championship Racing (USA)"));
+        assert!(!compatible_title("Sonic and Knuckles & Sonic 2","Sonic & Knuckles"));
+        assert!(!compatible_title("Phantasy Star - The End of the Millenium","Phantasy Star II"));
+        assert!(!compatible_title("The Legend of Zelda - Ocarina of Time","The Legend of Zelda - Majora's Mask"));
+        assert!(!compatible_title("Street Fighter II - Champion Edition","Street Fighter III - Champion Edition"));
+        assert!(!title_aliases("Game II - Subtitle").contains(&title_key("Game")));
+    }
+
+    #[test]
+    fn ordinary_releases_are_preferred_to_unrequested_betas_samples_reissues_and_other_revisions() {
+        for tag in ["Beta", "Sample", "Proto", "Sega Ages", "Retro-Bit", "Mega Drive Mini"] {
+            assert!(release_rank("Game (USA)","Game (U)")<release_rank(&format!("Game (USA) ({tag})"),"Game (U)"));
+        }
+        assert!(release_rank("Game (USA) (Rev A)","Game (U) (REV01)")<release_rank("Game (USA)","Game (U) (REV01)"));
+        assert!(release_rank("Game (USA)","Game (U) (REV00)")<release_rank("Game (USA) (Rev 1)","Game (U) (REV00)"));
+    }
 
     #[test]
     fn original_names_preserve_tags_and_title_dots_while_removing_rom_extensions() {

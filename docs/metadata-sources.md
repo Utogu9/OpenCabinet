@@ -36,7 +36,21 @@ revisado y, si no hay una coincidencia exacta, el nombre original del archivo.
 Ambas fuentes prueban también identificadores con variantes de separadores
 (por ejemplo, `SLUS_209.98` y `SLUS-20998`) y el nombre original sin etiquetas.
 Estas consultas exactas usan el índice local antes de buscar resultados
-aproximados; estos últimos siguen requiriendo una selección manual.
+aproximados; los resultados ambiguos siguen requiriendo una selección manual.
+
+Las regiones de ROMs reconocen también etiquetas compactas como `(U)`, `(E)`,
+`(J)`, `(W)`, `(UE)` y `(JU)`. `USA` y `North America` son equivalentes.
+Se prefiere una edición con las mismas regiones, después una que abarque todas
+las indicadas y finalmente una compatible, respetando el orden de las regiones
+del archivo. Se compara la región de cada nombre de edición, sin mezclarla con
+otros juegos que por error compartan el mismo identificador del catálogo.
+
+OpenCabinet-BDD admite equivalencias de artículos, `and`/`&`, espacios y
+subtítulos explícitos. Las frases añadidas u omitidas solo permiten selección
+automática cuando conservan suficientes palabras y los mismos números de
+secuela; un título distinto o ambiguo mantiene la revisión manual. A igualdad
+de coincidencia y región se prefieren ediciones normales frente a betas,
+muestras y reediciones no solicitadas, teniendo en cuenta las revisiones.
 
 Completar datos utiliza los desarrolladores, editores, géneros, modos, cantidades
 de jugadores, fechas y descripciones breves disponibles. Se prefiere el idioma

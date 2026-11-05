@@ -1104,29 +1104,25 @@ fn search_catalog_scope(
 }
 
 pub(super) fn rom_regions(path: &str) -> Vec<&'static str> {
-    let name = Path::new(path)
-        .file_name()
-        .and_then(|n| n.to_str())
-        .unwrap_or(path)
-        .to_ascii_lowercase();
+    let name = path.rsplit(['/', '\\']).next().unwrap_or(path).to_ascii_lowercase();
     let mut regions = Vec::new();
-    for (tag, region) in [
-        ("usa", "North America"),
-        ("north america", "North America"),
-        ("europe", "Europe"),
-        ("japan", "Japan"),
-        ("world", "World"),
-        ("spain", "Spain"),
-        ("france", "France"),
-        ("germany", "Germany"),
-        ("brazil", "Brazil"),
-        ("korea", "Korea"),
-    ] {
-        if name
-            .split(['(', ')', '[', ']', ','])
-            .any(|part| part.trim() == tag)
-        {
-            regions.push(region);
+    for group in name.split(['(', '[']).skip(1).filter_map(|part|part.split_once([')', ']']).map(|(tag,_)|tag)) {
+        for tag in group.split([',', '/', ';']).map(str::trim) {
+            let compact = matches!(tag,"ue"|"ju"|"uj"|"je"|"ej"|"jue"|"jeu"|"uje"|"uej"|"eju"|"euj");
+            let tags: Vec<&str> = if compact { tag.split("").filter(|s|!s.is_empty()).collect() } else { vec![tag] };
+            for tag in tags {
+                let region = match tag {
+                    "u"|"us"|"usa"|"north america"=>"North America",
+                    "e"|"eu"|"eur"|"europe"|"european"|"pal"=>"Europe",
+                    "j"|"jp"|"jpn"|"jap"|"japan"=>"Japan",
+                    "w"|"world"|"worldwide"=>"World",
+                    "spain"=>"Spain", "france"=>"France", "germany"=>"Germany",
+                    "brazil"=>"Brazil", "korea"=>"Korea", "asia"=>"Asia",
+                    "australia"=>"Australia", "italy"=>"Italy",
+                    _=>continue,
+                };
+                if !regions.contains(&region) { regions.push(region); }
+            }
         }
     }
     regions
@@ -3025,6 +3021,31 @@ mod tests {
         assert_eq!(image_kind("Box - Inlay"), "inlay");
         let selected: MediaOptions = serde_json::from_value(serde_json::json!({"selected_types": ["inlay"]})).unwrap();
         assert!(selected.validate().is_ok());
+    }
+
+    #[test]
+    fn genesis_short_region_tags_select_matching_artwork_without_reading_revision_or_language_tags() {
+        for (path, expected) in [
+            ("Adventures of Batman and Robin, The (U) [!].gen", vec!["North America"]),
+            ("Alien Soldier (E) [!].gen", vec!["Europe"]),
+            ("Golden Axe III (J) [!].gen", vec!["Japan"]),
+            ("Alien Storm (W) [!].gen", vec!["World"]),
+            ("Alien 3 (UE) (REV00) [!].gen", vec!["North America", "Europe"]),
+            ("Game (JU) [c][!].gen", vec!["Japan", "North America"]),
+            ("Game [JUE].gen", vec!["Japan", "North America", "Europe"]),
+            ("Game (USA, Europe) (En,Es).gen", vec!["North America", "Europe"]),
+            ("Game (U) [USA].gen", vec!["North America"]),
+            ("Game (EU).gen", vec!["Europe"]),
+            ("M:/Roms (Japan)/Striker (E) (M5) [!].gen", vec!["Europe"]),
+            ("M:/Roms (USA)/Game (REV00) (M5) [c][!].gen", vec![]),
+            ("M:\\Roms (Japan)\\Game (En,Es) (REV02).gen", vec![]),
+        ] { assert_eq!(rom_regions(path), expected, "{path}"); }
+        let images: Vec<_> = ["World", "North America", "Europe", "Japan"].into_iter()
+            .map(|region|CatalogImage{filename:format!("{}.png",region.replace(' ',"-")),kind:"cover".into(),region:region.into(),crc:region.into()}).collect();
+        let options=MediaOptions{cover:1,..Default::default()};
+        for (tag,region) in [("U","North America"),("E","Europe"),("J","Japan"),("W","World"),("UE","North America"),("JU","Japan")] {
+            assert_eq!(select_images(images.clone(),&options,&format!("Game ({tag}) [!].gen"))[0].region,region,"{tag}");
+        }
     }
 
     #[test]

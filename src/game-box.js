@@ -37,12 +37,15 @@
   function regionFor(romPath = "") {
     // Use filename tags, never a parent directory's name. Preserve their order
     // for multi-region releases, just as image selection prioritizes ROM regions.
-    const tags = String(romPath).split(/[\\/]/).pop().match(/\([^)]*\)/g) || [];
+    const tags = String(romPath).split(/[\\/]/).pop().match(/[([][^)\]]*[)\]]/g) || [];
     for (const tag of tags) {
-      for (const name of tag.slice(1, -1).split(/[,;]/).map(value => value.trim().toLowerCase())) {
-        if (["europe", "european", "pal", "eu"].includes(name)) return "europe";
-        if (["usa", "us", "north america", "canada"].includes(name)) return "north_america";
-        if (["japan", "jp"].includes(name)) return "japan";
+      const names=tag.slice(1,-1).split(/[,;/]/).flatMap(value=>{
+        const name=value.trim().toLowerCase();return /^(?:ue|ju|uj|je|ej|jue|jeu|uje|uej|eju|euj)$/.test(name)?[...name]:[name];
+      });
+      for (const name of names) {
+        if (["e", "europe", "european", "pal", "eu", "eur"].includes(name)) return "europe";
+        if (["u", "usa", "us", "north america", "canada"].includes(name)) return "north_america";
+        if (["j", "japan", "jp", "jpn"].includes(name)) return "japan";
       }
     }
     return null;

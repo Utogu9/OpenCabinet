@@ -8,8 +8,8 @@ const ROOT_URL: &str = "https://api.github.com/repos/Utogu9/OpenCabinet-BDD/cont
 const RAW_URL: &str = "https://raw.githubusercontent.com/Utogu9/OpenCabinet-BDD/main/";
 const CONFIG: &str = "metadata/source.json";
 const MIN_REPOSITORY_ID: i64 = 1_000_000_000_000;
-// Reindex older platform catalogs once to use localized labels as game titles.
-const REPOSITORY_GAME_VERSION: i64 = 5;
+// Retain release names and canonical title aliases for regional ROM matching.
+const REPOSITORY_GAME_VERSION: i64 = 6;
 
 #[derive(Default, Serialize, Deserialize)]
 struct Settings {
@@ -559,6 +559,8 @@ fn insert_platform(
         };
         let mut json=serde_json::to_value(&details).map_err(err)?;
         json["_regions"]=serde_json::to_value(regions::from_entries(&game.entries)).map_err(err)?;
+        json["_release_names"]=serde_json::to_value(game.entries.iter()
+            .flat_map(|entry|[entry.name.as_str(),entry.dat_name.as_str()]).filter(|name|!name.is_empty()).collect::<Vec<_>>()).map_err(err)?;
         if let Some(metadata)=metadata {
             let region=rom_regions(&game.entries[0].name);
             let mut languages=serde_json::Map::new();
@@ -607,6 +609,8 @@ fn insert_platform(
                 names.insert(super::super::clean_rom_title(&entry.dat_name));
             }
         }
+        let aliases:Vec<_>=names.iter().flat_map(|name|matching::title_aliases(name)).filter(|name|!name.is_empty()).collect();
+        names.extend(aliases);
         for name in names {
             tx.execute(
                 "INSERT INTO names VALUES(?1,?2,?3)",
@@ -750,36 +754,55 @@ pub(super) fn regional_match(
     }
     let filename = matching::rom_name(path);
     let region = rom_regions(path);
-    for full_name in [true, false] {
+    let query_key=matching::title_aliases(&filename).remove(0);
+    let mut releases=Vec::new();
+    for candidate in candidates.iter().filter(|c|c.exact) {
+        let json:String=catalog.query_row("SELECT details FROM games WHERE id=?1",[candidate.game.id],|r|r.get(0)).map_err(err)?;
+        let json:serde_json::Value=serde_json::from_str(&json).map_err(err)?;
+        let mut names:Vec<String>=json["_release_names"].as_array().into_iter().flatten().filter_map(|v|v.as_str().map(str::to_owned)).collect();
+        if names.is_empty() {
+            let mut stmt=catalog.prepare("SELECT name FROM names WHERE game_id=?1").map_err(err)?;
+            names=stmt.query_map([candidate.game.id],|r|r.get::<_,String>(0)).map_err(err)?.collect::<rusqlite::Result<_>>().map_err(err)?;
+        }
+        let relevant:Vec<_>=names.iter().filter(|name|matching::title_aliases(name).contains(&query_key)||matching::compatible_title(name,&filename)).cloned().collect();
+        let alias_only=relevant.is_empty();
+        releases.push((candidate.game.id,if alias_only{names}else{relevant},alias_only));
+    }
+    // Prefer the original filename, identical regions, then a release covering
+    // every ROM region. Only then try compatible regions in filename order.
+    for mode in 0..3+2*region.len() {
+        let full_name=mode==0;
         if !full_name && region.is_empty() {
             break;
         }
         let mut matched = Vec::new();
-        for candidate in candidates.iter().filter(|c| c.exact) {
-            let mut stmt = catalog
-                .prepare("SELECT name FROM names WHERE game_id=?1")
-                .map_err(err)?;
-            let names = stmt
-                .query_map([candidate.game.id], |r| r.get::<_, String>(0))
-                .map_err(err)?
-                .collect::<rusqlite::Result<Vec<_>>>()
-                .map_err(err)?;
-            if names.iter().any(|name| {
+        for (id,names,alias_only) in &releases {
+            let rank=names.iter().filter(|name| {
                 if full_name {
                     !filename.is_empty() && normalize(name) == normalize(&filename)
+                } else if mode==1 {
+                    let other=rom_regions(name);
+                    other.len()==region.len() && region.iter().all(|r|other.contains(r))
+                } else if mode==2 {
+                    let other=rom_regions(name);
+                    region.iter().all(|r|other.contains(r))
                 } else {
-                    rom_regions(name).first() == region.first()
+                    let other=rom_regions(name);
+                    other.contains(&region[(mode-3)/2]) && ((mode-3)%2==1 || other.len()==1)
                 }
-            }) {
-                matched.push(candidate.game.id);
+            }).map(|name|(*alias_only,matching::release_rank(name,&filename))).min();
+            if let Some(rank)=rank {
+                matched.push((*id,rank));
             }
         }
+        if let Some(best)=matched.iter().map(|(_,rank)|*rank).min() {matched.retain(|(_,rank)|*rank==best);}
+        let matched:Vec<_>=matched.into_iter().map(|(id,_)|id).collect();
         if matched.len() == 1 {
             return Ok(matched.first().copied());
         }
         if matched.len() > 1 {
             let titles: HashSet<_> = candidates.iter().filter(|candidate| matched.contains(&candidate.game.id))
-                .map(|candidate| normalize(&candidate.game.title)).collect();
+                .map(|candidate| matching::title_aliases(&candidate.game.title).remove(0)).collect();
             if titles.len() == 1 || (full_name && (filename.contains('(') || filename.contains('['))) {
                 return Ok(matching::shortest_match(candidates, &matched));
             }
@@ -1339,6 +1362,81 @@ mod tests {
     }}"#;
 
     #[test]
+    fn genesis_compact_tags_match_the_complete_region_set_before_single_region_variants() {
+        let files=Sandbox::new();let mut conn=files.catalog();let source="Sega - Mega Drive - Genesis";
+        let fixture=files.job.directory.join("genesis-regions.json");
+        fs::write(&fixture,serde_json::json!({"schema_version":2,"system":source,"games":{
+            "US":{"entries":[{"name":"Alien 3 (USA)"}]},
+            "EU":{"entries":[{"name":"Alien 3 (Europe)"}]},
+            "JP":{"entries":[{"name":"Alien 3 (Japan)"}]},
+            "WORLD":{"entries":[{"name":"Alien 3 (World)"}]},
+            "US-EU":{"entries":[{"name":"Alien 3 (USA, Europe)"}]},
+            "JP-US":{"entries":[{"name":"Alien 3 (USA, Japan)"}]}
+        }}).to_string()).unwrap();
+        insert_platform(&mut conn,&files.job,source,&fixture,|_|()).unwrap();
+        for (tag,serial) in [("U","US"),("E","EU"),("J","JP"),("W","WORLD"),("UE","US-EU"),("JU","JP-US")] {
+            let path=format!("M:/Roms/Alien 3 ({tag}) (REV00) [!].gen");
+            let found=search_candidate(&conn,"Alien 3",source,&path).unwrap();
+            assert_eq!(regional_match(&conn,&found,&path).unwrap(),Some(token(&format!("{source}/{serial}"))),"{path}");
+        }
+        let found=search_catalog(&conn,"Alien 3",source).unwrap();
+        assert_eq!(regional_match(&conn,&found,"Alien 3 (JUE).gen").unwrap(),Some(token(&format!("{source}/JP"))),"when no release covers every region, prefer the first compatible region");
+    }
+
+    #[test]
+    fn ecco_compact_regions_accept_a_catalog_release_with_additional_regions_and_north_america_aliases() {
+        for north_america in ["USA", "North America"] {
+            let files=Sandbox::new();let mut conn=files.catalog();let source="Sega - Mega Drive - Genesis";
+            let fixture=files.job.directory.join("ecco-regions.json");
+            fs::write(&fixture,serde_json::json!({"schema_version":2,"system":source,"games":{
+                "G-4106-00":{"entries":[{"name":"Ecco the Dolphin (Japan)"}],"metadata_id":"ecco"},
+                "MK-1042-00":{"entries":[{"name":format!("Ecco the Dolphin ({north_america}, Europe, Korea) (En)")}],"metadata_id":"ecco"},
+                "SEQUEL":{"entries":[{"name":"Ecco the Dolphin II (USA, Europe)"}]}
+            },"metadata":{"ecco":{"labels":{"en":"Ecco the Dolphin","es":"Ecco the Dolphin"}}}}).to_string()).unwrap();
+            insert_platform(&mut conn,&files.job,source,&fixture,|_|()).unwrap();
+            for tag in ["UE", "U", "E", "USA, Europe", "North America, Europe"] {
+                let path=format!("M:/Roms/ECCO The Dolphin ({tag}) [!].gen");
+                let found=search_candidate(&conn,"ECCO The Dolphin",source,&path).unwrap();
+                assert_eq!(found.len(),2,"exclude the sequel from exact matches");
+                assert_eq!(regional_match(&conn,&found,&path).unwrap(),Some(token(&format!("{source}/MK-1042-00"))),"{path} / {north_america}");
+            }
+            let found=search_catalog(&conn,"Ecco the Dolphin",source).unwrap();
+            assert_eq!(regional_match(&conn,&found,"ECCO The Dolphin (J).gen").unwrap(),Some(token(&format!("{source}/G-4106-00"))));
+            let europe=token(&format!("{source}/MK-1042-00"));
+            conn.execute("UPDATE names SET name='Ecco the Dolphin (Europe)',normalized=?1 WHERE game_id=?2 AND name LIKE '%Korea%'",params![normalize("Ecco the Dolphin (Europe)"),europe]).unwrap();
+            let json:String=conn.query_row("SELECT details FROM games WHERE id=?1",[europe],|r|r.get(0)).unwrap();
+            let mut json:serde_json::Value=serde_json::from_str(&json).unwrap();json["_release_names"]=serde_json::json!(["Ecco the Dolphin (Europe)"]);
+            conn.execute("UPDATE games SET details=?1 WHERE id=?2",params![json.to_string(),europe]).unwrap();
+            assert_eq!(regional_match(&conn,&found,"ECCO The Dolphin (UE).gen").unwrap(),Some(europe),"try Europe when USA is unavailable");
+        }
+    }
+
+    #[test]
+    fn genesis_matching_uses_each_release_title_and_region_instead_of_unrelated_entries_in_the_same_record() {
+        let files=Sandbox::new();let mut conn=files.catalog();let source="Sega - Mega Drive - Genesis";
+        let fixture=files.job.directory.join("release-preferences.json");
+        fs::write(&fixture,serde_json::json!({"schema_version":2,"system":source,"games":{
+            "MK-1535-00":{"entries":[{"name":"Adventures of Batman & Robin, The (Europe)"},{"name":"Adventures of Batman & Robin, The (USA)"}],"metadata_id":"batman"},
+            "SHORT":{"entries":[{"name":"Battle Squadron (USA, Europe)"},{"name":"Road Rash (Japan)"}]},
+            "ROAD-BASE":{"entries":[{"name":"Road Rash (USA, Europe)"}],"metadata_id":"road"},
+            "BETA":{"entries":[{"name":"Road Rash (USA, Europe) (Beta)"}]},
+            "REV":{"entries":[{"name":"Road Rash (USA, Europe) (Rev A)"}]}
+        },"metadata":{"batman":{"labels":{"en":"The Adventures of Batman & Robin","es":"The Adventures of Batman & Robin"}},"road":{"labels":{"en":"Road Rash","es":"Road Rash"}}}}).to_string()).unwrap();
+        insert_platform(&mut conn,&files.job,source,&fixture,|_|()).unwrap();
+        for (rom,title,serial) in [
+            ("Adventures of Batman and Robin, The (U) [!].gen","Adventures of Batman and Robin, The","MK-1535-00"),
+            ("Road Rash (UE) [!].gen","Road Rash","ROAD-BASE"),
+            ("Road Rash (UE) (REV01) [!].gen","Road Rash","REV"),
+            ("Road Rash (J) [!].gen","Road Rash","SHORT"),
+        ] {
+            let found=search_candidate(&conn,title,source,rom).unwrap();
+            let exact:Vec<_>=found.iter().filter(|r|r.exact).collect();
+            let selected=if exact.len()==1{Some(exact[0].game.id)}else{regional_match(&conn,&found,rom).unwrap()};
+            assert_eq!(selected,Some(token(&format!("{source}/{serial}"))),"{rom}");
+        }
+    }
+
+    #[test]
     fn original_rom_names_take_priority_and_shortest_serial_breaks_exact_ties() {
         let files = Sandbox::new();
         let mut conn = files.catalog();
@@ -1373,7 +1471,7 @@ mod tests {
         assert_eq!(fallback.len(), 5);
         assert!(fallback.iter().all(|game| game.exact && game.source_key.is_some()));
         assert_eq!(regional_match(&conn, &fallback, "Renamed.iso").unwrap(), None);
-        assert_eq!(regional_match(&conn, &fallback, "Renamed (USA).iso").unwrap(), None);
+        assert_eq!(regional_match(&conn, &fallback, "Renamed (USA).iso").unwrap(), Some(token(&format!("{platform}/SLUS-20998"))));
         // Existing cached catalogs can be reused: this change needs no reindex/download.
         drop(conn);
         ensure_platform(&files.job, platform, |_| panic!("catalog should work offline")).unwrap();
@@ -1627,6 +1725,35 @@ mod tests {
         let artwork=Path::new(env!("CARGO_MANIFEST_DIR")).join("../target/repo-console-artwork.json");
         insert_console_artwork(&mut conn,"Sony - PlayStation 2",&artwork).unwrap();drop(conn);
         assert!(console_images(&files.job,"Sony - PlayStation 2").unwrap().iter().any(|i|i.kind=="logo"&&i.filename.ends_with(".svg")));
+    }
+    #[test]
+    #[ignore = "Optional filename-only audit using OPENCABINET_MATCH_AUDIT_DIRECTORY and OPENCABINET_MATCH_AUDIT_CATALOG; never modifies the library or ROMs"]
+    fn audits_import_matches_against_a_local_directory() {
+        let directory=PathBuf::from(std::env::var_os("OPENCABINET_MATCH_AUDIT_DIRECTORY").expect("ROM directory"));
+        let catalog=PathBuf::from(std::env::var_os("OPENCABINET_MATCH_AUDIT_CATALOG").expect("Downloaded catalog JSON"));
+        let data:serde_json::Value=serde_json::from_reader(BufReader::new(File::open(&catalog).unwrap())).unwrap();
+        let source=data["system"].as_str().unwrap();
+        let files=Sandbox::new();let mut conn=files.catalog();
+        insert_platform(&mut conn,&files.job,source,&catalog,|_|()).unwrap();
+        let mut paths:Vec<_>=fs::read_dir(directory).unwrap().map(|entry|entry.unwrap().path()).filter(|path|path.is_file()).collect();
+        paths.sort();let mut rows=Vec::new();let mut matched=0;
+        for path in paths {
+            let path=path.to_string_lossy();let title=crate::clean_rom_title(&matching::rom_name(&path));
+            let found=search_candidate(&conn,&title,source,&path).unwrap();
+            let exact:Vec<_>=found.iter().filter(|r|r.exact).collect();
+            let selected=if exact.len()==1{Some(exact[0].game.id)}else{regional_match(&conn,&found,&path).unwrap()};
+            if selected.is_some(){matched+=1;}
+            rows.push(serde_json::json!({"filename":matching::rom_name(&path),"title":title,"selected":selected,
+                "candidates":found.iter().map(|r|serde_json::json!({"id":r.game.id,"key":r.source_key,"title":r.game.title,"exact":r.exact,"regions":r.regions})).collect::<Vec<_>>()}));
+        }
+        let report=serde_json::json!({"matched":matched,"total":rows.len(),"rows":rows});
+        let output=Path::new(env!("CARGO_MANIFEST_DIR")).join("../target/import-match-audit.json");
+        fs::write(&output,serde_json::to_vec_pretty(&report).unwrap()).unwrap();
+        eprintln!("Matched {matched}/{}; report: {}",rows.len(),output.display());
+        assert!(!rows.is_empty());
+        if let Ok(minimum)=std::env::var("OPENCABINET_MATCH_AUDIT_MIN_MATCHES") {
+            assert!(matched>=minimum.parse::<usize>().unwrap(),"insufficient automatic matches; inspect the report");
+        }
     }
     #[test]
     fn explicit_personal_import_validates_copies_and_can_return_to_the_default_source() {

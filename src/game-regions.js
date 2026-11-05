@@ -2,7 +2,10 @@
   const names = { usa:"USA", us:"USA", europe:globalThis.OpenCabinetI18n.t("msg.fc30e2a579"), eur:globalThis.OpenCabinetI18n.t("msg.fc30e2a579"), eu:globalThis.OpenCabinetI18n.t("msg.fc30e2a579"), japan:globalThis.OpenCabinetI18n.t("msg.b69d7b129c"), jap:globalThis.OpenCabinetI18n.t("msg.b69d7b129c"), jp:globalThis.OpenCabinetI18n.t("msg.b69d7b129c"), world:"World", australia:"Australia", asia:"Asia", korea:globalThis.OpenCabinetI18n.t("msg.b31fd8308f"), brazil:globalThis.OpenCabinetI18n.t("msg.6641c5a7ff"), spain:globalThis.OpenCabinetI18n.t("msg.f85c9fe369"), france:globalThis.OpenCabinetI18n.t("msg.6b6251a34b"), germany:globalThis.OpenCabinetI18n.t("msg.7630decd1a"), italy:globalThis.OpenCabinetI18n.t("msg.a7ca3e3d75") };
   function guess(path = "") {
     const filename = path.split(/[\\/]/).pop();
-    const labels = [...filename.matchAll(/[([]([^\])]+)[\])]/g)].flatMap(match => match[1].split(/[,/]/)).map(token => names[token.trim().toLowerCase()]).filter(Boolean);
+    const aliases={u:'usa',e:'europe',j:'japan',w:'world',jpn:'japan',pal:'europe'};
+    const labels = [...filename.matchAll(/[([]([^\])]+)[\])]/g)].flatMap(match => match[1].split(/[,/;]/))
+      .flatMap(token=>{const tag=token.trim().toLowerCase();return /^(?:ue|ju|uj|je|ej|jue|jeu|uje|uej|eju|euj)$/.test(tag)?[...tag]:[tag];})
+      .map(tag=>names[aliases[tag]||tag]).filter(Boolean);
     return [...new Set(labels)].join(" / ");
   }
   function members(game) { return game.regions?.length ? game.regions : [{ label:guess(game.rom_path) || globalThis.OpenCabinetI18n.t("msg.e545b02d8d"), game }]; }

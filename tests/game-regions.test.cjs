@@ -25,6 +25,15 @@ const group=()=>({id:1,title:'Game',default_region_id:2,regions:editions()});
 const turn=()=>new Promise(resolve=>setImmediate(resolve));
 const recomp=()=>({id:3,title:'Native game',platform:'PS2',rom_path:'C:/Games/Native.exe',launch_directly:true,recomp:true,discs:[]});
 
+test('Genesis region labels expand compact tags without treating dump flags or language counts as regions',()=>{
+ const {api}=environment();
+ for(const [tag,expanded] of [['U','USA'],['E','Europe'],['J','Japan'],['W','World'],['UE','USA, Europe'],['JU','Japan, USA'],['JUE','Japan, USA, Europe']]) {
+  assert.equal(api.guess(`M:/Roms/Game (${tag}) (REV00) [!].gen`),api.guess(`Game (${expanded}).gen`));
+ }
+ assert.equal(api.guess('M:/Roms (Japan)/Game (M5) (En,Es) [c][!].gen'),'');
+ assert.equal(api.guess('Game [UE].gen'),api.guess('Game (USA, Europe).gen'));
+});
+
 test('Recomp merging requires compatible roots and proposes the emulated original as the main entry',async()=>{
  const {api,body}=environment();const original={...group(),platform:'PS2'};original.regions.forEach(item=>item.game.platform='PS2');
  assert.equal(api.canMergeRecomp([original,recomp()]),true);

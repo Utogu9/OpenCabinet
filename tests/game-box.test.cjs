@@ -1047,6 +1047,11 @@ test("Console styles preserve automatic regions and allow presets, custom geomet
   assert.equal(regionFor('C:/Games (Japan)/game (USA, Europe).iso'), 'north_america');
   assert.equal(regionFor('game (En,Es) (Europe).iso'), 'europe');
   assert.equal(regionFor('C:/Games (Europe)/game.iso'), null);
+  for(const [tag,region] of [['U','north_america'],['E','europe'],['J','japan'],['UE','north_america'],['JU','japan']]) {
+    assert.equal(regionFor(`Game (${tag}) (REV00) [!].gen`),region);
+  }
+  assert.equal(regionFor('Game [E] (M5).gen'),'europe');
+  assert.equal(regionFor('Game (W) (REV00) [!].gen'),null);
   assert.notEqual(profileFor('PS2', null, 'game (Europe).iso').color, profileFor('PS2', null, 'game (USA).iso').color);
   const settings = {base:{model:'switch',color:'#123456'},regions:{europe:{model:null,color:'#abcdef'},japan:{model:'custom',width:110,height:200,depth:25,spine_face:'top'}}};
   assert.equal(profileFor('New console', 0.8, '', settings).id, 'switch');
