@@ -1,5 +1,5 @@
 const {test}=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path'),http=require('node:http');
-test('The optional Switch rig opens both folds, keeps the cartridge fixed and releases its viewer',async t=>{
+test('The optional Switch rig opens both folds, keeps the cartridge fixed and releases its viewer',{timeout:600000},async t=>{
   const root=path.resolve(__dirname,'..');
   if(!fs.existsSync(path.join(root,'src/models/switch/case.glb'))){t.skip('The optional Switch model is not available.');return;}
   let chromium;try{({chromium}=require('playwright-core'));}catch{t.skip('Optional browser test requires playwright-core.');return;}
@@ -25,6 +25,8 @@ test('The optional Switch rig opens both folds, keeps the cartridge fixed and re
   await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));t.after(()=>new Promise(resolve=>{server.closeAllConnections();server.close(resolve);}));
   const browser=await chromium.launch({executablePath:executable,headless:true});t.after(()=>browser.close());
   const page=await browser.newPage(),errors=[];
+  page.setDefaultTimeout(process.env.CI?120000:30000);
+  const settle=()=>page.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))));
   page.on('pageerror',error=>errors.push(error.message));
   page.on('console',message=>{if(message.type()==='error')errors.push(message.text());});
   await page.goto(`http://127.0.0.1:${server.address().port}/tests/fixtures/three-switch.html`);
@@ -52,12 +54,14 @@ test('The optional Switch rig opens both folds, keeps the cartridge fixed and re
     assert.ok(sheets[kind][0]>sheets.shell[0]-.001,kind+' must not flare out behind the closed case');
     assert.ok(sheets[kind][1]<sheets.shell[1]+.001,kind+' must not flare out in front of the closed case');
   }
-  await page.evaluate(()=>viewer.setOpen(true));await page.waitForTimeout(700);
+  await page.evaluate(()=>viewer.setOpen(true));
+  await page.waitForFunction(()=>debug.actions.every(action=>Math.abs(action.time-action.getClip().duration)<1e-6));
   const opened=await pose();
   assert.ok(opened.front.some((value,i)=>Math.abs(value-closed.front[i])>.005),'the front hinge must move to the flat pose');
   opened.card.forEach((value,i)=>assert.ok(Math.abs(value-closed.card[i])<1e-6,'the cartridge stays fixed relative to the rear panel'));
   assert.equal(await page.evaluate(()=>viewer.isOpen),true);
-  await page.evaluate(()=>viewer.setOpen(false,false));await page.waitForTimeout(50);
+  await page.evaluate(()=>viewer.setOpen(false,false));
+  await page.waitForFunction(()=>debug.actions.every(action=>Math.abs(action.time)<1e-6));
   (await pose()).front.forEach((value,i)=>assert.ok(Math.abs(value-closed.front[i])<1e-6));
   const canvasCount=await page.locator('#stage canvas').count();
   spineBytes=Buffer.from((await page.evaluate(()=>{
@@ -70,7 +74,7 @@ test('The optional Switch rig opens both folds, keeps the cartridge fixed and re
     window.redCover=image.toDataURL();select(2,[{kind:'cover',path:redCover}]);
   });
   await page.waitForFunction(()=>debug.materials.get('Cover Outside').map?.image?.width===2048);
-  await page.waitForTimeout(100);
+  await settle();
   assert.equal(await page.locator('#stage canvas').count(),canvasCount);
   await page.evaluate(()=>{
     const solid=(color,width,height)=>{const image=document.createElement('canvas');image.width=width;image.height=height;
@@ -118,7 +122,7 @@ test('The optional Switch rig opens both folds, keeps the cartridge fixed and re
   assert.deepEqual(await page.evaluate(()=>changedMaps),['Cover Outside'],'Applying a spine preserves unrelated GPU textures');
   await page.evaluate(()=>{viewer.setRotationLock('x');viewer.zoom(.1);viewer.showBack();});
   assert.equal(await page.evaluate(()=>viewer.rotationLock),'x');
-  await page.evaluate(()=>viewer.setOpen(true,false));await page.waitForTimeout(100);
+  await page.evaluate(()=>viewer.setOpen(true,false));await settle();
   await page.evaluate(()=>{
     window.savedSession={model:debug.model,geometry:debug.meshes[0].geometry,renderer:debug.renderer,
       outside:debug.materials.get('Cover Outside').map,environment:debug.scene.environment};
@@ -167,7 +171,7 @@ test('The optional Switch rig opens both folds, keeps the cartridge fixed and re
   assert.ok(openingLedges.left>0&&openingLedges.right>0,'Both authored opening ledges use the solid shell');
   assert.equal(openingLedges.clear,0,'Neither opening ledge is assigned to the translucent inlay sheet');
   await page.waitForFunction(()=>debug.materials.get('Cover Inside').map?.image);
-  await page.evaluate(()=>{viewer.reset();viewer.rotate(-80,0);});await page.waitForTimeout(100);
+  await page.evaluate(()=>{viewer.reset();viewer.rotate(-80,0);});await settle();
   const lighting=await page.evaluate(()=>{
     const targets=['Switch 2 Shell','Switch 2 Inner Sheet','Switch 2 Cartridge'].map(name=>debug.materials.get(name));
     function measure(){
@@ -186,9 +190,9 @@ test('The optional Switch rig opens both folds, keeps the cartridge fixed and re
   assert.ok(lighting.after.median<lighting.before.median,'The same red pigment receives less diffuse environment illumination');
   assert.ok(lighting.after.p95<250,'The red shell keeps its highlights below channel clipping');
   await page.locator('#stage').screenshot({path:'target/switch2-solid-side.png'});
-  await page.evaluate(()=>{viewer.reset();viewer.setOpen(true,false);});await page.waitForTimeout(100);
+  await page.evaluate(()=>{viewer.reset();viewer.setOpen(true,false);});await settle();
   await page.locator('#stage').screenshot({path:'target/switch2-solid-inside.png'});
-  await page.evaluate(()=>viewer.zoom(-.35));await page.waitForTimeout(100);
+  await page.evaluate(()=>viewer.zoom(-.35));await settle();
   await page.locator('#stage').screenshot({path:'target/switch2-solid-inside-far.png'});
   const visibleInlay=await page.evaluate(()=>{
     debug.renderer.render(debug.scene,debug.camera);const gl=debug.renderer.getContext(),w=gl.drawingBufferWidth,h=gl.drawingBufferHeight,pixels=new Uint8Array(w*h*4);
@@ -200,7 +204,7 @@ test('The optional Switch rig opens both folds, keeps the cartridge fixed and re
   await page.evaluate(()=>{
     Object.assign(document.getElementById('stage').style,{width:'320px',height:'250px'});
     viewer.reset();viewer.setOpen(true,false);viewer.rotate(17,0);viewer.zoom(-.35);
-  });await page.waitForTimeout(100);
+  });await settle();
   await page.locator('#stage').screenshot({path:'target/switch2-small-inlay-45.png'});
   const smallInlay=await page.evaluate(()=>{
     debug.renderer.render(debug.scene,debug.camera);const gl=debug.renderer.getContext(),pixels=new Uint8Array(gl.drawingBufferWidth*gl.drawingBufferHeight*4);
