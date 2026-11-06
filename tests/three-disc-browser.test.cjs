@@ -22,6 +22,7 @@ test('Optical discs slide beside the case, share one renderer and respond indepe
   t.diagnostic(platform);
   await page.goto(`http://127.0.0.1:${server.address().port}/tests/fixtures/three-disc.html?platform=${encodeURIComponent(platform)}`);
   await page.waitForFunction(()=>window.debug?.renderer.info.render.calls>0&&viewer.hasDisc&&parts().some(mesh=>mesh.material.map),{},{timeout:60000});
+  const initialPlanes=await page.evaluate(()=>({near:debug.camera.near,far:debug.camera.far}));
   assert.equal(await page.evaluate(()=>viewer.removeDisc()),false,'closed boxes retain their discs');
   await page.evaluate(async()=>{viewer.setOpen(true,false);await settle();});
   await page.evaluate(async()=>{viewer.zoom(10);await settle();});await checkClipPlanes(`${platform}, inserted disc`);
@@ -114,6 +115,13 @@ test('Optical discs slide beside the case, share one renderer and respond indepe
   assert.equal(await page.evaluate(()=>viewer.isDiscRemoved&&!textureDisposed),true,'the original artwork remains alive');
   await page.locator('.game-box-disc-tools button').last().click();await page.waitForFunction(()=>!viewer.isDiscRemoved);
   assert.equal(await page.evaluate(()=>parts().every(mesh=>mesh.visible)),true);
+  await page.evaluate(async()=>{viewer.zoom(10);await settle();});await checkClipPlanes(`${platform}, zoom after reinsertion`);
+  await page.evaluate(async()=>{viewer.setOpen(false,false);await settle();});await checkClipPlanes(`${platform}, closed-case zoom after reinsertion`);
+  await page.evaluate(async()=>{viewer.rotate(80,0);await settle();});await checkClipPlanes(`${platform}, oblique closed-case zoom after reinsertion`);
+  if(platform==='Sony PlayStation'||platform==='Sega Dreamcast')assert.deepEqual(await page.evaluate(()=>({near:debug.camera.near,far:debug.camera.far})),initialPlanes,'temporary detached-disc clipping must not leak into the normal jewel viewer');
+  await page.evaluate(async()=>{viewer.rotate(-80,0);await settle();});
+  await page.evaluate(async()=>{viewer.setOpen(true,false);await settle();});
+  await page.evaluate(async()=>{viewer.zoom(-.7);await settle();});
   await page.evaluate(()=>{viewer.removeDisc();viewer.examineDisc();select(2,'blue');});
   assert.equal(await page.evaluate(()=>debug.discInteraction.object.visible),false,'changing games removes the detached object from view');
   await page.waitForFunction(()=>parts().some(mesh=>mesh.material.map));

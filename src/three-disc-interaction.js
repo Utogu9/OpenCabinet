@@ -28,7 +28,7 @@ export function createDiscInteraction({host,reference,root,scene,camera,meshes,g
   const originalVisibility=new Map(),floating=new THREE.Group(),centered=new THREE.Group();
   floating.name='Detached Disc';floating.visible=false;floating.add(centered);scene.add(floating);
   const raycaster=new THREE.Raycaster(),pointer=new THREE.Vector2();
-  let removed=false,focused='box',tools=null,disposed=false,transition=null,amount=0,lastBounds=null,discBounds=null;
+  let removed=false,focused='box',tools=null,disposed=false,transition=null,amount=0,lastBounds=null,discBounds=null,clipOverride=null;
   let discZoom=1,boxZoom=1,caseX=0,targetX=0,discRadius=0,sourceOrigin=new THREE.Vector3(),returnRotation=null,side='front';
   function button(key,action) {
     const node=document.createElement('button');node.type='button';node.className='secondary-btn';node.textContent=t(key);
@@ -52,7 +52,13 @@ export function createDiscInteraction({host,reference,root,scene,camera,meshes,g
     if(removed)host.dataset.discRemoved='true';else {delete host.dataset.discRemoved;delete host.dataset.discFocus;}
     schedule();
   }
+  function restoreClipping() {
+    if(!clipOverride)return;
+    const {near,far}=clipOverride;clipOverride=null;
+    if(camera.near!==near||camera.far!==far){camera.near=near;camera.far=far;camera.updateProjectionMatrix();}
+  }
   function restore() {
+    restoreClipping();
     for(const [mesh,visible] of originalVisibility)mesh.visible=visible;
     originalVisibility.clear();centered.clear();floating.visible=false;floating.position.set(0,0,0);floating.quaternion.identity();floating.scale.setScalar(1);root.position.set(0,0,0);delete host.dataset.discAnimation;
     removed=false;focused='box';transition=null;amount=0;discZoom=boxZoom=1;returnRotation=null;refresh();
@@ -129,7 +135,9 @@ export function createDiscInteraction({host,reference,root,scene,camera,meshes,g
         const node=button(key,()=>{closeMenu();action();});node.className='dropdown-item';node.setAttribute('role','menuitem');menu.appendChild(node);items.push(node);
       }
     },
-    beforeFrame(){root.position.set(0,0,0);},
+    // Give the owner its original planes before it computes this frame. In
+    // particular, the jewel viewer keeps fixed planes and won't reset them.
+    beforeFrame(){restoreClipping();root.position.set(0,0,0);},
     layout(time,bounds) {
       lastBounds=bounds;if(!removed||!bounds)return;
       if(transition){transition.start??=time;const t=Math.min(1,(time-transition.start)/760);amount=THREE.MathUtils.lerp(transition.from,transition.to,t);
@@ -153,6 +161,7 @@ export function createDiscInteraction({host,reference,root,scene,camera,meshes,g
         }
       }
       const fit=distance*1.12;camera.position.z=THREE.MathUtils.lerp(camera.position.z,Math.max(camera.position.z,fit),amount);
+      clipOverride??={near:camera.near,far:camera.far};
       camera.near=Math.max(.05,(camera.position.z-maxZ)*.25);camera.far=Math.max(camera.near+10,camera.position.z-minZ+25);camera.updateProjectionMatrix();
       root.scale.multiplyScalar(1+(boxZoom-1)*amount);
       host.dataset.discAnimation=transition?'moving':'ready';host.dataset.discFocus=focused;
