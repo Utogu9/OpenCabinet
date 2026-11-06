@@ -194,7 +194,13 @@
       open.disabled=!node._viewer?.canOpen;open.setAttribute('role','menuitem');
       const read=button(t('msg.297ba61d09'),()=>{closeBoxMenu();node._viewer?.readManual?.();});
       read.disabled=!node._viewer?.isOpen||node._manualState?.status!=='ready';read.setAttribute('role','menuitem');
-      menu.append(open,read);dialog.append(menu);
+      menu.append(open,read);
+      if(node._viewer?.hasDisc&&(node._viewer.isOpen||node._viewer.isDiscRemoved)){
+        for(const [key,method] of node._viewer.isDiscRemoved?[['disc.examine','examineDisc'],['disc.putBack','returnDisc']]:[['disc.remove','removeDisc'],['disc.examine','examineDisc']]){
+          const item=button(t(key),()=>{closeBoxMenu();node._viewer?.[method]?.();});item.setAttribute('role','menuitem');menu.append(item);
+        }
+      }
+      dialog.append(menu);
       menu.style.left=`${Math.max(8,Math.min(event.clientX,window.innerWidth-menu.offsetWidth-8))}px`;
       menu.style.top=`${Math.max(8,Math.min(event.clientY,window.innerHeight-menu.offsetHeight-8))}px`;
       (open.disabled?read:open).focus({preventScroll:true});

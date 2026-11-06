@@ -3060,4 +3060,7 @@ html[data-i18n-pending] body { visibility: hidden; }
 .play-actions-section { margin-top: 22px; }
 .play-random-result { text-align: center; padding: 18px; }
 .sofa-playlist { max-width: 230px; }
+.game-box-disc-tools { position: absolute; bottom: 8px; left: 8px; right: 8px; z-index: 8; display: flex; flex-wrap: wrap; justify-content: center; gap: 6px; }
+.game-box-disc-tools button { padding: 5px 9px; font-size: .78rem; background: color-mix(in srgb, var(--bg-secondary, #20242d) 88%, transparent); }
+.game-box-disc-tools button[aria-pressed="true"] { border-color: #ffffff80; background: color-mix(in srgb, var(--bg-secondary, #20242d) 75%, #fff); }
 @media (max-width: 700px) { .play-columns,.play-filter-grid { grid-template-columns: 1fr; } }

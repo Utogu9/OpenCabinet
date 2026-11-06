@@ -1796,6 +1796,19 @@
     "metadata.region.hongKong": "Hong Kong",
     "metadata.region.asia": "Asia",
     "metadata.region.australia": "Australia",
-    "metadata.region.brazil": "Brasil"
+    "metadata.region.brazil": "Brasil",
+    "disc.remove": "Sacar disco",
+    "disc.examine": "Examinar disco",
+    "disc.putBack": "Volver a colocar el disco",
+    "disc.focusBox": "Caja",
+    "disc.focusDisc": "Disco",
+    "disc.controls": "Seleccioná la caja o el disco para girar y acercar ese objeto.",
+    "disc.flip": "Dar vuelta el disco",
+    "disc.finish": "Reverso del disco",
+    "disc.silver": "Plateado",
+    "disc.black": "Negro (CD de PlayStation)",
+    "disc.blue": "Azul (CD de PlayStation 2)",
+    "disc.gold": "Dorado",
+    "disc.invalidFinish": "El acabado del reverso del disco no es válido."
   }
 }

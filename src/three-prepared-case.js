@@ -2,7 +2,7 @@ import * as THREE from './vendor/three/three.module.js';
 import { mergeGeometries } from './vendor/three/BufferGeometryUtils.js';
 import { clearCasePlastic } from './three-case-plastic.js';
 import { configureAcrylicOptics } from './three-box-relief.js';
-import { createDiscMaterial } from './three-disc-material.js';
+import { createDiscMaterial, prepareDiscReverse } from './three-disc-material.js';
 import { loadPreparedModel } from './three-prepared-model.js';
 import { longboxArtworkUV } from './three-box-artwork.js';
 
@@ -84,6 +84,7 @@ function attachCase(scene,animations,manifest) {
     else {
       mesh.material=byName.get(mesh.userData.caseMaterial);
       if(!mesh.material)throw Error('Unsupported prepared case material: '+mesh.userData.caseMaterial);
+      if(mesh.material===silver)prepareDiscReverse(mesh.geometry);
       if(longbox&&mesh.material===cover)longboxArtworkUV(mesh.geometry,manifest.spine_fraction);
     }
   });
@@ -182,10 +183,10 @@ function attachCase(scene,animations,manifest) {
     Object.assign(keyLight.shadow.camera,{left:-240,right:240,top:240,bottom:-240,near:1,far:850});
     keyLight.shadow.camera.updateProjectionMatrix();keyLight.shadow.bias=-.00015;keyLight.shadow.normalBias=.18;
   }
-  function beforeRender({renderer,root,opened}) {
+  function beforeRender({renderer,root,opened,discRemoved=false}) {
     shadowReceivers.forEach(mesh=>mesh.visible=opened>0);
     shadowCasters.forEach(mesh=>mesh.visible=opened>0);
-    const key=[...root.quaternion.toArray(),...root.scale.toArray(),opened,!!booklet?.group.visible,clipLift].join(',');
+    const key=[...root.quaternion.toArray(),...root.scale.toArray(),...root.position.toArray(),opened,!!booklet?.group.visible,clipLift,discRemoved].join(',');
     if(key!==lightingKey){lightingKey=key;renderer.shadowMap.needsUpdate=true;}
   }
   function releaseLighting() {

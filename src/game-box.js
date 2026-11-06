@@ -113,6 +113,7 @@
     }
     if (/^#[\da-f]{6}$/i.test(style.color || "")) profile.color = style.color;
     if (["left", "top"].includes(style.spine_face)) profile.spineFace = style.spine_face;
+    if (["silver", "black", "blue", "gold"].includes(style.disc_finish)) profile.discFinish = style.disc_finish;
     return describeCase(profile, name);
   }
 

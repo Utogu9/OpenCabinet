@@ -2,7 +2,7 @@ import * as THREE from './vendor/three/three.module.js';
 import { mergeGeometries } from './vendor/three/BufferGeometryUtils.js';
 import { clearCasePlastic } from './three-case-plastic.js';
 import { wallShadowGeometry, configureAcrylicOptics, maskClearPanels } from './three-box-relief.js';
-import { createDiscMaterial } from './three-disc-material.js';
+import { createDiscMaterial, prepareDiscReverse } from './three-disc-material.js';
 
 // CSS faces use X right, Y down, Z out of the cover. Convert both the local
 // plane and its transform to Three's Y-up convention, keeping millimetres.
@@ -310,6 +310,7 @@ export function convertLegacyCase(sourceFactory,templateKey) {
     if(entry.material==='Case Acrylic')maskClearPanels(geometry,[-1,1].map(side=>
       new THREE.Box3(new THREE.Vector3(side*w/2-1.5,-h/2-1.5,-d/2-1.5),new THREE.Vector3(side*w/2+1.5,h/2+1.5,d/2))));
     const mesh=new THREE.Mesh(geometry,byName.get(entry.material));mesh.name=entry.key;parts[entry.part].add(mesh);
+    if(mesh.material===silver)prepareDiscReverse(geometry);
     mesh.userData.sourceFaces=entry.count;
     if(entry.category==='clips')mesh.userData.caseClip=true;
     if(entry.category==='clips')clipMeshes.push(mesh);

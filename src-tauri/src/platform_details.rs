@@ -17,6 +17,7 @@ struct BoxStyle {
     height: Option<f64>,
     depth: Option<f64>,
     spine_face: Option<String>,
+    disc_finish: Option<String>,
 }
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
@@ -36,6 +37,9 @@ impl BoxSettings {
             return Err(crate::i18n::text("msg.7fdb51f762").into());
         }
         for style in std::iter::once(&self.base).chain(self.regions.values()) {
+            if style.disc_finish.as_deref().is_some_and(|finish|!["silver","black","blue","gold"].contains(&finish)) {
+                return Err(crate::i18n::text("disc.invalidFinish").into());
+            }
             if let Some(model) = style.model.as_deref() {
                 if ![
                     "dvd",

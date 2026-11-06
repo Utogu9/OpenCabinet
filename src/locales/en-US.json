@@ -1796,6 +1796,19 @@
     "metadata.region.hongKong": "Hong Kong",
     "metadata.region.asia": "Asia",
     "metadata.region.australia": "Australia",
-    "metadata.region.brazil": "Brazil"
+    "metadata.region.brazil": "Brazil",
+    "disc.remove": "Remove disc",
+    "disc.examine": "Examine disc",
+    "disc.putBack": "Put disc back",
+    "disc.focusBox": "Box",
+    "disc.focusDisc": "Disc",
+    "disc.controls": "Select the box or disc to rotate and zoom that object.",
+    "disc.flip": "Flip disc",
+    "disc.finish": "Disc underside",
+    "disc.silver": "Silver",
+    "disc.black": "Black (PlayStation CD)",
+    "disc.blue": "Blue (PlayStation 2 CD)",
+    "disc.gold": "Gold",
+    "disc.invalidFinish": "Invalid disc underside finish."
   }
 }

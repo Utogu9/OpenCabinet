@@ -252,12 +252,13 @@
       },
       clearArtwork,
       get canOpen() { return inner.canOpen; }, get isOpen() { return inner.isOpen; }, get rotationLock() { return inner.rotationLock; },
+      get hasDisc(){return inner.hasDisc??false;},get isDiscRemoved(){return inner.isDiscRemoved??false;},
       setOpen(value, animate = true) { if (value) promote(); return inner.setOpen(value, animate); },
       toggleOpen() { return api.setOpen(!inner.isOpen); },
       clear() { clearArtwork(); inner.clear(); source = model = geometryKey = null; bindings = []; },
       dispose() { api.clear(); disposed = true; host.removeEventListener('keydown', openKey, true); inner.dispose(); },
     };
-    for (const name of ['reset','zoom','rotate','toggleSide','showBack','setRotationLock','readManual','returnManual','refreshManual','suspend','resume']) api[name] = (...args) => inner[name]?.(...args);
+    for (const name of ['reset','zoom','rotate','toggleSide','showBack','setRotationLock','readManual','returnManual','refreshManual','suspend','resume','removeDisc','returnDisc','examineDisc']) api[name] = (...args) => inner[name]?.(...args);
     return api;
   }
   async function cachedImage(path, signal, options) {

@@ -42,6 +42,21 @@ pub fn read(conn: &Connection, id: i32) -> Result<Option<BoxSettings>, String> {
 mod tests {
     use super::*;
     #[test]
+    fn disc_reverse_finishes_validate_persist_and_keep_older_settings_compatible() {
+        let conn=Connection::open_in_memory().unwrap();
+        conn.execute_batch("CREATE TABLE games(id INTEGER PRIMARY KEY);INSERT INTO games VALUES(1);").unwrap();init(&conn).unwrap();
+        let old:BoxSettings=serde_json::from_str(r#"{"base":{"model":"dvd"}}"#).unwrap();old.validate().unwrap();
+        for finish in ["silver","black","blue","gold"] {
+            let settings:BoxSettings=serde_json::from_value(serde_json::json!({"base":{"disc_finish":finish},"regions":{"japan":{"disc_finish":"blue"}}})).unwrap();
+            save(&conn,1,Some(&settings)).unwrap();
+            let saved=serde_json::to_value(read(&conn,1).unwrap()).unwrap();
+            assert_eq!(saved["base"]["disc_finish"],finish);assert_eq!(saved["regions"]["japan"]["disc_finish"],"blue");
+        }
+        let invalid:BoxSettings=serde_json::from_str(r#"{"base":{"disc_finish":"unknown"}}"#).unwrap();
+        assert!(save(&conn,1,Some(&invalid)).is_err());
+        assert_eq!(serde_json::to_value(read(&conn,1).unwrap()).unwrap()["base"]["disc_finish"],"gold");
+    }
+    #[test]
     fn game_box_patches_validate_reset_and_keep_omitted_settings() {
         let conn=Connection::open_in_memory().unwrap();
         conn.execute_batch("CREATE TABLE games(id INTEGER PRIMARY KEY);INSERT INTO games VALUES(1),(2);").unwrap();init(&conn).unwrap();

@@ -23,6 +23,15 @@ function editor(prefix = 'platform') {
   return {ui,field,get,change,previews,api:context.OpenCabinet3D,cleared:()=>cleared};
 }
 
+test('Disc reverse choices stay in the game draft, inherit console defaults and keep regional overrides separate',()=>{
+ const app=editor('game');app.ui.open(null,'PS2',[],{base:{disc_finish:'silver'}});
+ app.change('disc-finish','blue');assert.equal(app.ui.getValue().base.disc_finish,'blue');
+ assert.equal(app.api.profileFor('PS2',null,'Game (USA).iso',app.previews.at(-1).settings).discFinish,'blue');
+ app.change('region','japan');app.field('inherit').checked=false;app.field('inherit').onchange();app.change('disc-finish','gold');
+ assert.equal(app.ui.getValue().regions.japan.disc_finish,'gold');assert.equal(app.ui.getValue().base.disc_finish,'blue');
+ app.change('region','base');app.get('btn-reset-game-box').onclick();assert.equal(app.ui.getValue().base.disc_finish,undefined);
+});
+
 test('Box editor offers presets and keeps regional changes independent, inherited until enabled',()=>{
   const app=editor();app.ui.open(null,'New console',[]);
   assert.ok(app.field('model').children.some(option=>option.value==='dvd'));

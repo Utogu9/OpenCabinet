@@ -6,6 +6,7 @@
     const get = id => document.getElementById(`${prefix}-box-${id}`);
     const region = get("region"), inherit = get("inherit"), model = get("model"), spine = get("spine");
     const color = get("color"), autoColor = get("auto-color"), dimensions = [get("width"), get("height"), get("depth")];
+    const discFinish=get("disc-finish");
     const section = get("settings");
     let settings = { base: {}, regions: {} }, scope = "base", platform = "", games = [], busy = false;
     let active = false, inheritedSettings = null;
@@ -21,7 +22,7 @@
       get("inherit-row").classList.toggle("hidden", scope === "base");
       get("fields").classList.toggle("hidden", inherited);
       get("dimensions").classList.toggle("hidden", model.value !== "custom");
-      [model, spine, autoColor].forEach(control => { control.disabled = busy || inherited; });
+      [model, spine, autoColor,discFinish].filter(Boolean).forEach(control => { control.disabled = busy || inherited; });
       color.disabled = busy || inherited || autoColor.checked;
       dimensions.forEach(control => { control.disabled = busy || inherited || model.value !== "custom"; control.required = !control.disabled; });
       region.disabled = busy; inherit.disabled = busy;
@@ -36,6 +37,7 @@
       if (scope !== "base" && inherit.checked) delete settings.regions[scope];
       else {
         const style = { model: model.value || null, spine_face: spine.value || null, color: autoColor.checked ? null : color.value };
+        if(discFinish?.value)style.disc_finish=discFinish.value;
         if (model.value === "custom") dimensions.forEach((control, i) => { style[["width", "height", "depth"][i]] = control.value === "" ? null : Number(control.value); });
         if (scope === "base") settings.base = style; else settings.regions[scope] = style;
       }
@@ -48,6 +50,7 @@
       const style = (scope === "base" ? settings.base : settings.regions[scope]) || settings.base;
       inherit.checked = scope !== "base" && !settings.regions[scope];
       model.value = style.model || ""; spine.value = style.spine_face || "";
+      if(discFinish)discFinish.value=style.disc_finish||"";
       autoColor.checked = !style.color;
       const automatic = OpenCabinet3D.profileFor(platform, null, scope === "base" ? "Preview.rom" : `Preview (${regionTags[scope]}).rom`, OpenCabinet3D.resolveSettings(inheritedSettings, { base: style }));
       color.value = style.color || automatic.color;
@@ -59,7 +62,7 @@
       if (inherit.checked) delete settings.regions[scope]; else settings.regions[scope] = copy(settings.base);
       display();
     };
-    [model, spine, autoColor, color, ...dimensions].forEach(control => { control.oninput = read; control.onchange = read; });
+    [model, spine, autoColor, color, discFinish, ...dimensions].filter(Boolean).forEach(control => { control.oninput = read; control.onchange = read; });
     document.getElementById(`btn-reset-${prefix}-box`).onclick = () => {
       if (scope === "base") settings.base = {}; else delete settings.regions[scope];
       display();

@@ -6,6 +6,7 @@ import { chooseArtwork, longboxInsertWindows } from './three-box-artwork.js';
 import { configureAcrylicOptics } from './three-box-relief.js';
 import { createSwitchShells } from './three-switch-shell.js';
 import { prepareRenderGroup, createRenderLease, releaseSceneGpu, createFrameHold } from './three-box-session.js';
+import { createDiscInteraction, discFinish, applyDiscFinish } from './three-disc-interaction.js';
 
 // Cache source bytes; individual viewers own their meshes, textures and animations.
 const sourceTasks=new Map();
@@ -144,6 +145,7 @@ export async function createModelViewer(host,options={},definition) {
   for(let i=0;i<=4;i++){pose(i/4);frames.push(new THREE.Box3().setFromObject(model,true));}
   pose(0);
   let game=null,profile=null,key=null,revision=0,controller=null,disposed=false,renderLease=null;
+  const discInteraction=createDiscInteraction({host,reference:contents,root,scene,camera,meshes,getGame:()=>game,getProfile:()=>profile,isOpen:()=>opened>=.98,schedule,getRotationLock:()=>rotationLock});
   const frameHold=createFrameHold(renderer,host,()=>renderer.render(scene,camera));
   let frame=null,opened=0,openTarget=false,animation=null,zoom=1,side='front',rotationLock='free',drag=null,menu=null;
   let rotation=initialRotation(),width=0,height=0,surfaceScale=1;
@@ -204,6 +206,7 @@ export async function createModelViewer(host,options={},definition) {
   function notify(){onOpenState({canOpen:!!game&&definition.canOpen!==false,open:openTarget});}
   function render(time) {
     frame=null;if(disposed||renderLease?.paused||renderLease?.lost||!game||!host.clientWidth||!host.clientHeight)return;
+    discInteraction.beforeFrame();
     const nextWidth=host.clientWidth,nextHeight=host.clientHeight,surface=canvasViewport(nextWidth,nextHeight,zoom,options.carousel);
     if(width!==nextWidth||height!==nextHeight||surface.scale!==surfaceScale) {
       width=nextWidth;height=nextHeight;surfaceScale=surface.scale;
@@ -241,7 +244,7 @@ export async function createModelViewer(host,options={},definition) {
     const far=preciseDepth?Math.max(near+10,cameraDistance-minDepth+25):3000;
     if(camera.near!==near||camera.far!==far){camera.near=near;camera.far=far;camera.updateProjectionMatrix();}
     camera.position.set(0,0,cameraDistance);camera.lookAt(0,0,0);
-    procedural?.beforeRender?.({renderer,root,opened});renderer.render(scene,camera);frameHold.release();
+    discInteraction.layout(time,bounds);procedural?.beforeRender?.({renderer,root,opened,discRemoved:discInteraction.removed});renderer.render(scene,camera);frameHold.release();
     retiredTextures.splice(0).forEach(texture=>texture.dispose());
     host.dataset.triangles=String(renderer.info.render.triangles);host.dataset.drawCalls=String(renderer.info.render.calls);
   }
@@ -393,6 +396,7 @@ export async function createModelViewer(host,options={},definition) {
     if(!drag||(event&&drag.id!==event.pointerId))return;
     const previous=drag,id=drag.id;drag=null;host.classList.remove('dragging');if(host.hasPointerCapture?.(id))host.releasePointerCapture(id);
     if(event?.type==='pointerup'&&previous.manual&&!previous.moved)api.readManual();
+    else if(event?.type==='pointerup'&&previous.disc&&!previous.moved)api.removeDisc();
   }
   function closeMenu(focus=false){menu?.remove();menu=null;if(focus)host.focus({preventScroll:true});}
   listen(host,'contextmenu',event=>{
@@ -403,6 +407,7 @@ export async function createModelViewer(host,options={},definition) {
       button.setAttribute('role','menuitemradio');button.setAttribute('aria-checked',String(rotationLock===mode));
       button.addEventListener('click',()=>{api.setRotationLock(mode);closeMenu(true);});menu.appendChild(button);items.push(button);
     }
+    discInteraction.appendMenu(menu,items,()=>closeMenu(true));
     if(manual&&options.onManualCoverChange) {
       const heading=document.createElement('p');heading.className='game-box-menu-heading';heading.textContent=globalThis.OpenCabinetI18n.t('msg.26b484bdcb');menu.appendChild(heading);
       for(const [mode,key] of [['auto','msg.b803f24d52'],['full','msg.b6616b1d67'],['right','msg.dc5f5de445'],['left','msg.bd88b698c2']]) {
@@ -423,13 +428,14 @@ export async function createModelViewer(host,options={},definition) {
   listen(document,'pointerdown',event=>{if(menu&&!menu.contains(event.target))closeMenu();});
   listen(host,'pointerdown',event=>{
     if(event.button!==0||!game||menu?.contains(event.target))return;event.preventDefault();host.focus({preventScroll:true});
-    const rect=host.getBoundingClientRect();drag={id:event.pointerId,rect,point:arcballPoint(event,rect),x:event.clientX,y:event.clientY,startX:event.clientX,startY:event.clientY,moved:false,manual:hitsManual(event)};
+    const media=discInteraction.select(event),rect=discInteraction.interactionRect(host.getBoundingClientRect());drag={id:event.pointerId,rect,point:arcballPoint(event,rect),x:event.clientX,y:event.clientY,startX:event.clientX,startY:event.clientY,moved:false,media,manual:!media&&hitsManual(event),disc:!media&&discInteraction.hit(event)};
     host.setPointerCapture(event.pointerId);host.classList.add('dragging');
   });
   listen(host,'pointermove',event=>{
     if(!drag||drag.id!==event.pointerId)return;const next=arcballPoint(event,drag.rect);
     drag.moved ||= Math.hypot(event.clientX-drag.startX,event.clientY-drag.startY)>6;
     if(drag.manual&&!drag.moved)return;
+    if(drag.media){discInteraction.drag(drag.point,next,rotationLock);drag.point=next;return;}
     if(rotationLock==='free')rotation=math.multiply(math.between(drag.point,next),rotation);
     else rotation=math.multiply(math.axisAngle(rotationLock==='x'?[0,1,0]:[1,0,0],rotationLock==='x'?(event.clientX-drag.x)*180/drag.rect.width:(event.clientY-drag.y)*180/drag.rect.height),rotation);
     drag.point=next;drag.x=event.clientX;drag.y=event.clientY;side=null;schedule();
@@ -442,6 +448,7 @@ export async function createModelViewer(host,options={},definition) {
     if(key==='o')api.toggleOpen();else if(key==='home')api.reset();else if(['+','=','-'].includes(key))api.zoom(key==='-'?-.15:.15);
     else if(['arrowleft','arrowright','arrowup','arrowdown'].includes(key)) {
       const horizontal=['arrowleft','arrowright'].includes(key);if(rotationLock===(horizontal?'y':'x'))return;
+      if(discInteraction.rotate(horizontal?(['arrowleft','arrowup'].includes(key)?-15:15):0,horizontal?0:(['arrowleft','arrowup'].includes(key)?-15:15))){event.preventDefault();event.stopPropagation();return;}
       rotation=math.multiply(math.axisAngle(horizontal?[0,1,0]:[1,0,0],['arrowleft','arrowup'].includes(key)?-15:15),rotation);side=null;schedule();
     }else return;event.preventDefault();event.stopPropagation();
   });
@@ -449,7 +456,7 @@ export async function createModelViewer(host,options={},definition) {
   const api={
     suspend(release=false){stopDrag();renderLease.suspend(release);if(frame!==null){cancelAnimationFrame(frame);frame=null;}},
     resume(){if(!disposed)renderLease.resume();},
-    clearArtwork(){revision++;controller?.abort();key=null;clearManual();composed.clear();
+    clearArtwork(){discInteraction.reset();revision++;controller?.abort();key=null;clearManual();composed.clear();
       if(!options.carousel){dynamicTextures.forEach(texture=>texture.dispose());dynamicTextures.clear();}for(const kind of Object.keys(pictures))delete pictures[kind];
       for(const name of ['Cover Outside','Cover Inside','Cartridge Cover','UMD Label'])assign(name,null);
       schedule();},
@@ -457,6 +464,7 @@ export async function createModelViewer(host,options={},definition) {
       const nextProfile=globalThis.OpenCabinet3D.profileFor(next.platform,null,next.rom_path,globalThis.OpenCabinet3D.resolveSettings(settings,next.box_3d));
       const nextKey=JSON.stringify([next.id,next.title,images,nextProfile]);if(disposed||key===nextKey)return;
       const changed=next.id!==game?.id;api.clear();game=next;profile=nextProfile;key=nextKey;
+      applyDiscFinish(materials.get('Disc Silver'),discFinish(profile,game));
       host.dataset.format=profile.id;host.dataset.variant=modelId;host.dataset.rotationLock=rotationLock;
       host.setAttribute('aria-label',globalThis.OpenCabinetI18n.t('msg.c8c86a39c7',game.title));
       if(changed){opened=0;openTarget=false;animation=null;pose(0);rotation=initialRotation();zoom=1;side='front';}
@@ -489,24 +497,27 @@ export async function createModelViewer(host,options={},definition) {
     toggleOpen(){return api.setOpen(!openTarget);},
     rotate(horizontal,vertical){
       if(!game||disposed)return;
+      if(discInteraction.rotate(horizontal,vertical))return;
       const next=math.rotationStep(rotation,horizontal,vertical,rotationLock);if(next===rotation)return;
       stopDrag();rotation=next;side=null;schedule();
     },
-    zoom(delta){zoom=Math.max(.65,Math.min(1.7,zoom+delta));schedule();},
-    reset(){stopDrag();api.setOpen(false,false);rotation=initialRotation();side='front';zoom=1;schedule();},
-    showBack(){stopDrag();api.setOpen(false,false);rotation=math.axisAngle([0,1,0],180);side='back';schedule();},
-    toggleSide(){const back=side==='front'&&!openTarget;api.setOpen(false,false);rotation=back?math.axisAngle([0,1,0],180):initialRotation();side=back?'back':'front';schedule();},
+    zoom(delta){if(discInteraction.zoom(delta))return;zoom=Math.max(.65,Math.min(1.7,zoom+delta));schedule();},
+    reset(){if(discInteraction.resetView())return;stopDrag();api.setOpen(false,false);rotation=initialRotation();side='front';zoom=1;schedule();},
+    showBack(){if(discInteraction.focused){discInteraction.flip(true);return;}stopDrag();api.setOpen(false,false);rotation=math.axisAngle([0,1,0],180);side='back';schedule();},
+    toggleSide(){if(discInteraction.focused){discInteraction.flip();return;}const back=side==='front'&&!openTarget;api.setOpen(false,false);rotation=back?math.axisAngle([0,1,0],180):initialRotation();side=back?'back':'front';schedule();},
     readManual(){if(!manual||!openTarget||manualExtracted)return false;
       if(!options.onManualActivate||options.onManualActivate({manual,game,origin:canvas})===false)return false;
       manualExtracted=true;manualGroup.visible=false;if(procedural?.manualCover)compose();schedule();return true;},
     returnManual(){manualExtracted=false;manualGroup.visible=!!manual;if(procedural?.manualCover&&game)compose();schedule();},
+    get hasDisc(){return discInteraction.available;},get isDiscRemoved(){return discInteraction.removed;},
+    removeDisc:()=>discInteraction.remove(),returnDisc:()=>discInteraction.putBack(),examineDisc:()=>discInteraction.examine(),
     refreshManual(){if(game)void preloadManual();},
-    clear(){revision++;controller?.abort();controller=null;stopDrag();closeMenu();key=null;game=null;composed.clear();
+    clear(){discInteraction.reset();revision++;controller?.abort();controller=null;stopDrag();closeMenu();key=null;game=null;composed.clear();
       clearManual();
       if(!options.carousel){dynamicTextures.forEach(texture=>texture.dispose());dynamicTextures.clear();}for(const kind of Object.keys(pictures))delete pictures[kind];
       for(const name of ['Cover Outside','Cover Inside','Cartridge Cover','UMD Label']){const material=materials.get(name);if(material){if(options.carousel)assign(name,null);else {material.map=options.useModelArtwork?[...originalMaterials].find(value=>value.name===name)?.map||null:null;material.needsUpdate=true;}}}
       if(frame!==null){cancelAnimationFrame(frame);frame=null;}if(!renderLease?.lost&&!renderLease?.paused)renderer.clear();notify();},
-    dispose(){if(disposed)return;api.clear();disposed=true;resize.disconnect();listeners.forEach(([target,name,callback,config])=>target.removeEventListener(name,callback,config));
+    dispose(){if(disposed)return;api.clear();discInteraction.dispose();disposed=true;resize.disconnect();listeners.forEach(([target,name,callback,config])=>target.removeEventListener(name,callback,config));
       dynamicTextures.forEach(texture=>texture.dispose());dynamicTextures.clear();
       retiredTextures.splice(0).forEach(texture=>texture.dispose());blankTextures.forEach(texture=>texture.dispose());blankTextures.clear();
       mixer.stopAllAction();mixer.uncacheRoot(model);releaseModel(model);originalMaterials.forEach(value=>value.dispose());
@@ -529,6 +540,6 @@ export async function createModelViewer(host,options={},definition) {
     new Set([...dynamicTextures,...originalTextures,...retiredTextures,...blankTextures.values()]).forEach(texture=>texture.dispose());
   },()=>{if(game&&renderer.info.render.calls)frameHold.capture();});
   procedural?.onChange?.(schedule);
-  options.debug?.({scene,renderer,camera,root,model,meshes,materials,mixer,action:actions[0],actions,frames,manualGroup,manualMeshes,render:schedule,pose});
+  options.debug?.({scene,renderer,camera,root,model,meshes,materials,mixer,action:actions[0],actions,frames,manualGroup,manualMeshes,discInteraction,render:schedule,pose});
   return api;
 }
