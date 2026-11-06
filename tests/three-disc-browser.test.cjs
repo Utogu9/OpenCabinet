@@ -23,6 +23,18 @@ test('Optical discs slide beside the case, share one renderer and respond indepe
   await page.goto(`http://127.0.0.1:${server.address().port}/tests/fixtures/three-disc.html?platform=${encodeURIComponent(platform)}`);
   await page.waitForFunction(()=>window.debug?.renderer.info.render.calls>0&&viewer.hasDisc&&parts().some(mesh=>mesh.material.map),{},{timeout:60000});
   const initialPlanes=await page.evaluate(()=>({near:debug.camera.near,far:debug.camera.far}));
+  if(['Sony PlayStation','Sega Dreamcast'].includes(platform)){
+    const center=await page.evaluate(()=>{
+      const label=parts().find(mesh=>mesh.material===debug.materials.disc),silver=parts().find(mesh=>mesh.material===debug.materials.discSilver);
+      const radii=[label,silver].map(mesh=>{
+        mesh.geometry.computeBoundingBox();const box=mesh.geometry.boundingBox,cx=(box.min.x+box.max.x)/2,cy=(box.min.y+box.max.y)/2,p=mesh.geometry.attributes.position;
+        let radius=Infinity;for(let i=0;i<p.count;i++)radius=Math.min(radius,Math.hypot(p.getX(i)-cx,p.getY(i)-cy));return radius;
+      });
+      return {radii,annulus:debug.meshes.some(mesh=>mesh.material===debug.materials.hub)};
+    });
+    assert.ok(center.radii.every(radius=>Math.abs(radius-7.5)<.02),`${platform}: label and reverse must reach the 15 mm centre hole: ${JSON.stringify(center)}`);
+    assert.equal(center.annulus,false,'no pale disc annulus is left attached to the tray');
+  }
   assert.equal(await page.evaluate(()=>viewer.removeDisc()),false,'closed boxes retain their discs');
   await page.evaluate(async()=>{viewer.setOpen(true,false);await settle();});
   await page.evaluate(async()=>{viewer.zoom(10);await settle();});await checkClipPlanes(`${platform}, inserted disc`);
@@ -75,6 +87,16 @@ test('Optical discs slide beside the case, share one renderer and respond indepe
   });
   await page.mouse.click(clickBox.x,clickBox.y);
   assert.equal(await page.locator('#stage').getAttribute('data-disc-focus'),'box','clicking the case transfers control to it');
+  const beforeWheel=await page.evaluate(()=>({position:debug.discInteraction.object.position.toArray(),scale:debug.discInteraction.object.scale.toArray(),rotation:debug.discInteraction.object.quaternion.toArray(),boxScale:debug.root.scale.toArray()}));
+  await page.mouse.move(clickBox.x,clickBox.y);await page.mouse.down();await page.mouse.wheel(0,-200);
+  for(const offset of [4,8,12]){await page.mouse.move(clickBox.x+offset,clickBox.y+offset/3);await page.evaluate(()=>settle());}
+  await page.mouse.up();await page.evaluate(()=>settle());
+  const afterWheel=await page.evaluate(()=>({position:debug.discInteraction.object.position.toArray(),scale:debug.discInteraction.object.scale.toArray(),rotation:debug.discInteraction.object.quaternion.toArray(),boxScale:debug.root.scale.toArray()}));
+  assert.deepEqual(afterWheel.position,beforeWheel.position,`${platform}: dragging and zooming the box must not move the disc`);
+  assert.deepEqual(afterWheel.scale,beforeWheel.scale,`${platform}: the disc must not inherit the box's zoom between drag frames`);
+  assert.deepEqual(afterWheel.rotation,beforeWheel.rotation);
+  assert.ok(afterWheel.boxScale.every((value,i)=>Math.abs(value/beforeWheel.boxScale[i]-1.2)<1e-6),'box zoom is applied once, not multiplied by each frame');
+  await page.evaluate(async()=>{viewer.zoom(-.2);await settle();});
   await page.evaluate(async()=>{viewer.zoom(10);await settle();});await checkClipPlanes(`${platform}, detached disc`);
   await page.evaluate(async()=>{viewer.zoom(-.7);await settle();});
   const discRotation=await page.evaluate(()=>{window.discQuaternion=debug.discInteraction.object.quaternion.toArray();viewer.rotate(-15,5);return discQuaternion;});

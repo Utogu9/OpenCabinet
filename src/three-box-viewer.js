@@ -134,6 +134,10 @@ export async function createViewer(host, options={}) {
       distance=Math.max(size.y*root.scale.y,size.x*root.scale.x/camera.aspect)/(2*tangent)*1.12+size.z*root.scale.z/2;
       layoutDirty=false;
     }
+    // Detached-media layout applies the box zoom after framing. Start every
+    // frame from the physical case scale so that zoom cannot accumulate or
+    // become the detached disc's base scale during pointer dragging.
+    root.scale.set(profile.width/142,profile.height/125,profile.depth/10);
     root.quaternion.fromArray(rotation);
     if(options.carousel && opened===0 && framingBounds) {
       const center=framingBounds.getCenter(new THREE.Vector3()),tangent=Math.tan(THREE.MathUtils.degToRad(camera.fov/2));
