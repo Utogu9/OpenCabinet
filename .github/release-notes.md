@@ -1,28 +1,32 @@
-## What's new in v0.5.0
+## What's new in v0.6.0
 
-- Move PlayStation 2/3/4/5, Xbox/360, Sega and Nintendo cases, PSP, cardboard boxes and generic DVD cases to Three.js with prebuilt GLB models.
-- Add the red Nintendo Switch 2 case and improve plastic materials, cover reflections and disc highlights.
-- Show Mega Drive/Genesis manuals inside their cases and display cached Dreamcast covers while original artwork loads.
-- Download artwork for multiple games with up to four concurrent workers.
-- Automatically discover artwork repository submodules and follow their main branches, preserving cached catalogs when offline.
-- Show catalog regions in game matches, including Nintendo Switch editions.
-- Add editable diagnostic reports from About → Logs, plus storage usage, thumbnail cache cleanup and retained collection review in Preferences.
-- Keep storage scans optional and allow navigation while they run in the background.
-- Verify that backups preserve session history and regional statistics, and that CBZ manuals with AVIF pages render correctly.
-- Remove the duplicate blue keyboard focus outline from the game grid.
+- Remove discs from their cases and inspect the disc and case independently in the same 3D viewer, with animated extraction and reflective disc backs.
+- Fix camera clipping after reinserting discs, independent zoom controls, and Dreamcast/PlayStation disc center holes and artwork.
+- Use folded rear-cover spines on Sega CD/Saturn cases.
+- Improve original ROM title and regional matching, including compact Genesis region tags, and use localized catalog labels as game titles.
+- Support AVIF artwork imports, downloads and thumbnails.
+- Delete managed manuals directly from Edit game → Manuals.
+- Check for catalog updates automatically when importing with a catalog older than one week; this can be disabled in Preferences.
+- Choose the default import region for filenames without region tags, with USA/North America as the default.
+- Support normalized SQLite repository catalogs alongside JSON, including the new PlayStation and PlayStation 2 submodules.
+- Configure release date formats and restore preferences to their defaults.
+- Show a draggable progress panel while removing multiple games.
+- Make PS3/PS4 EBOOT folder searches controllable through the extensions list.
 
-## Novedades de v0.5.0
+## Novedades de v0.6.0
 
-- Cajas de PlayStation 2/3/4/5, Xbox/360, Sega y Nintendo, PSP, cartón y DVD genéricas convertidas a Three.js con modelos GLB preparados.
-- Caja roja de Nintendo Switch 2 y mejoras en los materiales plásticos, reflejos de las carátulas y brillo de los discos.
-- Manuales de Mega Drive/Genesis dentro de sus cajas y portadas cacheadas de Dreamcast mientras cargan las imágenes originales.
-- Descarga de imágenes para varios juegos con hasta cuatro trabajadores simultáneos.
-- Detección automática de submódulos del repositorio de imágenes, usando sus ramas main y conservando los catálogos locales sin conexión.
-- Regiones del catálogo visibles en las coincidencias, incluidas las ediciones de Nintendo Switch.
-- Diagnósticos editables desde Acerca de → Logs y gestión del almacenamiento, limpieza de miniaturas y revisión de colecciones conservadas en Preferencias.
-- Cálculo de almacenamiento opcional que permite seguir navegando mientras trabaja en segundo plano.
-- Verificación de la conservación de sesiones y estadísticas regionales en backups y de la lectura de manuales CBZ con páginas AVIF.
-- Eliminación del doble borde de foco azul en la grilla al navegar con el teclado.
+- Discos extraíbles para inspeccionar la caja y el disco de forma independiente en el mismo visor 3D, con animación de extracción y reversos reflectantes.
+- Correcciones del recorte de cámara al reinsertar discos, del zoom independiente y del agujero central y el arte de los discos de Dreamcast/PlayStation.
+- Uso de los lomos incluidos en la contraportada de las cajas de Sega CD/Saturn.
+- Mejoras en las coincidencias por nombre original y región, incluidas las etiquetas compactas de Genesis, y uso de los títulos localizados del catálogo.
+- Importación, descarga y miniaturas de imágenes AVIF.
+- Eliminación de manuales administrados desde Editar juego → Manuales.
+- Comprobación automática de actualizaciones al importar con un catálogo de más de una semana, desactivable en Preferencias.
+- Región de importación configurable para archivos sin región reconocible, con USA/Norteamérica como valor inicial.
+- Soporte de catálogos SQLite normalizados junto con JSON, incluidos los nuevos submódulos de PlayStation y PlayStation 2.
+- Formatos de fecha de lanzamiento configurables y restauración de preferencias predeterminadas.
+- Progreso flotante y arrastrable al eliminar varios juegos.
+- Búsqueda de carpetas EBOOT de PS3/PS4 controlable desde la lista de extensiones.
 
 ## Downloads / Descargas
 
