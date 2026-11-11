@@ -17,3 +17,17 @@ test('Switch 2 keeps both inlay-facing opening ledges opaque while retaining the
   assert.deepEqual(split.indices,[3,4,5,6,7,8,0,1,2]);
   assert.equal(split.opaqueCount,6);assert.equal(split.insideCount,3);
 });
+
+test('Switch 2 retaining tab slopes use the shell material instead of the translucent inlay floor',async()=>{
+  const {splitSwitchShell}=await import('../src/three-switch-shell.js');
+  // Authored tab roots lie just above the 1.5 mm floor, with upward-facing
+  // sloping normals. The old broad height/normal range included these faces.
+  const y=[.0015,.0015,.0015,.001535,.00165,.001756,.0015,.0015,.0015];
+  const ny=[1,1,1,.95,.95,.95,.96,.96,.96];
+  const position={count:9,getX:i=>i<3?0:-.034,getY:i=>y[i],getZ:()=>.007};
+  const geometry={getAttribute:name=>name==='position'?position:{getY:i=>ny[i]},getIndex:()=>null,groups:[]};
+  const split=splitSwitchShell(geometry);
+  assert.deepEqual(split.indices,[3,4,5,6,7,8,0,1,2]);
+  assert.equal(split.opaqueCount,6);
+  assert.equal(split.insideCount,3,'the planar inlay sheet stays translucent');
+});

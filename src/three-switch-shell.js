@@ -11,7 +11,10 @@ export function splitSwitchShell(geometry) {
     // Bounds are in the authored open pose (metres), before skinning.
     const openingRim=triangle.every(index=>Math.abs(position.getZ(index))<.037
       &&(position.getX(index)>.0449||position.getX(index)<-.1582));
-    const floor=!openingRim&&triangle.every(index=>normal.getY(index)>.85&&position.getY(index)>.001&&position.getY(index)<.0019);
+    // Only the actual flat paper-facing sheet is translucent. The sloping
+    // roots of the retaining tabs also pass through this height range, but
+    // belong to the molded shell just like the rest of each tab.
+    const floor=!openingRim&&triangle.every(index=>normal.getY(index)>.999&&Math.abs(position.getY(index)-.0015)<.000002);
     (floor?inside:opaque).push(...triangle);
   }
   return {originalIndex,originalGroups:geometry.groups.map(group=>({...group})),indices:[...opaque,...inside],opaqueCount:opaque.length,insideCount:inside.length};

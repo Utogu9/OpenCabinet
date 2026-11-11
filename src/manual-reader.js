@@ -84,7 +84,11 @@
     function show(s, spread) {
       const [left, right] = sides(spread, s.count);
       face(s, s.left, left); face(s, s.right, right);
-      s.leaf.style.display = 'none'; s.leafFront.replaceChildren(); s.leafBack.replaceChildren();
+      // Retire the turning surfaces completely, including their paper/shadow
+      // state. Clearing only their canvases can leave a composited back face
+      // behind the cover after the first reverse turn.
+      s.leaf.style.display = 'none'; s.leaf.style.transform = 'none';
+      face(s, s.leafFront, null); face(s, s.leafBack, null);
       s.paper.style.transform = `translateX(${offset(spread, s.count)})`;
       s.book.dataset.cover = spread === 0 ? 'front' : right === null ? 'back' : 'open';
       s.book.dataset.turning = 'false'; s.spread = spread;

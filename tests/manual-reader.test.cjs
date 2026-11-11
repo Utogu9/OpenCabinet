@@ -246,6 +246,15 @@ test('A turning leaf has a real front and back with the following page underneat
   const back = a.animations.filter(x => x.target === u.leaf).at(-1);
   assert.match(back.frames[0].transform, /rotateY\(-180deg\)/); assert.match(back.frames[1].transform, /rotateY\(0deg\)/);
   await finishTurns(a); assert.deepEqual(pages(u), ['', '1']); assert.equal(u.paper.style.transform, 'translateX(-25%)');
+  assert.equal(u.book.dataset.turning, 'false');
+  assert.equal(u.left.dataset.empty, 'true');
+  assert.equal(u.leaf.style.display, 'none');
+  assert.equal(u.leaf.style.transform, 'none');
+  for (const face of [u.leafFront, u.leafBack]) {
+    assert.equal(face.dataset.empty, 'true', 'retired faces must not retain a paper surface or shadow');
+    assert.equal(face.dataset.page, '');
+    assert.equal(face.children.length, 0);
+  }
   a.reader.dispose();
 });
 

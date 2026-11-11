@@ -1143,11 +1143,14 @@ html[data-os="linux"] .game-box-model .game-box-face { will-change: transform; }
 .manual-reader-center { display: grid; place-items: center; min-width: 100%; min-height: 100%; }
 .manual-reader-book { position: relative; perspective: 3000px; transform-origin: center; flex-shrink: 0; }
 .manual-reader-paper { position: relative; width: 100%; height: 100%; transform-style: preserve-3d; }
+/* Keep 3D compositing only while a leaf is turning, so retired page layers
+   cannot linger behind the single cover. */
+.manual-reader-book[data-turning="false"] .manual-reader-paper { transform-style: flat; }
 .manual-reader-page, .manual-reader-leaf-face { position: absolute; top: 0; width: 50%; height: 100%; background: #fffef9;
   border-radius: 2px; box-shadow: 0 10px 24px #0009; }
 .manual-reader-left { right: 50%; }
 .manual-reader-right { left: 50%; }
-.manual-reader-page[data-empty="true"], .manual-reader-leaf-face[data-empty="true"] { background: transparent; box-shadow: none; pointer-events: none; }
+.manual-reader-page[data-empty="true"], .manual-reader-leaf-face[data-empty="true"] { display: none; background: transparent; box-shadow: none; pointer-events: none; }
 .manual-reader-paper canvas { display: block; width: 100%; height: 100%; object-fit: contain; border-radius: 2px; background: #fffef9; }
 .manual-reader-gutter { position: absolute; left: 48%; top: 0; width: 4%; height: 100%; pointer-events: none;
   background: linear-gradient(90deg, transparent, #0002 45%, #0004 50%, #0001 60%, transparent); transform: translateZ(.5px); }
@@ -1527,8 +1530,10 @@ html[data-os="linux"] .game-box-model .game-box-face { will-change: transform; }
 .personal-notes { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 180px; overflow: auto; font-size: .85rem; margin: 6px 0 0; }
 #game-personal-editor, .feature-dialog form { display: flex; flex-direction: column; gap: 18px; }
 #game-edit-panel-personal h3 { margin-bottom: 16px; }
-.feature-dialog { width: min(1000px, calc(100vw - 40px)); max-height: calc(100vh - 40px); padding: 0; }
-.feature-dialog > .modal-body { padding: 24px; overflow: auto; max-height: calc(100vh - 140px); }
+dialog.feature-dialog { width: min(1000px, calc(100vw - 40px)); max-height: calc(100vh - 40px); padding: 0; overflow: hidden; }
+dialog.feature-dialog[open] { display: flex; flex-direction: column; }
+.feature-dialog > .modal-header { flex-shrink: 0; }
+.feature-dialog > .modal-body { padding: 24px; overflow: auto; min-height: 0; }
 .feature-dialog .form-actions { padding: 16px 0 0; margin: 0; }
 .feature-dialog input, .feature-dialog select, .feature-dialog textarea, .personal-sidebar select { color: var(--text-main); background: var(--bg-color); border: 1px solid var(--border-color); padding: 8px; border-radius: 5px; font: inherit; }
 .feature-dialog textarea { width: 100%; resize: vertical; box-sizing: border-box; }
