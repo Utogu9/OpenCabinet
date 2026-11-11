@@ -5433,12 +5433,14 @@ function reviewMetadataImport(preview, platform, task, operation=null) {
         const summary = document.createElement("summary"); summary.textContent = globalThis.OpenCabinetI18n.t("msg.25b76dadfd");
         const body = document.createElement("p"); body.className = "metadata-details";
         details.append(summary, body);
+        const files = (game.discs?.length ? game.discs : [game]).map(disc => disc.rom_path.split(/[\\/]/).pop());
+        const fileDetails = `${globalThis.OpenCabinetI18n.t("msg.75d6b4579e")}: ${files.join("\n")}\n\n`;
 
         function updateDetails() {
           if (game.existing_game_id) {
             card.classList.remove("metadata-match-unmatched");
             status.textContent = globalThis.OpenCabinetI18n.t("msg.0bb2626158");
-            body.textContent = status.textContent; return;
+            body.textContent = fileDetails + status.textContent; return;
           }
           const chosen = row.candidates.find((game) => game.id === row.selected_id);
           heading.textContent = preferences.useCatalogTitles && chosen?.title?.trim() ? chosen.title : game.title;
@@ -5446,10 +5448,10 @@ function reviewMetadataImport(preview, platform, task, operation=null) {
           else card.classList.add("metadata-match-unmatched");
           status.textContent = chosen ? `${chosen.exact ? globalThis.OpenCabinetI18n.t("msg.c6aba42fdd") : globalThis.OpenCabinetI18n.t("msg.331570c2ec")} · ${chosen.platform}`
             : row.candidates.length ? globalThis.OpenCabinetI18n.t("msg.1e11ef651d") : globalThis.OpenCabinetI18n.t("msg.24aa8da1b9");
-          body.textContent = chosen ? [chosen.title, globalThis.OpenCabinetI18n.t("msg.a3011897b1", chosen.platform), globalThis.OpenCabinetI18n.t("msg.66e351ec27", formatReleaseDate(chosen.release_date) || "—"),
+          body.textContent = fileDetails + (chosen ? [chosen.title, globalThis.OpenCabinetI18n.t("msg.a3011897b1", chosen.platform), globalThis.OpenCabinetI18n.t("msg.66e351ec27", formatReleaseDate(chosen.release_date) || "—"),
             globalThis.OpenCabinetI18n.t("msg.3ea6961dd5", chosen.developer || "—"), globalThis.OpenCabinetI18n.t("msg.647325454a", chosen.publisher || "—"), globalThis.OpenCabinetI18n.t("msg.439c200421", chosen.genre || "—"),
             globalThis.OpenCabinetI18n.t("msg.22b204f176", globalThis.OpenCabinetI18n.gameMode(chosen.game_mode) || "—"), globalThis.OpenCabinetI18n.t("msg.e4eefae773", chosen.max_players || "—"),
-            "", chosen.description || globalThis.OpenCabinetI18n.t("msg.591e5cef97")].join("\n") : globalThis.OpenCabinetI18n.t("msg.00a1bafb3d");
+            "", chosen.description || globalThis.OpenCabinetI18n.t("msg.591e5cef97")].join("\n") : globalThis.OpenCabinetI18n.t("msg.00a1bafb3d"));
         }
 
         function populate() {
@@ -5476,7 +5478,7 @@ function reviewMetadataImport(preview, platform, task, operation=null) {
           if (!alive || !rows.includes(row)) return;
           const hadMatches = rows.some(row => row.selected_id !== null);
           row.candidates = candidates;
-          row.selected_id = preferredMetadataMatch(candidates, {defaultRegion:preferences.defaultRegion,romPath:game.rom_path});
+          if (!candidates.some(candidate => candidate.id === row.selected_id)) row.selected_id = null;
           populate();
           refreshOrder(); matchesChanged(hadMatches);
         });

@@ -393,6 +393,8 @@ test("A corrected match is accepted while availability is pending and stale coun
   assert.equal(query.disabled, false); assert.equal(button.disabled, false);
   query.value = "Corrected name";
   await button.click(); await turn();
+  assert.equal(card.children[2].value, "", "search must not accept the exact result automatically");
+  card.children[2].value = "2"; await card.children[2].onchange(); await turn();
   assert.equal(card.children[2].value, "2");
   assert.equal(app.calls.find(call => call.command === "search_metadata_games").args.query, "Corrected name");
   assert.equal(app.media("disc").checked, true);
@@ -523,10 +525,65 @@ test("Automatic image analysis shows errors and no-results explicitly",async()=>
   }
 });
 
+test("Manual searches update alternatives without accepting a new match, even for a unique exact result", async () => {
+  for (const selected of [null, 1]) {
+    let app;
+    let results;
+    app = importer({ handlers: {
+      match_metadata_games: () => app.preview.games.map(game => ({ rom_path: game.rom_path, selected_id: selected, candidates: selected === null ? [] : [app.game(1)] })),
+      search_metadata_games: () => results,
+    } });
+    const pending = app.start(); await turn();
+    const card = app.get('lb-match-list').children[0];
+    const select = card.children[2], search = card.children[3].children[1];
+    results = [app.game(2)];
+    await search.click(); await turn();
+    assert.equal(select.value, '');
+    assert.deepEqual(select.children.map(option => option.value), ['', '2']);
+    assert.equal(card.children[0].textContent, 'Reviewed 0');
+    assert.match(card.children[4].children[1].textContent, /Game 0 \(USA\)\.rom/);
+    select.value = '2'; await select.onchange(); await turn();
+    results = [app.game(3), app.game(2)];
+    await search.click(); await turn();
+    assert.equal(select.value, '2', 'keep the explicitly selected match if it remains available');
+    assert.equal(card.children[0].textContent, 'Catalog title 2');
+    assert.match(card.children[4].children[1].textContent, /Game 0 \(USA\)\.rom/);
+    results = [];
+    await search.click(); await turn();
+    assert.equal(select.value, '');
+    assert.deepEqual(select.children.map(option => option.value), ['']);
+    await app.get('btn-lb-import').click(); await pending;
+    assert.equal(app.calls.find(call => call.command === 'stage_metadata_import').args.selections[0].id, null);
+  }
+});
+
+test("Import match details show every original filename without a match and for existing multidisc games", async () => {
+  for (const existing of [false, true]) {
+    let app;
+    app = importer({ handlers: {
+      prepare_disc_import: ({preview}) => preview,
+      match_metadata_games: () => app.preview.games.map(game => ({rom_path: game.rom_path, selected_id: null, candidates: []})),
+    } });
+    app.preview.games[0].discs = [
+      {rom_path: 'C:\\roms\\Original Title (USA) (Disc 1).chd'},
+      {rom_path: '/roms/Original Title (USA) (Disc 2).chd'},
+    ];
+    if (existing) app.preview.games[0].existing_game_id = 10;
+    const pending = app.start(); await turn();
+    const details = app.get('lb-match-list').children[0].children[4].children[1].textContent;
+    assert.match(details, /Original Title \(USA\) \(Disc 1\)\.chd/);
+    assert.match(details, /Original Title \(USA\) \(Disc 2\)\.chd/);
+    assert.equal(details.includes('C:\\roms'), false);
+    await app.get('btn-lb-cancel').click(); await pending;
+  }
+});
+
 test("Manual searches can change the source record without changing the reviewed title", async () => {
   const app = importer(); const pending = app.start(); await turn(); await app.get("btn-lb-search").click();
   const card = app.get("lb-match-list").children[0]; const searchRow = card.children[3];
   searchRow.children[0].value = "Another search"; await searchRow.children[1].click();
+  assert.equal(card.children[2].value, "");
+  card.children[2].value = "2"; await card.children[2].onchange(); await turn();
   assert.equal(card.children[2].value, "2"); assert.equal(app.preview.games[0].title, "Reviewed 0");
   assert.equal(app.calls.find((call) => call.command === "search_metadata_games").args.query, "Another search");
   await app.get("btn-lb-import").click(); await pending;
@@ -543,6 +600,8 @@ test('Catalog titles are shown by default, follow manual matches and do not muta
     assert.equal(card.children[0].textContent,'Reviewed 0');
     card.children[3].children[0].value='Another search';await card.children[3].children[1].click();
     await turn();
+    assert.equal(card.children[0].textContent,'Reviewed 0');
+    select.value='2';await select.onchange();await turn();
     assert.equal(card.children[0].textContent,'Catalog title 2');
     assert.equal(app.preview.games[0].title,'Reviewed 0');
     assert.equal(app.get('btn-lb-import').disabled,false);
@@ -658,6 +717,8 @@ test("Unselected matches are highlighted and ordered first without changing titl
   const resolved = list.children[0];
   const searchRow = resolved.children[3];
   searchRow.children[0].value = "Correct alternative"; await searchRow.children[1].click();
+  assert.equal(resolved.classList.contains("metadata-match-unmatched"), true);
+  resolved.children[2].value = "2"; await resolved.children[2].onchange();
   assert.equal(resolved.classList.contains("metadata-match-unmatched"), false);
   assert.deepEqual(titles(), ["Reviewed 2", "Reviewed 0", "Reviewed 1", "Reviewed 3"]);
   assert.equal(resolved.children[3].children[0].value, "Correct alternative");
