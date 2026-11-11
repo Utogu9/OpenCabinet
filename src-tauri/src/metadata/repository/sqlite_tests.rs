@@ -190,6 +190,7 @@ fn sqlite_and_json_keep_identical_matches_metadata_and_media_identities() {
         .unwrap();
     game["images"]["cover_front"] = json!({"kind":"cover_front","path":format!("{serial}/cover_front.avif"),"sources":[{"region":"US","uploader":"Scanner Name","file_page":"https://segaretro.org/File:Exact_scan.jpg","url":"https://segaretro.org/images/scan.jpg"}]});
     game["images"]["manual"] = json!({"path":format!("{serial}/manual.cbz")});
+    game["images"]["screenshot"] = json!({"kind":"screenshot","path":format!("{serial}/screenshot.png"),"sources":[{"source":"Named_Snaps/Example (USA).png"}]});
     data["metadata"]["wikidata:Q975773"]["source_url"] = "https://www.wikidata.org/wiki/Q975773".into();
     let json = files.job.directory.join("input.json");
     fs::write(&json, serde_json::to_vec(&data).unwrap()).unwrap();
@@ -200,6 +201,8 @@ fn sqlite_and_json_keep_identical_matches_metadata_and_media_identities() {
     let origin = image[0].source.as_ref().unwrap();
     assert_eq!(origin.uploader.as_deref(),Some("Scanner Name"));
     assert_eq!(origin.url.as_deref(),Some("https://segaretro.org/File:Exact_scan.jpg"));
+    let snap:String=conn.query_row("SELECT s.details FROM repository_image_sources s JOIN images i USING(filename) WHERE i.kind='screenshot'",[],|r|r.get(0)).unwrap();
+    assert_eq!(crate::media_provenance::decode(Some(snap)).unwrap().url.as_deref(),Some("https://github.com/libretro-thumbnails/Sony_-_PlayStation_2/blob/master/Named_Snaps/Example%20%28USA%29.png"));
     let details: String = conn.query_row("SELECT details FROM games WHERE details LIKE '%Q975773%'",[],|r|r.get(0)).unwrap();
     assert_eq!(repository_metadata::read_game(&details).unwrap().source.unwrap().url.as_deref(),Some("https://www.wikidata.org/wiki/Q975773"));
     let snapshot = |conn: &Connection| {

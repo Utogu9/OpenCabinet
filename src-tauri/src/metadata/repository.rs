@@ -12,7 +12,7 @@ const RAW_URL: &str = "https://raw.githubusercontent.com/Utogu9/OpenCabinet-BDD/
 const CONFIG: &str = "metadata/source.json";
 const MIN_REPOSITORY_ID: i64 = 1_000_000_000_000;
 // Retain release names and canonical title aliases for regional ROM matching.
-const REPOSITORY_GAME_VERSION: i64 = 7;
+const REPOSITORY_GAME_VERSION: i64 = 8;
 
 #[derive(Default, Serialize, Deserialize)]
 struct Settings {
@@ -378,6 +378,8 @@ struct RepoImage {
 #[derive(Deserialize)]
 struct RepoImageSource {
     #[serde(default)]
+    provider: Option<String>,
+    #[serde(default)]
     uploader_hidden: bool,
     #[serde(default)]
     uploader: Option<String>,
@@ -395,12 +397,28 @@ struct RepoImageSource {
     region: String,
 }
 
-fn image_origin(sources: &[RepoImageSource]) -> Option<crate::media_provenance::Source> {
+fn libretro_image_url(platform: &str, source: &RepoImageSource) -> Option<String> {
+    if source.provider.as_deref().is_some_and(|provider| provider != "libretro-thumbnails") {
+        return None;
+    }
+    let path = source.source.as_deref()?;
+    let (directory, filename) = path.split_once('/')?;
+    if !["Named_Boxarts", "Named_Snaps", "Named_Titles"].contains(&directory)
+        || !valid_relative(path) || filename.contains('/')
+        || !valid_relative(platform) || platform.contains('/') {
+        return None;
+    }
+    Some(format!("https://github.com/libretro-thumbnails/{}/blob/master/{}",
+        url_path(&platform.replace(' ', "_")), url_path(path)))
+}
+
+fn image_origin(platform: &str, sources: &[RepoImageSource]) -> Option<crate::media_provenance::Source> {
     let make = |source: &RepoImageSource| {
         crate::media_provenance::Source {
             uploader: if source.uploader_hidden { None } else { source.uploader.clone() },
             url: [&source.file_page, &source.page, &source.source, &source.url].into_iter()
-                .filter_map(|s| s.as_deref()).find_map(crate::media_provenance::web_url),
+                .filter_map(|s| s.as_deref()).find_map(crate::media_provenance::web_url)
+                .or_else(|| libretro_image_url(platform, source)),
         }.clean()
     };
     sources.iter().filter_map(make).find(|s| s.uploader.is_some())
@@ -763,7 +781,7 @@ fn insert_platform(
             if !manual && !["webp","avif","png","jpg","jpeg","gif","bmp","svg"].contains(&extension.as_str()) { continue; }
             let filename = format!("repo-{}.{extension}", -token(&format!("{source}/{}", image.path)));
             let url = format!("{raw}{}", url_path(&image.path));
-            if let Some(origin) = image_origin(&image.sources) {
+            if let Some(origin) = image_origin(source, &image.sources) {
                 tx.execute("INSERT OR REPLACE INTO repository_image_sources VALUES(?1,?2)",
                     params![filename,serde_json::to_string(&origin).map_err(err)?]).map_err(err)?;
             }
@@ -1089,6 +1107,25 @@ pub(crate) fn retained_console_filename(path: &Path) -> Option<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn libretro_paths_get_exact_file_links_without_guessing_unknown_sources() {
+        let origin = |sources: serde_json::Value| image_origin("Sega - Dreamcast", &serde_json::from_value::<Vec<RepoImageSource>>(sources).unwrap());
+        for directory in ["Named_Boxarts", "Named_Snaps", "Named_Titles"] {
+            let source=origin(serde_json::json!([{"source":format!("{directory}/Sonic & Knuckles (USA) #1.png")}])).unwrap();
+            assert!(source.uploader.is_none());
+            assert_eq!(source.url.unwrap(),format!("https://github.com/libretro-thumbnails/Sega_-_Dreamcast/blob/master/{directory}/Sonic%20%26%20Knuckles%20%28USA%29%20%231.png"));
+        }
+        for source in serde_json::json!([
+            {}, {"source":"Unknown/cover.png"}, {"source":"Named_Boxarts/../cover.png"},
+            {"source":"Named_Boxarts/cover.png","provider":"another-source"}
+        ]).as_array().unwrap() {
+            assert!(origin(serde_json::json!([source])).is_none());
+        }
+        let known=origin(serde_json::json!([{"source":"Named_Boxarts/cover.png","file_page":"https://segaretro.org/File:Exact.jpg","uploader":"Scanner"}])).unwrap();
+        assert_eq!(known.url.as_deref(),Some("https://segaretro.org/File:Exact.jpg"));
+        assert_eq!(known.uploader.as_deref(),Some("Scanner"));
+    }
     const SUBMODULES: &str = include_str!("../../tests/fixtures/repository-submodules.json");
     #[test]
     fn localized_catalog_titles_preserve_original_filename_and_serial_matching_after_reopening() {

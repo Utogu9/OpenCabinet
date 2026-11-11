@@ -735,7 +735,8 @@ function sourceBadge(source) {
   const sites = { "segaretro.org": "Sega Retro", "psxdatacenter.com": "PSX Data Center", "gametdb.com": "GameTDB", "art.gametdb.com": "GameTDB", "wikidata.org": "Wikidata", "mobygames.com": "MobyGames" };
   const badge = document.createElement("button");
   badge.type = "button"; badge.className = "media-source-badge";
-  badge.textContent = sites[host] || host; badge.title = source.url;
+  const libretro = ["github.com", "raw.githubusercontent.com"].includes(host) && url.pathname.split("/")[1]?.toLowerCase() === "libretro-thumbnails";
+  badge.textContent = libretro ? "libretro-thumbnails" : sites[host] || host; badge.title = source.url;
   badge.addEventListener("click", () => invoke("open_source_url", { url: source.url }).catch(error => showToast(String(error), true)));
   return badge;
 }

@@ -668,6 +668,19 @@ test("Metadata article badges follow result selection, persist on Apply and show
   assert.equal(app.evaluate('sourceBadge({url:"javascript:alert(1)"})'),null);
 });
 
+test("Libretro artwork shows its repository name and opens the original file instead of a generic GitHub label", async () => {
+  const url='https://github.com/libretro-thumbnails/Sega_-_Dreamcast/blob/master/Named_Boxarts/Sonic%20Adventure%20%28USA%29.png';
+  const app=mediaApp({handlers:{open_source_url:()=>null}});
+  app.evaluate(`allGames[0].images[0].source={url:${JSON.stringify(url)}}`);
+  await app.open();
+  const header=app.rowFor('cover.png').children[1].children[0];
+  assert.equal(header.children.length,2,'repository attribution does not invent an uploader');
+  assert.equal(header.children[1].textContent,'libretro-thumbnails');
+  await header.children[1].trigger('click');
+  assert.deepEqual(app.calls.find(call=>call.command==='open_source_url').args,{url});
+  assert.equal(app.evaluate('sourceBadge({url:"https://github.com/someone/another-repo"}).textContent'),'github.com');
+});
+
 test("Editor downloads missing image types into a draft and only persists them on Save", async () => {
   const app = mediaApp(); await app.open();
   await app.get("btn-download-game-images").trigger("click");
