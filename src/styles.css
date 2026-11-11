@@ -1624,7 +1624,9 @@ button.media-source-badge {
 .image-editor-filename .media-source-badge { flex: 0 1 auto; max-width: 35%; }
 button.media-source-badge { cursor: pointer; width: auto; }
 button.media-source-badge:hover { color: var(--text-main); border-color: var(--accent-color); }
-.metadata-title-actions { display: flex; flex-direction: column; align-items: flex-end; gap: 5px; flex-shrink: 0; max-width: 45%; }
+.metadata-game-title-row { position: relative; }
+.metadata-title-actions { display: flex; align-items: center; flex-shrink: 0; max-width: 45%; margin-left: auto; }
+#game-metadata-source { position: absolute; right: 0; bottom: calc(100% + 5px); max-width: 45%; }
 #game-metadata-source:empty { display: none; }
 #game-metadata-source .media-source-badge { max-width: 100%; }
 

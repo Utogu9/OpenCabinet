@@ -12,7 +12,7 @@ const RAW_URL: &str = "https://raw.githubusercontent.com/Utogu9/OpenCabinet-BDD/
 const CONFIG: &str = "metadata/source.json";
 const MIN_REPOSITORY_ID: i64 = 1_000_000_000_000;
 // Retain release names and canonical title aliases for regional ROM matching.
-const REPOSITORY_GAME_VERSION: i64 = 8;
+const REPOSITORY_GAME_VERSION: i64 = 9;
 
 #[derive(Default, Serialize, Deserialize)]
 struct Settings {
@@ -403,7 +403,7 @@ fn libretro_image_url(platform: &str, source: &RepoImageSource) -> Option<String
     }
     let path = source.source.as_deref()?;
     let (directory, filename) = path.split_once('/')?;
-    if !["Named_Boxarts", "Named_Snaps", "Named_Titles"].contains(&directory)
+    if !["Named_Boxarts", "Named_Snaps", "Named_Titles", "Named_Logos"].contains(&directory)
         || !valid_relative(path) || filename.contains('/')
         || !valid_relative(platform) || platform.contains('/') {
         return None;
@@ -1111,7 +1111,7 @@ mod tests {
     #[test]
     fn libretro_paths_get_exact_file_links_without_guessing_unknown_sources() {
         let origin = |sources: serde_json::Value| image_origin("Sega - Dreamcast", &serde_json::from_value::<Vec<RepoImageSource>>(sources).unwrap());
-        for directory in ["Named_Boxarts", "Named_Snaps", "Named_Titles"] {
+        for directory in ["Named_Boxarts", "Named_Snaps", "Named_Titles", "Named_Logos"] {
             let source=origin(serde_json::json!([{"source":format!("{directory}/Sonic & Knuckles (USA) #1.png")}])).unwrap();
             assert!(source.uploader.is_none());
             assert_eq!(source.url.unwrap(),format!("https://github.com/libretro-thumbnails/Sega_-_Dreamcast/blob/master/{directory}/Sonic%20%26%20Knuckles%20%28USA%29%20%231.png"));
@@ -1125,6 +1125,12 @@ mod tests {
         let known=origin(serde_json::json!([{"source":"Named_Boxarts/cover.png","file_page":"https://segaretro.org/File:Exact.jpg","uploader":"Scanner"}])).unwrap();
         assert_eq!(known.url.as_deref(),Some("https://segaretro.org/File:Exact.jpg"));
         assert_eq!(known.uploader.as_deref(),Some("Scanner"));
+        let saturn: Vec<RepoImageSource> = serde_json::from_value(serde_json::json!([{
+            "source":"Named_Logos/Sonic 3D Blast (USA).png",
+            "dat_name":"Sonic 3D Blast (USA)","match":"exact"
+        }])).unwrap();
+        let logo=image_origin("Sega - Saturn",&saturn).unwrap();
+        assert_eq!(logo.url.as_deref(),Some("https://github.com/libretro-thumbnails/Sega_-_Saturn/blob/master/Named_Logos/Sonic%203D%20Blast%20%28USA%29.png"));
     }
     const SUBMODULES: &str = include_str!("../../tests/fixtures/repository-submodules.json");
     #[test]

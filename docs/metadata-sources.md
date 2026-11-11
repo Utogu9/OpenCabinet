@@ -35,7 +35,7 @@ comerciales, y fichas opcionales de metadatos compartidas mediante `metadata_id`
 Las descargas nuevas conservan el uploader y el enlace de origen de cada imagen,
 cuando el catálogo los proporciona. Se prefiere la página del archivo o artículo
 al enlace directo a la imagen; no se deduce un uploader cuando falta.
-Las rutas originales `Named_Boxarts/`, `Named_Snaps/` y `Named_Titles/` se
+Las rutas originales `Named_Boxarts/`, `Named_Snaps/`, `Named_Titles/` y `Named_Logos/` se
 reconocen como procedencia de libretro-thumbnails cuando no hay otra fuente
 explícita. La etiqueta abre el archivo original en el repositorio de esa consola,
 sin consultar la red para identificarlo ni inventar un uploader individual.
