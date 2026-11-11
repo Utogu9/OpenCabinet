@@ -87,6 +87,8 @@ pub struct Manifest {
     images: Vec<GameImage>,
     #[serde(default)]
     manuals: Vec<String>,
+    #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
+    manual_sources: crate::media_provenance::Sources,
     #[serde(default)]
     statistics: Option<SavedStatistics>,
     #[serde(default)]
@@ -312,7 +314,13 @@ pub fn sync_game(
             kind: image.kind,
         });
     }
+    let manual_paths=crate::manuals::scan(&folder)?;
+    let mut manual_sources=crate::media_provenance::Sources::new();
+    for (path,source) in crate::manuals::sources(conn,root,&manual_paths)? {
+        manual_sources.insert(relative(Path::new(&path).strip_prefix(&folder).map_err(err)?)?,source);
+    }
     let manifest = Manifest {
+        manual_sources,
         artwork_id: crate::metadata::repository::match_id(conn,game_id,false),
         discs: crate::discs::read(conn,game_id)?.into_iter().map(DiscIdentity::from_disc).collect(),
         version: 1,
@@ -331,7 +339,7 @@ pub fn sync_game(
         rom_path,
         catalog_id,
         images: entries,
-        manuals: crate::manuals::scan(&folder)?
+        manuals: manual_paths
             .into_iter()
             .map(|p| relative(p.strip_prefix(&folder).unwrap()))
             .collect::<Result<_>>()?,
@@ -725,6 +733,14 @@ pub fn attach(conn: &Connection, root: &Path, game_id: i64, id: &str) -> Result<
         )
         .map_err(err)?;
     let manifest: Manifest = serde_json::from_str(&body).map_err(err)?;
+    let collection_dir:String=conn.query_row("SELECT directory FROM media_collections WHERE id=?1",[id],|r|r.get(0)).map_err(err)?;
+    let collection_folder=directory(root,&collection_dir)?;
+    for path in crate::manuals::scan(&collection_folder)? {
+        let rel=relative(path.strip_prefix(&collection_folder).map_err(err)?)?;
+        if manifest.manuals.contains(&rel) {
+            crate::manuals::save_source(conn,root,&path,manifest.manual_sources.get(&rel))?;
+        }
+    }
     let changed=conn.execute("UPDATE games SET media_collection_id=?1,launch\u{0062}ox_id=COALESCE(launch\u{0062}ox_id,?3) WHERE id=?2",params![id,game_id,manifest.catalog_id]).map_err(err)?;
     if let Some(personal)=&manifest.personal {crate::library_features::save(conn,game_id as i32,personal)?;}
     if let Some(name)=&manifest.preferred_manual {
@@ -1198,6 +1214,39 @@ mod tests {
         )
         .unwrap()
     }
+    #[test]
+    fn manual_attribution_survives_collisions_duplicates_and_manifest_only_recovery() {
+        let files=Sandbox::new();let mut conn=db();let rom=files.rom("Manual game.iso");let id=game(&conn,&rom,None);
+        let first=pdf(&files.0.join("a/Guide.pdf"),"First manual");
+        let second=pdf(&files.0.join("b/Guide.pdf"),"Second manual");
+        let duplicate=pdf(&files.0.join("c/Copy.pdf"),"First manual");
+        let source=crate::media_provenance::Source{uploader:Some("Scanner".into()),url:Some("https://segaretro.org/File:Manual.pdf".into())};
+        let other=crate::media_provenance::Source{uploader:None,url:Some("https://example.org/another-manual".into())};
+        let mut edit=manual_edit(id,vec![first.clone(),second.clone(),duplicate.clone()]);
+        edit.manual_sources.insert(first,source.clone());edit.manual_sources.insert(second,other.clone());
+        edit.manual_sources.insert(duplicate,other.clone());
+        crate::save_game_with_media(&mut conn,edit,&files.0).unwrap();
+        let (uuid,dir)=collection(&conn,id);let folder=files.0.join(&dir);
+        let paths=crate::manuals::scan(&folder).unwrap();assert_eq!(paths.len(),2);
+        let origins=crate::manuals::sources(&conn,&files.0,&paths).unwrap();
+        assert_eq!(origins[folder.join("manuals").join("Guide.pdf").to_str().unwrap()],source,"duplicates cannot overwrite existing attribution");
+        assert_eq!(origins[folder.join("manuals").join("Guide (2).pdf").to_str().unwrap()],other);
+        let before=fs::read(folder.join("manifest.json")).unwrap();
+        let manifest:Manifest=serde_json::from_slice(&before).unwrap();
+        assert_eq!(manifest.manual_sources["manuals/Guide.pdf"],source);
+        assert_eq!(manifest.manual_sources["manuals/Guide (2).pdf"],other);
+        preserve_before_delete(&mut conn,&files.0,&[id as i32]).unwrap();
+        crate::delete_game_records(&mut conn,&[id as i32]).unwrap();
+        let mut fresh=db();reconcile(&mut fresh,&files.0).unwrap();let restored=game(&fresh,&rom,None);
+        let tx=fresh.transaction().unwrap();attach(&tx,&files.0,restored,&uuid).unwrap();tx.commit().unwrap();
+        assert_eq!(crate::manuals::sources(&fresh,&files.0,&paths).unwrap(),origins);
+        crate::manuals::delete_manual(&mut fresh,&files.0,restored,&paths[0]).unwrap();
+        let remaining=crate::manuals::scan(&folder).unwrap();assert_eq!(remaining.len(),1);
+        assert_eq!(crate::manuals::sources(&fresh,&files.0,&remaining).unwrap().len(),1);
+        let manifest:Manifest=serde_json::from_slice(&fs::read(folder.join("manifest.json")).unwrap()).unwrap();
+        assert_eq!(manifest.manual_sources.len(),1);
+    }
+
     #[test]
     fn preferred_manual_and_personal_data_survive_collection_recovery(){
         let files=Sandbox::new();let mut conn=db();let rom=files.rom("Game.iso");let id=game(&conn,&rom,Some(77));

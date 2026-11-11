@@ -116,6 +116,8 @@ pub struct Emulator {
 #[serde(rename_all = "camelCase")]
 pub struct GameDetails {
     #[serde(default)]
+    manual_sources: media_provenance::Sources,
+    #[serde(default)]
     metadata_source: Option<media_provenance::Source>,
     #[serde(default)]
     launch_actions: Option<launch_actions::Actions>,
@@ -880,7 +882,7 @@ fn save_game_with_media(conn: &mut Connection, mut details: GameDetails, root: &
     let tx = conn.transaction_with_behavior(TransactionBehavior::Immediate).map_err(|e|e.to_string())?;
     let mut copied = PendingImageCopies(Vec::new());
     if let Some(paths) = details.manuals.take() {
-        manuals::copy_into_collection(&tx, root, details.id as i64, &paths, &mut copied)?;
+        manuals::copy_into_collection(&tx, root, details.id as i64, &paths, &details.manual_sources, &mut copied)?;
     }
     if let Some(images) = &mut details.images {
         validate_game_images(images)?;
@@ -1964,7 +1966,7 @@ mod game_edit_tests {
     }
 
     fn details() -> GameDetails {
-        GameDetails { metadata_source: None, launch_actions:None, personal:None, manual_preference:None, rom_path:None, order_group:None, box_3d:None, regions:None, variables: None, execution: None, discs: None,
+        GameDetails { manual_sources: Default::default(), metadata_source: None, launch_actions:None, personal:None, manual_preference:None, rom_path:None, order_group:None, box_3d:None, regions:None, variables: None, execution: None, discs: None,
             id: 1, title: "  New Title  ".into(), platform: "genesis".into(),
             release_date: Some("1992-11-24".into()),
             developer: Some("  Developer  ".into()), publisher: Some("Publisher".into()),
@@ -2776,6 +2778,7 @@ pub fn run() {
             select_game_images,
             manuals::select_game_manuals,
             manuals::get_game_manuals,
+            manuals::get_game_manual_sources,
             manuals::delete_game_manual,
             cbz::get_cbz_manifest,
             cbz::read_cbz_page,

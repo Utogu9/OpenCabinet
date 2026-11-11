@@ -2869,7 +2869,7 @@ function setupGameImageDownloader({ getGame, getImages, onImages, onBusy, getMan
   }
   function acceptReport(report) {
     onImages(report.images);
-    onManuals(report.manuals || []);
+    onManuals(report.manuals || [], report.manual_sources || {});
     retryAvailable = report.failures.length > 0;
     retry.classList.toggle("hidden", !retryAvailable);
     const failures = document.getElementById("editor-artwork-failures"); failures.replaceChildren();
@@ -3180,6 +3180,7 @@ function setupGameEditor() {
   let personalEditor = null, draftPreferredManual = "";
   let launchActionsEditor = null;
   let savedManuals = [], draftManuals = [];
+  let manualSources = new Map();
   let editorManualData=null;
   const editorManualReader=window.OpenCabinetManualReader?.create({imageSource,onClose:()=>{editorManualData?.dispose();editorManualData=null;}});
   let manualVersion = 0;
@@ -3228,7 +3229,13 @@ function setupGameEditor() {
   const downloader = setupGameImageDownloader({
     onState: state => { artworkState = state; updateEditorActions(); },
     getManuals: () => [...savedManuals, ...draftManuals],
-    onManuals: paths => { paths.forEach(path => { if (!savedManuals.includes(path) && !draftManuals.includes(path)) draftManuals.push(path); }); renderManuals(); },
+    onManuals: (paths, sources) => {
+      paths.forEach(path => {
+        if (!savedManuals.includes(path) && !draftManuals.includes(path)) draftManuals.push(path);
+        if (sources[path]) manualSources.set(path,sources[path]);
+      });
+      renderManuals();
+    },
     onSource: id => { draftCatalogId = id; },
     getGame: () => ({ id: editingId, title: document.getElementById("game-edit-name").value.trim(), platform: platformSelect.value }),
     getImages: () => draftImages.map((image) => ({ ...image })),
@@ -3398,8 +3405,10 @@ function setupGameEditor() {
     for (const [paths, pending] of [[savedManuals, false], [draftManuals, true]]) {
       for (const path of paths) {
         const row = document.createElement("div"); row.className = "game-manual-item";
-        const name = document.createElement("span"); name.className = "game-manual-name";
-        name.textContent = `${path.split(/[\\/]/).pop()}${pending ? globalThis.OpenCabinetI18n.t("msg.57b3b593fd") : ""}`; name.title = path;
+        const file = imageFilename({path,source:manualSources.get(path)});
+        file.classList.add("game-manual-file");
+        const name=file.children[0];
+        if (pending) name.textContent += globalThis.OpenCabinetI18n.t("msg.57b3b593fd");
         const action = document.createElement("button"); action.type = "button"; action.className = "secondary-btn";
         action.textContent = pending ? globalThis.OpenCabinetI18n.t("msg.f039f4a8c9") : globalThis.OpenCabinetI18n.t("msg.74e094e879");
         action.addEventListener("click", async () => {
@@ -3441,7 +3450,7 @@ function setupGameEditor() {
           }catch(error){showToast(String(error),true);}
           finally{choosingImages=false;metadataControls();}
         });
-        preferred.classList.toggle("hidden",savedManuals.length+draftManuals.length<2);row.append(name, action, preferred,remove); list.appendChild(row);
+        preferred.classList.toggle("hidden",savedManuals.length+draftManuals.length<2);row.append(file, action, preferred,remove); list.appendChild(row);
       }
     }
     metadataControls();
@@ -3452,9 +3461,16 @@ function setupGameEditor() {
     const version = ++manualVersion;
     if (id === null) return;
     try {
-      const paths = await invoke("get_game_manuals", { id });
+      const [paths,sources] = await Promise.all([
+        invoke("get_game_manuals", { id }),
+        invoke("get_game_manual_sources", { id }).catch(error => { console.error("Could not read manual sources:",error); return {}; }),
+      ]);
       if (id !== editingId || closing || version !== manualVersion) return;
       savedManuals = paths;
+      for (const path of paths) {
+        if (sources[path]) manualSources.set(path,sources[path]);
+        else manualSources.delete(path);
+      }
       manualCoverCache?.trackGame(id,paths);
       if(!draftPreferredManual)draftPreferredManual=paths[0]||"";
       draftManuals = draftManuals.filter(path => !paths.includes(path));
@@ -3519,6 +3535,7 @@ function setupGameEditor() {
     editingId = null;
     draftImages = [];
     savedManuals = []; draftManuals = [];
+    manualSources.clear();
     ++manualVersion;
     document.getElementById("game-manual-list").replaceChildren();
     document.getElementById("game-image-list").replaceChildren();
@@ -3576,7 +3593,7 @@ function setupGameEditor() {
         }
       }).catch(error => console.error("Could not read metadata source:", error));
       draftImages = gameImages(game);
-      savedManuals = []; draftManuals = []; renderManuals();
+      savedManuals = []; draftManuals = []; manualSources.clear(); renderManuals();
       renderImageEditor();
       document.getElementById("game-edit-name").value = game.title;
       document.getElementById("game-edit-release-date").value = game.release_date || "";
@@ -3682,6 +3699,7 @@ function setupGameEditor() {
       publisher: document.getElementById("game-edit-publisher").value.trim() || null,
       images: draftImages.map((image) => ({ ...image })),
       manuals: [...draftManuals],
+      manualSources: Object.fromEntries(draftManuals.filter(path=>manualSources.has(path)).map(path=>[path,manualSources.get(path)])),
       genre: document.getElementById("game-edit-genre").value.trim() || null,
       gameMode: document.getElementById("game-edit-game-mode").value.trim() === gameModeLabel.trim()
         ? gameModeSource : document.getElementById("game-edit-game-mode").value.trim() || null,

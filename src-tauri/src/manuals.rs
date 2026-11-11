@@ -115,6 +115,7 @@ pub(crate) fn copy_into_collection(
     root: &Path,
     id: i64,
     paths: &[String],
+    sources: &crate::media_provenance::Sources,
     copies: &mut PendingImageCopies,
 ) -> Result<()> {
     if paths.is_empty() {
@@ -133,6 +134,7 @@ pub(crate) fn copy_into_collection(
         let mut duplicate = false;
         for existing in &saved {
             if same_contents(source, existing)? {
+                save_source(conn,root,existing,sources.get(path))?;
                 duplicate = true;
                 break;
             }
@@ -164,6 +166,7 @@ pub(crate) fn copy_into_collection(
                         .map_err(err)?;
                     out.flush().map_err(err)?;
                     validate(&target)?;
+                    save_source(conn,root,&target,sources.get(path))?;
                     saved.push(target);
                     break;
                 }
@@ -173,6 +176,29 @@ pub(crate) fn copy_into_collection(
                 Err(e) => return Err(err(e)),
             }
         }
+    }
+    Ok(())
+}
+
+fn source_key(root: &Path, path: &Path) -> String {
+    path.strip_prefix(root).unwrap_or(path).to_string_lossy().replace('\\', "/")
+}
+
+pub(crate) fn sources(conn: &Connection, root: &Path, paths: &[PathBuf]) -> Result<crate::media_provenance::Sources> {
+    let mut sources = crate::media_provenance::Sources::new();
+    for path in paths {
+        if let Some(source) = crate::media_provenance::read_file(conn,&source_key(root,path))? {
+            sources.insert(path.to_string_lossy().into_owned(),source);
+        }
+    }
+    Ok(sources)
+}
+
+pub(crate) fn save_source(conn: &Connection, root: &Path, path: &Path, source: Option<&crate::media_provenance::Source>) -> Result<()> {
+    let key=source_key(root,path);
+    // An identical manual may already carry attribution from another source.
+    if crate::media_provenance::read_file(conn,&key)?.is_none() {
+        crate::media_provenance::save_file(conn,&key,source)?;
     }
     Ok(())
 }
@@ -241,6 +267,18 @@ pub async fn get_game_manuals(id: i64) -> Result<Vec<String>> {
 }
 
 #[tauri::command]
+pub async fn get_game_manual_sources(id: i64) -> Result<crate::media_provenance::Sources> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let conn=crate::get_db_connection().map_err(err)?;
+        let root=crate::data_directory().map_err(err)?;
+        let paths=match existing_collection(&conn,&root,id)? {
+            Some(collection)=>scan(&collection)?,None=>Vec::new(),
+        };
+        sources(&conn,&root,&paths)
+    }).await.map_err(err)?
+}
+
+#[tauri::command]
 pub async fn open_game_folder(app: tauri::AppHandle, id: i64, kind: String) -> Result<()> {
     tauri::async_runtime::spawn_blocking(move || {
         let mut conn = crate::get_db_connection().map_err(err)?;
@@ -283,6 +321,7 @@ pub(crate) fn delete_manual(conn: &mut Connection, root: &Path, id: i64, path: &
     let result = (|| {
         crate::library_features::init(conn).map_err(err)?;
         let tx = conn.transaction().map_err(err)?;
+        tx.execute("DELETE FROM image_sources WHERE path=?1",[source_key(root,&allowed)]).map_err(err)?;
         tx.execute("DELETE FROM game_manual_preferences WHERE game_id=?1 AND filename=?2",(id,allowed.file_name().unwrap().to_string_lossy().as_ref())).map_err(err)?;
         let mut copies = PendingImageCopies(Vec::new());
         media_library::sync_game(&tx,root,id,&mut copies)?;

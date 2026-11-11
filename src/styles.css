@@ -1513,6 +1513,8 @@ html[data-os="linux"] .game-box-model .game-box-face { will-change: transform; }
 .game-manual-list { display: flex; flex-direction: column; gap: 8px; color: var(--text-muted); font-size: 0.85rem; }
 .game-manual-item { display: flex; align-items: center; gap: 12px; padding: 10px; border: 1px solid var(--border-color); border-radius: 8px; }
 .game-manual-name { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.game-manual-file { flex: 1; min-width: 0; }
+.game-manual-file .media-source-badge { flex-shrink: 1; }
 .game-manual-item button { flex-shrink: 0; }
 .media-preference-button { display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; width: 28px; height: 28px; padding: 5px; border: 0; border-radius: 5px; background: transparent; color: var(--text-muted); opacity: .55; cursor: pointer; }
 .media-preference-button:hover, .media-preference-button[aria-pressed="true"] { color: var(--text-main); opacity: 1; background: var(--card-hover-bg); }
@@ -1604,7 +1606,7 @@ html[data-os="linux"] .game-box-model .game-box-face { will-change: transform; }
   gap: 6px;
   min-width: 0;
 }
-.image-editor-filename .image-editor-name { flex: 1 1 0; min-width: 0; }
+.image-editor-filename .image-editor-name { flex: 1 1 0; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .media-uploader-badge,
 button.media-source-badge {
   display: inline-block;

@@ -384,6 +384,8 @@ struct CatalogImage {
 
 #[derive(Serialize, Deserialize)]
 struct PreparedGame {
+    #[serde(default)]
+    manual_sources: crate::media_provenance::Sources,
     candidate: RomCandidate,
     metadata: Option<CatalogGame>,
     images: Vec<GameImage>,
@@ -432,6 +434,7 @@ pub struct DownloadReport {
 
 #[derive(Serialize)]
 pub struct EditorImageReport {
+    manual_sources: crate::media_provenance::Sources,
     images: Vec<GameImage>,
     manuals: Vec<String>,
     image_count: usize,
@@ -1287,6 +1290,7 @@ fn prepare_batch(
             )
             .map_err(err)?;
         let mut prepared = PreparedGame {
+            manual_sources: Default::default(),
             candidate: candidate.clone(),
             metadata: None,
             images: Vec::new(),
@@ -1418,10 +1422,15 @@ fn download_batch(
     for game in &mut batch.games {
         game.images.clear();
         game.manuals.clear();
+        game.manual_sources.clear();
     }
     for task in batch.tasks.iter().filter(|task| task.done) {
         if task.image.kind == "manual" {
-            batch.games[task.game_index].manuals.push(task.path.to_string_lossy().into_owned());
+            let path=task.path.to_string_lossy().into_owned();
+            if let Some(source)=task.image.source.as_ref().and_then(crate::media_provenance::Source::clean) {
+                batch.games[task.game_index].manual_sources.insert(path.clone(),source);
+            }
+            batch.games[task.game_index].manuals.push(path);
             continue;
         }
         batch.games[task.game_index].images.push(GameImage { source: task.image.source.clone(),
@@ -1563,7 +1572,7 @@ pub(super) fn commit_import(
             }
             summary.image_count += 1;
         }
-        crate::manuals::copy_into_collection(&tx, &job.root, id, &game.manuals, &mut copied)?;
+        crate::manuals::copy_into_collection(&tx, &job.root, id, &game.manuals, &game.manual_sources, &mut copied)?;
         crate::media_library::sync_game(&tx,&job.root,id,&mut copied)?;
         summary.manual_count += game.manuals.len();
         summary.failed_image_count += failures_per_game[index];
@@ -2027,6 +2036,7 @@ fn prepare_editor_images(
         },
         platform,
         games: vec![PreparedGame {
+            manual_sources: Default::default(),
             candidate,
             metadata: None,
             images: Vec::new(),
@@ -2286,8 +2296,11 @@ fn editor_image_report(
         }
     }
     let report = download_report(batch);
+    let manuals:Vec<_>=batch.games[0].manuals.iter().filter(|path| !existing_manuals.iter().any(|saved| identical_images(Path::new(path), Path::new(saved)))).cloned().collect();
+    let manual_sources=manuals.iter().filter_map(|path|batch.games[0].manual_sources.get(path).map(|source|(path.clone(),source.clone()))).collect();
     Ok(EditorImageReport {
-        manuals: batch.games[0].manuals.iter().filter(|path| !existing_manuals.iter().any(|saved| identical_images(Path::new(path), Path::new(saved)))).cloned().collect(),
+        manual_sources,
+        manuals,
         images,
         image_count: report.image_count,
         available_count: batch.tasks.len(),
@@ -2599,12 +2612,23 @@ mod tests {
     fn downloads_pdf_and_cbz_before_import_and_commits_portable_manuals() {
         let sandbox = Sandbox::new(); let mut conn = library(); let catalog = sandbox.catalog();
         catalog_manuals(&catalog);
+        let source=crate::media_provenance::Source{uploader:Some("Manual scanner".into()),url:Some("https://segaretro.org/File:Exact_manual.pdf".into())};
+        let writer=Connection::open(catalog.path().unwrap()).unwrap();
+        writer.execute_batch("CREATE TABLE repository_image_sources(filename TEXT PRIMARY KEY,details TEXT NOT NULL)").unwrap();
+        for filename in ["manual.pdf","manual2.cbz"] {
+            writer.execute("INSERT INTO repository_image_sources VALUES(?1,?2)",params![filename,serde_json::to_string(&source).unwrap()]).unwrap();
+        }
+        drop(writer);
         let mut batch = sandbox.batch(&conn,&catalog,1,MediaOptions{manuals:true,..Default::default()});
         assert_eq!(batch.tasks.len(),2);
         let server = MockServer::new(vec![("manual.pdf",vec![(200,b"%PDF-1.7\nGuide\n%%EOF".to_vec())]),("manual2.cbz",vec![(200,cbz_bytes())])],false);
         let report = download_batch(&mut batch,&sandbox.job,&server.base,|_|()).unwrap();
         assert_eq!(report.manual_count,2); assert_eq!(report.image_count,0); assert!(report.failures.is_empty());
         assert_eq!(count(&conn),0); assert!(batch.games[0].images.is_empty());
+        assert_eq!(batch.games[0].manual_sources.len(),2);
+        assert!(batch.games[0].manual_sources.values().all(|saved|saved==&source));
+        let draft=editor_image_report(&batch,&[],&[],&sandbox.job).unwrap();
+        assert_eq!(draft.manual_sources.len(),2);
         // The editor filters out byte-identical manuals already saved or staged.
         let existing = batch.games[0].manuals.clone();
         assert!(editor_image_report(&batch,&[],&existing,&sandbox.job).unwrap().manuals.is_empty());
@@ -2615,8 +2639,11 @@ mod tests {
         let collection = sandbox.root.join(directory);
         let manuals = crate::manuals::scan(&collection).unwrap(); assert_eq!(manuals.len(),2);
         assert!(manuals.iter().all(|path|path.starts_with(collection.join("manuals"))));
+        let saved_sources=crate::manuals::sources(&conn,&sandbox.root,&manuals).unwrap();
+        assert_eq!(saved_sources.len(),2);assert!(saved_sources.values().all(|saved|saved==&source));
         let manifest = fs::read_to_string(collection.join("manifest.json")).unwrap();
         assert!(manifest.contains(".pdf") && manifest.contains(".cbz"));
+        assert!(manifest.contains("manual_sources") && manifest.contains("Manual scanner"));
         assert_eq!(conn.query_row("SELECT COUNT(*) FROM game_images",[],|r|r.get::<_,i64>(0)).unwrap(),0);
     }
 
@@ -4031,7 +4058,7 @@ mod tests {
         .unwrap();
         let source = &batch.tasks[0].path;
         fs::write(source, PNG).unwrap();
-        let details = crate::GameDetails { metadata_source: None, launch_actions:None, personal:None, manual_preference:None, rom_path:None, order_group:None, box_3d:None, regions: None, variables: None, execution: None, discs: None,
+        let details = crate::GameDetails { manual_sources: Default::default(), metadata_source: None, launch_actions:None, personal:None, manual_preference:None, rom_path:None, order_group:None, box_3d:None, regions: None, variables: None, execution: None, discs: None,
             manuals: None,
             id,
             title: "Custom title".into(),

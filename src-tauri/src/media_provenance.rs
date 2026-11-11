@@ -1,6 +1,7 @@
 //! Attribution stays with managed artwork, including portable collection manifests.
 use rusqlite::{params, Connection, OptionalExtension};
 use serde::{Deserialize, Serialize};
+pub type Sources = std::collections::BTreeMap<String, Source>;
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq)]
 pub struct Source {
@@ -58,6 +59,17 @@ pub fn save_image(conn: &Connection, path: &str, source: Option<&Source>) -> Res
         .map_err(|e| e.to_string())?;
     }
     Ok(())
+}
+
+// Keep the existing index compatible while also tracking PDF/CBZ attribution.
+pub fn save_file(conn: &Connection, path: &str, source: Option<&Source>) -> Result<(), String> {
+    save_image(conn, path, source)
+}
+
+pub fn read_file(conn: &Connection, path: &str) -> Result<Option<Source>, String> {
+    let json = conn.query_row("SELECT details FROM image_sources WHERE path=?1", [path], |r|r.get(0))
+        .optional().map_err(|e|e.to_string())?;
+    Ok(decode(json))
 }
 
 pub fn save_metadata(conn: &Connection, game: i64, source: Option<&Source>) -> Result<(), String> {

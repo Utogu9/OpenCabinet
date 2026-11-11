@@ -296,6 +296,7 @@ fn prepare_with_counts(
             },
             platform: source.into(),
             games: vec![PreparedGame {
+                manual_sources: Default::default(),
                 media_collection_id: None,
                 candidate: RomCandidate { linux_execution: None, recomp: false, launch_directly: false, discs: Vec::new(), existing_game_id: None,
                     steam: None, epic: None,

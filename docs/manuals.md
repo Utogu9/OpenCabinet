@@ -16,6 +16,14 @@ publicados. **Editar juego → Manuales → Descargar manuales** permite buscar 
 cambiar la coincidencia y agregar los PDF y CBZ al borrador. Hay que guardar los
 cambios para conservarlos. Los archivos idénticos a manuales existentes se omiten.
 
+Las descargas conservan el uploader y la página de origen cuando el catálogo
+los incluye. En **Editar juego → Manuales** aparecen junto al nombre del archivo,
+con el mismo formato de etiquetas que las imágenes. La etiqueta del sitio abre
+el enlace exacto; el nombre del archivo se acorta antes que los créditos cuando
+falta espacio. Los créditos se conservan al guardar, respaldar y recuperar la
+colección, incluso si dos manuales distintos tenían el mismo nombre. Los
+archivos agregados manualmente sin atribución no muestran créditos inventados.
+
 Durante la importación, la casilla **Descargar manuales (PDF / CBZ)** aparece debajo
 de los tipos de imagen. Es independiente de las imágenes y permite importar solo
 manuales. La descarga comparte el progreso, la cancelación y el reintento de

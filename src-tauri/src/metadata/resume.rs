@@ -131,7 +131,7 @@ mod tests{
         let preview=ScanPreview{games:vec![candidate.clone()],skipped_count:0,total_found:1};
         let mut prepared=candidate;prepared.title="Catalog title".into();
         let tasks=[("cover.png","cover"),("guide.pdf","manual")].into_iter().map(|(filename,kind)|DownloadTask{game_index:0,image:CatalogImage{ source: None,filename:filename.into(),kind:kind.into(),region:"World".into(),crc:String::new()},path:job.directory.join(format!("0-{filename}")),failure:None,done:false}).collect();
-        let batch=StagedBatch{preview,platform:"PS2".into(),games:vec![PreparedGame{candidate:prepared,metadata:None,images:vec![],manuals:vec![],media_collection_id:None}],tasks};
+        let batch=StagedBatch{preview,platform:"PS2".into(),games:vec![PreparedGame{manual_sources:Default::default(),candidate:prepared,metadata:None,images:vec![],manuals:vec![],media_collection_id:None}],tasks};
         for task in &batch.tasks{job.image_urls.lock().unwrap().insert(task.image.filename.clone(),format!("https://example.invalid/{}",task.image.filename));}
         (root,jobs,job,batch)
     }

@@ -156,6 +156,7 @@ function mediaApp(options = {}) {
             play_time_seconds: 0, session_count: 1, is_running: true };
           if (command === "select_game_images") return pickerPaths;
           if (command === "get_game_manuals") return [];
+          if (command === "get_game_manual_sources") return {};
           if (command === "get_game_metadata_source") return null;
           if (command === "select_game_manuals") return pickerPaths;
           assert.equal(command, "update_game");
@@ -246,6 +247,40 @@ test("Manual downloads support PDF and CBZ drafts, a manual-only catalog and the
   assert.equal(app.get('game-manual-list').children.length, 2);
   await app.save();
   assert.deepEqual(app.calls.find(call => call.command === 'update_game').args.details.manuals, paths);
+});
+
+test("Manual credits use the image badges for saved PDFs and downloaded CBZ drafts, preserving exact links on Save", async () => {
+  const saved='C:/data/images/collection/manuals/Guide.pdf';
+  const local='C:/data/images/collection/manuals/Personal.pdf';
+  const draft='C:/temp/downloaded.cbz';
+  const source={uploader:'Manual scanner',url:'https://segaretro.org/File:Exact_manual.pdf?oldid=123'};
+  const draftSource={url:'https://www.gametdb.com/PS3/BCAS20003'};
+  const app=mediaApp({handlers:{
+    get_game_manuals:()=>[saved,local],get_game_manual_sources:()=>({[saved]:source}),
+    get_metadata_image_types:()=>({counts:{},manual_count:1}),open_source_url:()=>null,
+    download_editor_game_images:()=>({images:[],manuals:[draft],manual_sources:{[draft]:draftSource},image_count:0,available_count:1,failures:[]}),
+  }});
+  await app.open();
+  const list=app.get('game-manual-list');
+  const header=list.children[0].children[0];
+  assert.equal(header.children[0].textContent,'Guide.pdf');
+  assert.equal(header.children[1].textContent,'Manual scanner');
+  assert.equal(header.children[2].textContent,'Sega Retro');
+  assert.equal(list.children[1].children[0].children.length,1,'local files without attribution have no invented credit');
+  await header.children[2].trigger('click');
+  assert.deepEqual(app.calls.find(call=>call.command==='open_source_url').args,{url:source.url});
+  await list.children[0].children[2].trigger('click');
+  assert.equal(list.children[0].children[0].children[1].textContent,'Manual scanner','preference changes preserve badges');
+  await app.get('btn-download-game-manuals').trigger('click');
+  await app.get('btn-editor-artwork-download').trigger('click');
+  const downloaded=list.children[2].children[0];
+  assert.equal(downloaded.children.length,2,'a URL without an uploader shows only the site badge');
+  assert.equal(downloaded.children[1].textContent,'GameTDB');
+  assert.equal(downloaded.children[1].title,draftSource.url);
+  assert.equal(app.calls.some(call=>call.command==='update_game'),false);
+  await app.save();
+  const details=app.calls.find(call=>call.command==='update_game').args.details;
+  assert.deepEqual(details.manuals,[draft]);assert.deepEqual(details.manualSources,{[draft]:draftSource});
 });
 
 test("Manual search can change matches, retry failures and switch back to image downloads", async () => {
@@ -452,7 +487,7 @@ test("Manual PDFs stay in the editor draft until Save, and Cancel discards the s
   app.picker(["C:/docs/Manual.pdf", "C:/docs/Controls.pdf", "C:/docs/Manual.pdf"]);
   await app.get("btn-add-game-manuals").trigger("click");
   assert.equal(app.get("game-manual-list").children.length, 2);
-  assert.match(app.get("game-manual-list").children[0].children[0].textContent, /Pendiente/);
+  assert.match(app.get("game-manual-list").children[0].children[0].children[0].textContent, /Pendiente/);
   assert.equal(app.calls.some(c => c.command === "update_game"), false);
   await app.get("btn-cancel-game-edit").trigger("click"); await app.open();
   assert.equal(app.get("game-manual-list").children.length, 0);
