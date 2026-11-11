@@ -3,6 +3,7 @@ use super::RepoEntry;
 
 fn canonical(value: &str) -> Option<String> {
     let value=value.trim();
+    if let Some(region)=super::super::canonical_region(value) { return Some(region.to_owned()); }
     let name=match value.to_ascii_uppercase().as_str() {
         ""|"UNKNOWN"|"UNK"|"N/A"=>return None,
         "ALL"|"WORLD"|"WORLDWIDE"|"WLD"|"ALL REGIONS"=>"World",
@@ -60,7 +61,8 @@ mod tests {
             (r#"[{"name":"Game","region":"UNKNOWN"}]"#,vec![]),
             (r#"[{"name":"Game","region":"N/A"}]"#,vec![]),
             (r#"[{"name":"Game (Europe)","region":null}]"#,vec!["Europe"]),
-            (r#"[{"name":"Game","region":"PAL"}]"#,vec!["PAL"]),
+            (r#"[{"name":"Game","region":"PAL"}]"#,vec!["Europe"]),
+            (r#"[{"name":"Game","region":"U/E/J"}]"#,vec!["North America","Europe","Japan"]),
         ] {
             assert_eq!(from_entries(&serde_json::from_str::<Vec<RepoEntry>>(json).unwrap()),expected);
         }

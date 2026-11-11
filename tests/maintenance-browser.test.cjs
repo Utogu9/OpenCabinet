@@ -36,6 +36,11 @@ test('Storage and diagnostics fit the real dialogs and export only the reviewed 
     document.getElementById('preferences-dialog').showModal();await panel.open();
   });
   assert.equal(await page.evaluate(()=>calls.length),0);
+  const reset=await page.locator('#btn-reset-preferences').boundingBox();
+  const footer=await page.locator('#preferences-form > .form-actions').boundingBox();
+  const cancel=await page.locator('#btn-cancel-preferences').boundingBox();
+  assert.ok(Math.abs(reset.x-(footer.x+24))<2,'Restore defaults starts at the left footer margin');
+  assert.ok(cancel.x>reset.x+reset.width+20,'Cancel stays separated on the right');
   await page.locator('#btn-refresh-storage').click();await page.waitForFunction(()=>document.querySelector('#storage-retained button'));
   assert.equal(await page.locator('#storage-retained button').textContent(),'Open folder');
   await page.locator('#storage-retained button').click();

@@ -53,6 +53,7 @@ pub async fn select_game_file(
             .unwrap_or_default()
             .into_iter()
             .map(|value| value.trim().trim_start_matches('.').to_owned())
+            .map(|value| if crate::folder_games::supported(&platform) && value.eq_ignore_ascii_case("eboot") {"bin".to_owned()} else {value})
             .filter(|value| !value.is_empty())
             .collect();
         if crate::folder_games::supported(&platform) && !extensions.iter().any(|e| e.eq_ignore_ascii_case("bin")) { extensions.push("bin".into()); }

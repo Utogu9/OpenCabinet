@@ -284,7 +284,7 @@ pub struct CatalogGame {
     description: Option<String>,
 }
 
-#[derive(Serialize, Debug)]
+#[derive(Serialize, Debug, Clone)]
 pub struct SearchResult {
     #[serde(flatten)]
     game: CatalogGame,
@@ -311,6 +311,7 @@ pub struct MatchSelection {
 #[derive(Deserialize, Debug, Clone, Default)]
 #[serde(default)]
 pub struct MediaOptions {
+    default_region: Option<String>,
     selected_types: Option<Vec<String>>,
     download_all: bool,
     manuals: bool,
@@ -1115,10 +1116,10 @@ pub(super) fn rom_regions(path: &str) -> Vec<&'static str> {
                     "u"|"us"|"usa"|"north america"=>"North America",
                     "e"|"eu"|"eur"|"europe"|"european"|"pal"=>"Europe",
                     "j"|"jp"|"jpn"|"jap"|"japan"=>"Japan",
-                    "w"|"world"|"worldwide"=>"World",
+                    "w"|"world"|"worldwide"|"all"|"all regions"=>"World",
                     "spain"=>"Spain", "france"=>"France", "germany"=>"Germany",
-                    "brazil"=>"Brazil", "korea"=>"Korea", "asia"=>"Asia",
-                    "australia"=>"Australia", "italy"=>"Italy",
+                    "brazil"|"br"|"bra"=>"Brazil", "korea"|"kr"|"kor"|"south korea"=>"Korea", "asia"|"as"|"asi"=>"Asia",
+                    "australia"|"au"|"aus"=>"Australia", "italy"=>"Italy",
                     _=>continue,
                 };
                 if !regions.contains(&region) { regions.push(region); }
@@ -1128,12 +1129,47 @@ pub(super) fn rom_regions(path: &str) -> Vec<&'static str> {
     regions
 }
 
+// Shared aliases for preferences and catalog region fields, including GoodTools tags.
+fn canonical_region(value: &str) -> Option<&'static str> {
+    rom_regions(&format!("Game ({value}).iso")).first().copied()
+}
+
+fn import_match(catalog: &Connection, candidates: &[SearchResult], path: &str, default_region: &str) -> Result<Option<i64>> {
+    let exact: Vec<_> = candidates.iter().filter(|candidate| candidate.exact).collect();
+    if exact.len() == 1 { return Ok(Some(exact[0].game.id)); }
+    let detected=rom_regions(path);
+    if !detected.is_empty() {
+        if let Some(id)=repository::regional_match(catalog,candidates,path)? {return Ok(Some(id));}
+    }
+    for region in if detected.is_empty() {vec![canonical_region(default_region).unwrap_or("North America")]} else {detected} {
+        let preferred: Vec<_> = exact.iter().filter(|candidate| candidate.regions.iter()
+            .any(|value| canonical_region(value) == Some(region))).map(|candidate| (*candidate).clone()).collect();
+        if preferred.len() == 1 { return Ok(Some(preferred[0].game.id)); }
+        if !preferred.is_empty() {
+            let filename=path.rsplit(['/', '\\']).next().unwrap_or(path);
+            let stem=filename.rsplit_once('.').map_or(filename, |(stem,_)|stem);
+            let regional_path = format!("{stem} ({region}).iso");
+            if let Some(id) = repository::regional_match(catalog, &preferred, &regional_path)? { return Ok(Some(id)); }
+            // Some systems store release regions separately, without tags in any
+            // title. Keep the established shortest-ID rule within this region.
+            if preferred.iter().all(|candidate|candidate.source_key.is_some()) && preferred.iter()
+                .map(|candidate|normalize(&candidate.game.title)).collect::<HashSet<_>>().len()==1 {
+                return Ok(repository::shortest_match(&preferred,&preferred.iter().map(|candidate|candidate.game.id).collect::<Vec<_>>()));
+            }
+        }
+    }
+    repository::regional_match(catalog, candidates, path)
+}
+
 fn select_images(
     mut images: Vec<CatalogImage>,
     options: &MediaOptions,
     rom_path: &str,
 ) -> Vec<CatalogImage> {
     let mut regions = rom_regions(rom_path);
+    if regions.is_empty() {
+        if let Some(region)=options.default_region.as_deref().and_then(canonical_region) {regions.push(region);}
+    }
     for region in ["World", "North America", "Europe", "Japan", ""] {
         if !regions.contains(&region) {
             regions.push(region);
@@ -1143,7 +1179,7 @@ fn select_images(
         let rank = |image: &CatalogImage| {
             regions
                 .iter()
-                .position(|r| r.eq_ignore_ascii_case(&image.region))
+                .position(|r| r.eq_ignore_ascii_case(&image.region) || canonical_region(r).is_some_and(|region|canonical_region(&image.region)==Some(region)))
                 .unwrap_or(regions.len())
         };
         rank(a).cmp(&rank(b)).then(a.filename.cmp(&b.filename))
@@ -1663,6 +1699,7 @@ pub async fn match_metadata_games(
     preview: ScanPreview,
     platform: String,
     source_platform: String,
+    default_region: Option<String>,
     on_progress: Channel<MetadataProgress>,
     jobs: tauri::State<'_, MetadataJobs>,
 ) -> Result<Vec<MatchRow>> {
@@ -1701,12 +1738,7 @@ pub async fn match_metadata_games(
                     let _ = channel.send(progress_job.progress("matching", index as u64, Some(total), Some(title.clone())));
                 }, || repository::search_candidate(&catalog, &candidate.title, &source_platform, &candidate.rom_path))?
             };
-            let exact: Vec<_> = candidates.iter().filter(|g| g.exact).collect();
-            let selected_id = if exact.len() == 1 {
-                Some(exact[0].game.id)
-            } else {
-                repository::regional_match(&catalog,&candidates,&candidate.rom_path)?
-            };
+            let selected_id = import_match(&catalog,&candidates,&candidate.rom_path,default_region.as_deref().unwrap_or("North America"))?;
             rows.push(MatchRow {
                 rom_path: candidate.rom_path,
                 candidates,
@@ -3047,6 +3079,9 @@ mod tests {
         for (tag,region) in [("U","North America"),("E","Europe"),("J","Japan"),("W","World"),("UE","North America"),("JU","Japan")] {
             assert_eq!(select_images(images.clone(),&options,&format!("Game ({tag}) [!].gen"))[0].region,region,"{tag}");
         }
+        let options=MediaOptions{cover:1,default_region:Some("JPN".into()),..Default::default()};
+        assert_eq!(select_images(images.clone(),&options,"Game.iso")[0].region,"Japan");
+        assert_eq!(select_images(images,&options,"Game (USA).iso")[0].region,"North America");
     }
 
     #[test]

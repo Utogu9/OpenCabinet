@@ -43,6 +43,16 @@ de importación. Los juegos sin coincidencia siempre mantienen el título
 revisado. Esta elección se guarda al pulsar Guardar y no renombra juegos
 existentes.
 
+## Región de importación
+
+La **Región predeterminada de importación**, en **Datos de juegos**, se usa cuando
+el archivo no indica una región reconocible y hay coincidencias exactas de nombre.
+El valor inicial es USA/Norteamérica. Se pueden elegir Europa, Japón y otras
+regiones; sus abreviaturas equivalentes se reconocen también en el catálogo.
+Una región presente en el nombre del archivo tiene prioridad sobre esta opción.
+La misma preferencia se aplica al elegir imágenes de los juegos importados sin
+región; no modifica los nombres ni las rutas de los archivos originales.
+
 ## Ubicación de los datos de usuario
 
 En la sección **Datos de usuario**, **Examinar...** permite seleccionar una carpeta vacía o una biblioteca existente, como una copia de seguridad. La app comprueba la carpeta y muestra qué hará antes de guardar:

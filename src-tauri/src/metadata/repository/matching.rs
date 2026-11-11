@@ -146,7 +146,7 @@ pub(in crate::metadata) fn finish_search_results(
     Ok(results)
 }
 
-pub(super) fn shortest_match(candidates: &[SearchResult], ids: &[i64]) -> Option<i64> {
+pub(in crate::metadata) fn shortest_match(candidates: &[SearchResult], ids: &[i64]) -> Option<i64> {
     candidates
         .iter()
         .filter(|candidate| ids.contains(&candidate.game.id))

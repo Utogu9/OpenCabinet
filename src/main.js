@@ -139,7 +139,12 @@ let manualCoverCache = null;
 const isJewelManualGame = game => !!window.OpenCabinet3D?.jewelFamily(game?.platform);
 const pauseManualPrefetchForScroll=()=>manualCoverCache?.pauseForScroll();
 const PREFERENCES_KEY = "opencabinet.preferences";
-const DEFAULT_PREFERENCES = { language: globalThis.OpenCabinetI18n.defaultLocale, maxCachedCovers: 400, cacheMode: "disk", cacheDirectory: "", startMaximized: true, coversOnly: false, timeFormat: "24h", releaseDateFormat: "DD-MM-YYYY", autoUpdateCatalog: true, combineRegionStatistics: true, useCatalogTitles: true };
+const DEFAULT_PREFERENCES = { language: globalThis.OpenCabinetI18n.defaultLocale, maxCachedCovers: 400, cacheMode: "disk", cacheDirectory: "", startMaximized: true, coversOnly: false, timeFormat: "24h", releaseDateFormat: "DD-MM-YYYY", autoUpdateCatalog: true, defaultRegion: "North America", combineRegionStatistics: true, useCatalogTitles: true };
+
+function canonicalImportRegion(value) {
+  const aliases={u:'North America',us:'North America',usa:'North America','north america':'North America',e:'Europe',eu:'Europe',eur:'Europe',europe:'Europe',european:'Europe',pal:'Europe',j:'Japan',jp:'Japan',jpn:'Japan',jap:'Japan',japan:'Japan',w:'World',world:'World',worldwide:'World',all:'World',asia:'Asia',as:'Asia',korea:'Korea',kr:'Korea',kor:'Korea',australia:'Australia',au:'Australia',aus:'Australia',brazil:'Brazil',br:'Brazil',spain:'Spain',france:'France',germany:'Germany',italy:'Italy'};
+  return aliases[String(value||'').trim().toLowerCase()]||null;
+}
 let preferences = readPreferences();
 let appThemes = null;
 const launchingGames = new Set();
@@ -166,6 +171,7 @@ function readPreferences() {
       timeFormat: ["12h", "24h"].includes(saved?.timeFormat) ? saved.timeFormat : DEFAULT_PREFERENCES.timeFormat,
       releaseDateFormat: ["DD-MM-YYYY","MM-DD-YYYY","YYYY-MM-DD"].includes(saved?.releaseDateFormat) ? saved.releaseDateFormat : DEFAULT_PREFERENCES.releaseDateFormat,
       autoUpdateCatalog: typeof saved?.autoUpdateCatalog === "boolean" ? saved.autoUpdateCatalog : true,
+      defaultRegion: canonicalImportRegion(saved?.defaultRegion) || DEFAULT_PREFERENCES.defaultRegion,
       combineRegionStatistics: typeof saved?.combineRegionStatistics === "boolean" ? saved.combineRegionStatistics : true,
       useCatalogTitles: typeof saved?.useCatalogTitles === "boolean" ? saved.useCatalogTitles : true,
     };
@@ -193,6 +199,7 @@ function setupPreferences() {
   const timeFormat = document.getElementById("preference-time-format");
   const releaseDateFormat=document.getElementById("preference-release-date-format");
   const autoUpdateCatalog=document.getElementById("preference-auto-update-catalog");
+  const defaultRegion=document.getElementById("preference-default-region");
   const restoreDefaults=document.getElementById("btn-reset-preferences");
   let resettingDefaults=false;
   const directory = document.getElementById("preference-data-directory");
@@ -293,7 +300,7 @@ function setupPreferences() {
     document.getElementById("preference-cache-disk-options").classList.toggle("hidden", cacheMode.value !== "disk");
     startMaximized.disabled = coversOnly.disabled = busy;
     timeFormat.disabled = busy;
-    releaseDateFormat.disabled=autoUpdateCatalog.disabled=restoreDefaults.disabled=busy;
+    releaseDateFormat.disabled=autoUpdateCatalog.disabled=defaultRegion.disabled=restoreDefaults.disabled=busy;
     document.getElementById("btn-close-preferences").disabled = busy;
     document.getElementById("btn-cancel-preferences").disabled = busy;
     restart.classList.toggle("hidden", !location?.pending_directory);
@@ -337,6 +344,7 @@ function setupPreferences() {
     timeFormat.value = preferences.timeFormat;
     releaseDateFormat.value=preferences.releaseDateFormat;
     autoUpdateCatalog.checked=preferences.autoUpdateCatalog;
+    defaultRegion.value=preferences.defaultRegion;
     resettingDefaults=false;
     error.classList.add("hidden");
     location = null;
@@ -406,7 +414,7 @@ function setupPreferences() {
     input.value=String(DEFAULT_PREFERENCES.maxCachedCovers);cacheMode.value=DEFAULT_PREFERENCES.cacheMode;draftCacheDirectory="";
     startMaximized.checked=DEFAULT_PREFERENCES.startMaximized;coversOnly.checked=DEFAULT_PREFERENCES.coversOnly;languageSelect.value=DEFAULT_PREFERENCES.language;
     combineRegions.checked=DEFAULT_PREFERENCES.combineRegionStatistics;catalogTitles.checked=DEFAULT_PREFERENCES.useCatalogTitles;
-    timeFormat.value=DEFAULT_PREFERENCES.timeFormat;releaseDateFormat.value=DEFAULT_PREFERENCES.releaseDateFormat;autoUpdateCatalog.checked=DEFAULT_PREFERENCES.autoUpdateCatalog;
+    timeFormat.value=DEFAULT_PREFERENCES.timeFormat;releaseDateFormat.value=DEFAULT_PREFERENCES.releaseDateFormat;autoUpdateCatalog.checked=DEFAULT_PREFERENCES.autoUpdateCatalog;defaultRegion.value=DEFAULT_PREFERENCES.defaultRegion;
     draftCatalog=null;draftDirectory=location.active_directory;selection=null;resettingDefaults=true;
     showCategory("startup");update();
     document.getElementById("preferences-form").requestSubmit();
@@ -447,6 +455,7 @@ function setupPreferences() {
       cacheMode: cacheMode.value === "ram" ? "ram" : "disk", cacheDirectory: draftCacheDirectory,
       startMaximized: startMaximized.checked, coversOnly: coversOnly.checked, timeFormat: timeFormat.value,
       releaseDateFormat:releaseDateFormat.value,autoUpdateCatalog:autoUpdateCatalog.checked,
+      defaultRegion:canonicalImportRegion(defaultRegion.value)||DEFAULT_PREFERENCES.defaultRegion,
       combineRegionStatistics: combineRegions.checked, useCatalogTitles: catalogTitles.checked };
     let previous;
     saving = true; update();
@@ -533,6 +542,7 @@ function setupPreferences() {
       || startMaximized.checked !== preferences.startMaximized || coversOnly.checked !== preferences.coversOnly
       || timeFormat.value !== preferences.timeFormat
       || releaseDateFormat.value !== preferences.releaseDateFormat || autoUpdateCatalog.checked !== preferences.autoUpdateCatalog
+      || defaultRegion.value !== preferences.defaultRegion
       || languageSelect.value !== preferences.language
       || combineRegions.checked !== preferences.combineRegionStatistics
       || catalogTitles.checked !== preferences.useCatalogTitles
@@ -1449,6 +1459,33 @@ function updateGameSelection() {
   else resetGameDetails();
 }
 
+function createDeletionTask() {
+  const card=document.getElementById('delete-games-task');
+  const label=document.getElementById('delete-games-task-label');
+  const counts=document.getElementById('delete-games-task-counts');
+  const bar=document.getElementById('delete-games-task-bar');
+  const dismiss=document.getElementById('btn-dismiss-delete-games-task');
+  const floating=window.OpenCabinetTaskWindows?.attach(card);
+  let finished=false;
+  card.classList.remove('import-task-success');dismiss.classList.add('hidden');
+  label.textContent=globalThis.OpenCabinetI18n.t('deletion.preparing');counts.textContent='';bar.removeAttribute('value');
+  if(floating)floating.show();else card.classList.remove('hidden');
+  dismiss.onclick=()=>{if(finished){if(floating)floating.hide();else card.classList.add('hidden');}};
+  return {
+    update(progress){
+      if(finished)return;
+      const phase=['preserving','deleting','cleanup'].includes(progress.phase)?progress.phase:'finishing';
+      label.textContent=globalThis.OpenCabinetI18n.t(`deletion.${phase}`);
+      if(progress.total){bar.value=100*progress.processed/progress.total;counts.textContent=`${progress.processed} / ${progress.total}`;}
+      else{bar.removeAttribute('value');counts.textContent='';}
+    },
+    finish(error=null){
+      finished=true;card.classList.toggle('import-task-success',!error);dismiss.classList.remove('hidden');
+      label.textContent=error?String(error):globalThis.OpenCabinetI18n.t('deletion.complete');counts.textContent='';bar.value=error?0:100;
+    },
+  };
+}
+
 // Shared by the context menu and the selected game's sidebar button.
 async function deleteLibraryGames(ids) {
   if (deletingGames) return;
@@ -1457,13 +1494,17 @@ async function deleteLibraryGames(ids) {
   const targetIds = games.map((game) => game.id);
   const single = games.length === 1;
   deletingGames = true;
+  let task=null;
   try {
     const confirmed = await confirmDeletion(single ? globalThis.OpenCabinetI18n.t("msg.e46db29366") : globalThis.OpenCabinetI18n.t("msg.384fd2c8c6"),
       globalThis.OpenCabinetI18n.t("msg.de7978d868", single ? globalThis.OpenCabinetI18n.t("msg.138fa73e5d", games[0].title) : globalThis.OpenCabinetI18n.t("msg.853f54c89b", games.length)));
     if (!confirmed) return;
     const preserveData = await chooseGameDataRetention();
     if (preserveData === null) return;
-    const deleted = await invoke("delete_games", { ids: targetIds, preserveData });
+    const onProgress=new window.__TAURI__.core.Channel();
+    if(!single){task=createDeletionTask();onProgress.onmessage=progress=>task.update(progress);}
+    const deleted = await invoke("delete_games", { ids: targetIds, preserveData, onProgress });
+    task?.finish();
     const removed = new Set(targetIds);
     allGames = allGames.filter((game) => !removed.has(game.id));
     selectedGameIds = new Set([...selectedGameIds].filter((id) => !removed.has(id)));
@@ -1472,6 +1513,7 @@ async function deleteLibraryGames(ids) {
     applyLibraryFilters();
     showToast(deleted === 1 ? globalThis.OpenCabinetI18n.t("msg.8c71e7d341") : globalThis.OpenCabinetI18n.t("msg.31c9b1c990", deleted));
   } catch (error) {
+    task?.finish(error);
     showToast(globalThis.OpenCabinetI18n.t("msg.96da899484", single ? globalThis.OpenCabinetI18n.t("msg.71d738408a") : globalThis.OpenCabinetI18n.t("msg.a4dea9fadf"), error), true);
   } finally {
     deletingGames = false;
@@ -2628,8 +2670,18 @@ function metadataResultLabel(game) {
   return `${game.title} · ${game.platform}${regions ? ` · ${regions}` : ""}${game.source_key ? ` · ${game.source_key}` : ""}${game.release_date ? ` · ${formatReleaseDate(game.release_date)}` : ""}`;
 }
 
-function preferredMetadataMatch(games) {
-  const exact = games.filter(game => game.exact);
+function preferredMetadataMatch(games, {defaultRegion=null,romPath=''}={}) {
+  let exact = games.filter(game => game.exact);
+  if(defaultRegion){
+    const detected=[...romPath.split(/[\\/]/).pop().matchAll(/\(([^)]*)\)|\[([^\]]*)\]/g)].flatMap(match=>(match[1]||match[2]||'').split(/[,/;]/).flatMap(value=>{
+      const tag=value.trim();
+      return /^(?:ue|ju|uj|je|ej|jue|jeu|uje|uej|eju|euj)$/i.test(tag)?[...tag].map(canonicalImportRegion):[canonicalImportRegion(tag)];
+    })).filter(Boolean);
+    for(const region of detected.length?detected:[canonicalImportRegion(defaultRegion)]){
+      const preferred=exact.filter(game=>(game.regions||[]).some(value=>canonicalImportRegion(value)===region));
+      if(preferred.length){exact=preferred;break;}
+    }
+  }
   if (exact.length === 1) return exact[0].id;
   // Distinct repository serials remain selectable. Do not guess between regions,
   // editions or personal-catalog entries that only share a cleaned title.
@@ -5424,7 +5476,7 @@ function reviewMetadataImport(preview, platform, task, operation=null) {
           if (!alive || !rows.includes(row)) return;
           const hadMatches = rows.some(row => row.selected_id !== null);
           row.candidates = candidates;
-          row.selected_id = preferredMetadataMatch(candidates);
+          row.selected_id = preferredMetadataMatch(candidates, {defaultRegion:preferences.defaultRegion,romPath:game.rom_path});
           populate();
           refreshOrder(); matchesChanged(hadMatches);
         });
@@ -5537,7 +5589,7 @@ function reviewMetadataImport(preview, platform, task, operation=null) {
       optionsBox.setAttribute("aria-busy", "true");
       if (!mediaInputs.size) optionsBox.textContent = globalThis.OpenCabinetI18n.t("msg.b66e6720fc");
       matchedPlatform = null; rows = []; list.replaceChildren();
-      const matches = await invoke("match_metadata_games", { jobId, preview, platform, sourcePlatform, onProgress: channel("matching") });
+      const matches = await invoke("match_metadata_games", { jobId, preview, platform, sourcePlatform, defaultRegion:preferences.defaultRegion, onProgress: channel("matching") });
       if (!alive) return;
       rows = matches; matchedPlatform = sourcePlatform; renderMatches(); startTypesRefresh();
     }).then(() => availabilityTask);
@@ -5557,7 +5609,7 @@ function reviewMetadataImport(preview, platform, task, operation=null) {
         if (!await ensureSession()) return;
         if (typesDirty) await refreshTypes();
         if (!alive) return;
-        const options = readOptions();
+        const options = {...readOptions(),default_region:preferences.defaultRegion};
         detached = true;
         task.start(() => cancel.onclick?.());
         const result = await invoke("stage_metadata_import", { jobId, preview, platform, sourcePlatform: matchedPlatform,

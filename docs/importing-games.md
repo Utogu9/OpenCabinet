@@ -85,6 +85,13 @@ registros y las imágenes administradas creadas durante esa importación.
 
 ## Formatos adicionales
 
+En PS3 y PS4, `eboot` es una entrada especial de la lista de extensiones.
+Activa la búsqueda de `Juego/PS3_GAME/USRDIR/EBOOT.BIN` en PS3 y
+`Juego/eboot.bin` en PS4, comprobando solo la carpeta elegida y sus subcarpetas
+inmediatas. Quitar `eboot` desactiva esa búsqueda y permite importar únicamente
+los demás formatos seleccionados. Las listas predeterminadas antiguas se
+actualizan una sola vez; los filtros personalizados se conservan.
+
 Nintendo 3DS admite `.zcci`, incluido el selector de archivo individual y el
 escaneo por carpetas. Las plataformas con la lista predeterminada anterior de
 3DS incorporan esta extensión al iniciar; las listas personalizadas se conservan.

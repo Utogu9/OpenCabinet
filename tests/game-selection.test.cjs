@@ -468,6 +468,34 @@ test("Failed deletion preserves the selection and library", async () => {
   assert.equal(app.evaluate("allGames.length"), 6);
 });
 
+test('Bulk deletion shows live progress, ignores late events and keeps failures visible',async()=>{
+  let resolve,request;
+  const app=library({handlers:{delete_games:args=>{request=args;return new Promise(done=>resolve=done);}}});
+  app.click(1);app.click(2,{ctrlKey:true});app.rightClick(2);
+  const pending=app.get('context-delete-games').handlers.click();
+  await new Promise(done=>setImmediate(done));
+  assert.equal(app.get('delete-games-task').classList.contains('hidden'),false);
+  assert.equal(app.evaluate('allGames.length'),6,'library stays intact until the backend commits');
+  request.onProgress.onmessage({phase:'preserving',processed:1,total:2});
+  assert.equal(app.get('delete-games-task-bar').value,50);
+  assert.equal(app.get('delete-games-task-counts').textContent,'1 / 2');
+  request.onProgress.onmessage({phase:'cleanup',processed:0,total:null});
+  assert.match(app.get('delete-games-task-label').textContent,/Limpiando/);
+  resolve(2);await pending;
+  assert.equal(app.evaluate('allGames.length'),4);
+  assert.equal(app.get('delete-games-task').classList.contains('import-task-success'),true);
+  request.onProgress.onmessage({phase:'preserving',processed:0,total:2});
+  assert.equal(app.get('delete-games-task-bar').value,100);
+  app.get('btn-dismiss-delete-games-task').onclick();
+  assert.equal(app.get('delete-games-task').classList.contains('hidden'),true);
+  const failed=library({handlers:{delete_games:()=>{throw Error('Busy database');}}});
+  failed.click(1);failed.click(2,{ctrlKey:true});failed.rightClick(1);
+  await failed.get('context-delete-games').handlers.click();
+  assert.equal(failed.evaluate('allGames.length'),6);
+  assert.match(failed.get('delete-games-task-label').textContent,/Busy database/);
+  assert.equal(failed.get('btn-dismiss-delete-games-task').classList.contains('hidden'),false);
+});
+
 test("The retention step can discard managed data or cancel before calling the backend", async () => {
   const cancelled=library({preserveData:null});cancelled.click(1);cancelled.rightClick(1);
   await cancelled.get("context-delete-games").handlers.click();

@@ -886,10 +886,14 @@ fn lookup(
 }
 
 pub fn preserve_before_delete(conn: &mut Connection, root: &Path, ids: &[i32]) -> Result<()> {
+    preserve_before_delete_with_progress(conn,root,ids,|_,_|{})
+}
+
+pub fn preserve_before_delete_with_progress(conn: &mut Connection, root: &Path, ids: &[i32], mut progress: impl FnMut(usize, bool)) -> Result<()> {
     init_schema(conn)?;
     let mut copies = PendingImageCopies(Vec::new());
     let tx = conn.transaction().map_err(err)?;
-    for id in ids {
+    for (index,id) in ids.iter().enumerate() {
         let exists: bool = tx
             .query_row(
                 "SELECT EXISTS(SELECT 1 FROM games WHERE id=?1)",
@@ -901,9 +905,11 @@ pub fn preserve_before_delete(conn: &mut Connection, root: &Path, ids: &[i32]) -
             ensure_game(&tx, root, *id as i64)?;
             sync_game(&tx, root, *id as i64, &mut copies)?;
         }
+        progress(index+1,false);
     }
     tx.commit().map_err(err)?;
     copies.0.clear();
+    progress(ids.len(),true);
     let warnings = flush(conn, root);
     if !warnings.is_empty() {
         return Err(warnings.join("\n"));

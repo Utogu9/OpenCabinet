@@ -6,4 +6,5 @@ pub(crate) const IMAGE_BASE: &str = concat!("https://images.launch", "box-app.co
 pub(crate) const PLATFORM_IMAGE_BASE: &str = concat!("https://images.launch", "box-app.com/Platforms/");
 pub(crate) const SITE: &str = concat!("https://gamesdb.launch", "box-app.com/");
 pub(crate) const LEGACY_CATALOG_PATH: &str = concat!("metadata/launch", "box.db");
+#[cfg(test)]
 pub(crate) const LEGACY_PREVIOUS_PATH: &str = concat!("metadata/launch", "box.previous.db");

@@ -42,6 +42,7 @@ pub fn error_text(output: &Option<ErrorOutput>) -> String {
         .unwrap_or_default()
 }
 
+#[cfg(any(target_os = "linux", test))]
 #[derive(Debug)]
 pub struct Identity {
     pub parent: u32,
@@ -63,6 +64,7 @@ impl Session {
         std::time::Duration::ZERO
     }
 }
+#[cfg(any(target_os = "linux", test))]
 pub fn parse_stat(stat: &str) -> Option<Identity> {
     // comm may contain spaces and parentheses; fields after its final ')' are stable.
     let fields: Vec<_> = stat.rsplit_once(')')?.1.split_whitespace().collect();

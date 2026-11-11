@@ -3064,3 +3064,4 @@ html[data-i18n-pending] body { visibility: hidden; }
 .game-box-disc-tools button { padding: 5px 9px; font-size: .78rem; background: color-mix(in srgb, var(--bg-secondary, #20242d) 88%, transparent); }
 .game-box-disc-tools button[aria-pressed="true"] { border-color: #ffffff80; background: color-mix(in srgb, var(--bg-secondary, #20242d) 75%, #fff); }
 @media (max-width: 700px) { .play-columns,.play-filter-grid { grid-template-columns: 1fr; } }
+#btn-reset-preferences { margin-right: auto; }

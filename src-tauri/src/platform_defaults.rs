@@ -254,12 +254,12 @@ const DEFAULTS: &[Platform] = &[
     },
     Platform {
         name: "Sony PlayStation 3",
-        extensions: ".iso, .pkg, .bin",
+        extensions: ".iso, .pkg, eboot",
         aliases: &["PlayStation 3", "PS3"],
     },
     Platform {
         name: "Sony PlayStation 4",
-        extensions: ".pkg, .bin",
+        extensions: ".pkg, eboot",
         aliases: &["PlayStation 4", "PS4"],
     },
     Platform {
@@ -407,6 +407,20 @@ pub(crate) fn init(conn: &Connection) -> rusqlite::Result<()> {
     // Extend the previous built-in 3DS list, preserving custom filters.
     tx.execute("UPDATE platforms SET default_extensions='.3ds, .cci, .cxi, .cia, .zcci'
         WHERE LOWER(name) IN ('nintendo 3ds','3ds') AND default_extensions='.3ds, .cci, .cxi, .cia'", [])?;
+    // Migrate only untouched old defaults once; a removed EBOOT token stays removed.
+    let eboot_migrated: bool = tx.query_row("SELECT EXISTS(SELECT 1 FROM platform_catalog_versions WHERE version=2)",[],|r|r.get(0))?;
+    if !eboot_migrated {
+        let saved = tx.prepare("SELECT id,name,default_extensions FROM platforms")?
+            .query_map([],|r|Ok((r.get::<_,i64>(0)?,r.get::<_,String>(1)?,r.get::<_,String>(2)?)))?
+            .collect::<rusqlite::Result<Vec<_>>>()?;
+        for (id,name,extensions) in saved {
+            if let Some(known)=definition(&name) {
+                let old=match known.name {"Sony PlayStation 3"=>".iso, .pkg, .bin","Sony PlayStation 4"=>".pkg, .bin",_=>continue};
+                if extensions==old {tx.execute("UPDATE platforms SET default_extensions=?1 WHERE id=?2",(known.extensions,id))?;}
+            }
+        }
+        tx.execute("INSERT INTO platform_catalog_versions(version) VALUES(2)",[])?;
+    }
     tx.commit()
 }
 
@@ -467,7 +481,7 @@ mod tests {
                 )
                 .unwrap();
             assert!(!ext.is_empty());
-            assert!(ext.split(',').all(|e| e.trim().starts_with('.')));
+            assert!(ext.split(',').all(|e| e.trim().starts_with('.') || e.trim()=="eboot"));
         }
         let mut names = std::collections::HashSet::new();
         for p in DEFAULTS {
@@ -524,6 +538,20 @@ mod tests {
             "Sony PlayStation 2"
         );
     }
+    #[test]
+    fn eboot_defaults_migrate_once_and_preserve_custom_extension_filters() {
+        let conn=library();init(&conn).unwrap();
+        conn.execute("DELETE FROM platform_catalog_versions WHERE version=2",[]).unwrap();
+        conn.execute("UPDATE platforms SET default_extensions='.iso, .pkg, .bin' WHERE name='Sony PlayStation 3'",[]).unwrap();
+        conn.execute("UPDATE platforms SET default_extensions='.pkg' WHERE name='Sony PlayStation 4'",[]).unwrap();
+        init(&conn).unwrap();
+        assert_eq!(conn.query_row("SELECT default_extensions FROM platforms WHERE name='Sony PlayStation 3'",[],|r|r.get::<_,String>(0)).unwrap(),".iso, .pkg, eboot");
+        assert_eq!(conn.query_row("SELECT default_extensions FROM platforms WHERE name='Sony PlayStation 4'",[],|r|r.get::<_,String>(0)).unwrap(),".pkg");
+        conn.execute("UPDATE platforms SET default_extensions='.iso, .pkg' WHERE name='Sony PlayStation 3'",[]).unwrap();
+        init(&conn).unwrap();
+        assert_eq!(conn.query_row("SELECT default_extensions FROM platforms WHERE name='Sony PlayStation 3'",[],|r|r.get::<_,String>(0)).unwrap(),".iso, .pkg");
+    }
+
     #[test]
     fn deleted_defaults_and_customized_names_are_not_reinserted_on_restart() {
         let conn = library();

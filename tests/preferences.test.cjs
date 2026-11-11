@@ -74,6 +74,16 @@ function app(storage = new Map(), failSave = false, options = {}) {
   };
 }
 
+test('Import region defaults to USA, accepts aliases and persists independently of the interface language',async()=>{
+  const instance=app();await instance.open();
+  assert.equal(instance.get('preference-default-region').value,'North America');
+  instance.get('preference-default-region').value='Japan';await instance.save(400);
+  const restarted=app(instance.storage);await restarted.open();
+  assert.equal(restarted.get('preference-default-region').value,'Japan');
+  for(const [alias,expected] of [['U','North America'],['US','North America'],['USA','North America'],['EUR','Europe'],['PAL','Europe'],['JPN','Japan']])
+    assert.equal(instance.evaluate(`canonicalImportRegion(${JSON.stringify(alias)})`),expected);
+});
+
 test('Release date formats persist without changing stored dates and preserve partial dates',async()=>{
   const instance=app();await instance.open();
   assert.equal(instance.get('preference-auto-update-catalog').checked,true);

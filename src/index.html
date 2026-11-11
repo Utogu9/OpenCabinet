@@ -249,6 +249,16 @@
       </div>
     </aside>
 
+    <aside class="import-task hidden" id="delete-games-task" aria-labelledby="delete-games-task-title">
+      <div class="import-task-header">
+        <h3 id="delete-games-task-title" data-i18n="deletion.title"></h3>
+        <button class="close-btn hidden" id="btn-dismiss-delete-games-task" type="button" data-i18n-aria-label="msg.9a0b73067d">&times;</button>
+      </div>
+      <p id="delete-games-task-label" class="task-label" role="status"></p>
+      <progress id="delete-games-task-bar" max="100" data-i18n-aria-label="deletion.title"></progress>
+      <p id="delete-games-task-counts" class="task-label"></p>
+    </aside>
+
     <aside class="import-task hidden" id="import-task" aria-labelledby="import-task-title">
       <div class="import-task-header">
         <h3 id="import-task-title"><span data-i18n="msg.461a09faea"></span></h3>
@@ -1269,6 +1279,13 @@
           <label class="preference-toggle"><input id="preference-auto-update-catalog" type="checkbox"><span data-i18n="preferences.autoUpdateCatalog"></span></label>
           <p class="preference-help" data-i18n="preferences.autoUpdateCatalogHelp"></p>
           <div class="form-group">
+            <label for="preference-default-region" data-i18n="preferences.defaultRegion"></label>
+            <select id="preference-default-region">
+              <option value="North America" data-i18n="region.North America"></option><option value="Europe" data-i18n="region.Europe"></option><option value="Japan" data-i18n="region.Japan"></option><option value="World" data-i18n="region.World"></option><option value="Asia" data-i18n="region.Asia"></option><option value="Korea" data-i18n="region.Korea"></option><option value="Australia" data-i18n="region.Australia"></option><option value="Brazil" data-i18n="region.Brazil"></option><option value="Spain" data-i18n="region.Spain"></option><option value="France" data-i18n="region.France"></option><option value="Germany" data-i18n="region.Germany"></option><option value="Italy" data-i18n="region.Italy"></option>
+            </select>
+            <p class="preference-help" data-i18n="preferences.defaultRegionHelp"></p>
+          </div>
+          <div class="form-group">
             <label for="preference-metadata-catalog" data-i18n="source.catalog"></label>
             <input id="preference-metadata-catalog" type="text" readonly>
           </div>
@@ -1360,8 +1377,8 @@
         </div>
         <p id="preferences-error" class="preferences-error hidden" role="alert"></p>
         <div class="form-actions">
-          <button class="secondary-btn" id="btn-cancel-preferences" type="button"><span data-i18n="msg.bb9dbb406d"></span></button>
           <button class="secondary-btn" id="btn-reset-preferences" type="button" data-i18n="preferences.reset"></button>
+          <button class="secondary-btn" id="btn-cancel-preferences" type="button"><span data-i18n="msg.bb9dbb406d"></span></button>
           <button class="primary-btn" id="btn-save-preferences" type="submit"><span data-i18n="msg.13e51a210f"></span></button>
         </div>
       </form>

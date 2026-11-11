@@ -3,7 +3,7 @@ use super::*;
 mod matching;
 mod regions;
 mod sources;
-pub(super) use matching::{finish_search_results, search_candidate};
+pub(super) use matching::{finish_search_results, search_candidate, shortest_match};
 const ROOT_URL: &str = "https://api.github.com/repos/Utogu9/OpenCabinet-BDD/contents?ref=main";
 const RAW_URL: &str = "https://raw.githubusercontent.com/Utogu9/OpenCabinet-BDD/main/";
 const CONFIG: &str = "metadata/source.json";
@@ -1065,6 +1065,25 @@ mod tests {
             assert_eq!(search_catalog(&conn, serial, source).unwrap()[0].game.title, title);
         }
     }
+    #[test]
+    fn imports_prefer_the_configured_region_only_when_the_filename_has_no_region() {
+        let files=Sandbox::new();let mut conn=files.catalog();let source="Nintendo - Switch";
+        conn.execute("INSERT INTO platforms VALUES(?1)",[source]).unwrap();
+        let fixture=files.job.directory.join("region-default.json");
+        let mut data:serde_json::Value=serde_json::from_str(include_str!("../../tests/fixtures/repository-switch-regions.json")).unwrap();
+        data["games"]["AAAAC2"]=data["games"]["AAAAC"].clone();
+        fs::write(&fixture,serde_json::to_vec(&data).unwrap()).unwrap();
+        insert_platform(&mut conn,&files.job,source,&fixture,|_|()).unwrap();
+        let results=search_candidate(&conn,"Switch Example",source,"Renamed.nsp").unwrap();
+        for (preferred,key) in [("USA","AAAAC"),("U","AAAAC"),("US","AAAAC"),("North America","AAAAC"),("EU","AAAAE"),("Europe","AAAAE"),("Japan","AAAAJ"),("JPN","AAAAJ"),("ALL","AAAAA")] {
+            assert_eq!(import_match(&conn,&results,"Renamed.nsp",preferred).unwrap(),Some(token(&format!("{source}/{key}"))),"{preferred}");
+        }
+        assert_eq!(import_match(&conn,&results,"Switch Example (Japan).nsp","USA").unwrap(),Some(token(&format!("{source}/AAAAJ"))));
+        assert_eq!(import_match(&conn,&results,"Switch Example (E).nsp","Japan").unwrap(),Some(token(&format!("{source}/AAAAE"))));
+        let fuzzy=search_catalog(&conn,"Switch Examp",source).unwrap();
+        assert_eq!(import_match(&conn,&fuzzy,"Switch Examp.nsp","USA").unwrap(),None,"approximate names still need review");
+    }
+
     #[test]
     fn switch_search_results_keep_release_regions_separate_from_artwork_and_localized_titles() {
         let files=Sandbox::new();let mut conn=files.catalog();let source="Nintendo - Switch";

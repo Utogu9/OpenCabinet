@@ -7,6 +7,16 @@ const vm = require('./helpers/localized-vm.cjs');
 const turn = () => new Promise((resolve) => setImmediate(resolve));
 const deferred = () => { let resolve; const promise = new Promise((done) => { resolve = done; }); return { promise, resolve }; };
 
+test('Manual import searches prefer the default region only without a filename region',()=>{
+  const app=importer();
+  const results=[{id:1,title:'Example',platform:'PS3',source_key:'EU',exact:true,regions:['EUR']},{id:2,title:'Example',platform:'PS3',source_key:'USA',exact:true,regions:['U']}];
+  const choose=(romPath,defaultRegion)=>app.evaluate(`preferredMetadataMatch(${JSON.stringify(results)},${JSON.stringify({romPath,defaultRegion})})`);
+  assert.equal(choose('Example.iso','USA'),2);
+  assert.equal(choose('Example.iso','Europe'),1);
+  assert.equal(choose('Example (Europe).iso','USA'),1,'default cannot replace a detected region');
+  assert.equal(choose('Example (USA).iso','Europe'),2);
+});
+
 function importer(options = {}) {
   const elements = new Map();
   class Element {

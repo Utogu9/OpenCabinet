@@ -943,7 +943,7 @@ async fn delete_game(id: i32, preserve_data: Option<bool>, tracker: tauri::State
 }
 
 #[tauri::command]
-async fn delete_games(ids: Vec<i32>, preserve_data: Option<bool>, tracker: tauri::State<'_, PlayTracker>) -> Result<usize, String> {
+async fn delete_games(ids: Vec<i32>, preserve_data: Option<bool>, on_progress: tauri::ipc::Channel<DeletionProgress>, tracker: tauri::State<'_, PlayTracker>) -> Result<usize, String> {
     let tracker = tracker.inner().clone();
     tauri::async_runtime::spawn_blocking(move || {
         let mut conn = get_db_connection().map_err(|e| e.to_string())?;
@@ -951,16 +951,30 @@ async fn delete_games(ids: Vec<i32>, preserve_data: Option<bool>, tracker: tauri
         let _active = roots.into_iter().map(|id|tracker.reserve(id)).collect::<Result<Vec<_>,_>>()?;
         let root = data_directory().map_err(|e|e.to_string())?;
         let members = game_regions::expanded(&conn,&ids)?;
-        if preserve_data.unwrap_or(true) { media_library::preserve_before_delete(&mut conn, &root, &members)?; }
-        delete_game_records_with_options(&mut conn, &ids, (!preserve_data.unwrap_or(true)).then_some(root.as_path()))
+        let mut progress=|phase,processed,total| {let _=on_progress.send(DeletionProgress{phase,processed,total});};
+        progress(if preserve_data.unwrap_or(true){"preserving"}else{"deleting"},0,Some(members.len()));
+        if preserve_data.unwrap_or(true) {
+            media_library::preserve_before_delete_with_progress(&mut conn,&root,&members,|count,flushing| {
+                progress(if flushing{"finishing"}else{"preserving"},count,(!flushing).then_some(members.len()));
+            })?;
+        }
+        delete_game_records_with_progress(&mut conn, &ids, (!preserve_data.unwrap_or(true)).then_some(root.as_path()), &mut progress)
     }).await.map_err(|e| e.to_string())?
 }
 
+#[derive(Serialize)]
+struct DeletionProgress { phase: &'static str, processed: usize, total: Option<usize> }
+
+#[cfg(test)]
 fn delete_game_records(conn: &mut Connection, ids: &[i32]) -> Result<usize, String> {
     delete_game_records_with_options(conn, ids, None)
 }
 
 fn delete_game_records_with_options(conn: &mut Connection, ids: &[i32], discard_root: Option<&Path>) -> Result<usize, String> {
+    delete_game_records_with_progress(conn,ids,discard_root,&mut |_,_,_|{})
+}
+
+fn delete_game_records_with_progress(conn: &mut Connection, ids: &[i32], discard_root: Option<&Path>, progress: &mut impl FnMut(&'static str,usize,Option<usize>)) -> Result<usize, String> {
     let _cleanup_lock = discard_root.map(|_| media_library::cleanup_lock());
     if ids.is_empty() {
         return Err(crate::i18n::text("msg.3fc9b7a4d5").to_string());
@@ -970,17 +984,21 @@ fn delete_game_records_with_options(conn: &mut Connection, ids: &[i32], discard_
     let logical_count = logical.iter().map(|id|conn.query_row("SELECT EXISTS(SELECT 1 FROM games WHERE id=?1)",[id],|row|row.get::<_,bool>(0)).map(|exists|usize::from(exists))).collect::<rusqlite::Result<Vec<_>>>().map_err(|e|e.to_string())?.into_iter().sum::<usize>();
     let tx = conn.transaction().map_err(|e| e.to_string())?;
     if discard_root.is_some() { media_library::discard_collections(&tx,&members)?; }
+    progress("deleting",0,Some(members.len()));
     let mut deleted = 0;
     {
         let mut statement = tx.prepare("DELETE FROM games WHERE id = ?1").map_err(|e| e.to_string())?;
-        for id in &members {
+        for (index,id) in members.iter().enumerate() {
             deleted += statement.execute([id]).map_err(|e| e.to_string())?;
+            progress("deleting",index+1,Some(members.len()));
         }
     }
     tx.commit().map_err(|e| e.to_string())?;
     if let Some(root) = discard_root {
+        progress("cleanup",0,None);
         for warning in media_library::clean_trash(conn,root) { eprintln!("{warning}"); }
     }
+    progress("done",members.len(),Some(members.len()));
     Ok(deleted.min(logical_count))
 }
 
@@ -1265,7 +1283,7 @@ fn discover_roms_for_platform(
     }
     let default_exts = vec![
         "iso", "cue", "chd", "md", "bin", "sfc", "smc", "gba", "gbc", "gb",
-        "n64", "z64", "nds", "3ds", "zcci", "cci", "cxi", "cia", "nsp", "xbe", "zip", "7z", "v40", "nes"
+        "n64", "z64", "nds", "3ds", "zcci", "cci", "cxi", "cia", "nsp", "xbe", "zip", "7z", "v40", "nes", "eboot"
     ];
     let exts_to_check: Vec<String> = match custom_extensions {
         Some(list) if !list.is_empty() => list.into_iter().map(|e| e.trim().to_lowercase().replace('.', "")).collect(),
@@ -1278,13 +1296,14 @@ fn discover_roms_for_platform(
     let mut total_found = 0;
     let mut skipped_count = 0;
     let mut last_update = Instant::now();
-    let folder_layout = platform.is_some_and(folder_games::supported);
+    let folder_platform = platform.is_some_and(folder_games::supported);
+    let folder_layout = folder_platform && exts_to_check.iter().any(|ext| ext == "eboot");
     on_progress(ScanProgress { phase: "discovering", processed: 0, total: None,
         added_count: 0, skipped_count: 0, current_file: None });
     for (index, entry) in entries.enumerate() {
         let entry = entry.map_err(|e| crate::i18n::i18n_format!("msg.9a496ed8c2", e))?;
         let entry_path = entry.path();
-        if entry_path.is_file() && (!folder_layout || !entry_path.extension().is_some_and(|e| e.eq_ignore_ascii_case("bin"))) && entry_path.extension().and_then(|e| e.to_str())
+        if entry_path.is_file() && (!folder_platform || !entry_path.extension().is_some_and(|e| e.eq_ignore_ascii_case("bin"))) && entry_path.extension().and_then(|e| e.to_str())
             .is_some_and(|ext| exts_to_check.contains(&ext.to_lowercase())) {
             let rom_path = entry_path.to_string_lossy().into_owned();
             if cue_tracks.contains(&discs::key(&rom_path)) { continue; }
@@ -1555,7 +1574,9 @@ mod scan_tests {
             let path=folder.0.join(file);fs::create_dir_all(path.parent().unwrap()).unwrap();fs::write(path,"boot").unwrap();
         }
         let mut conn=database();
-        let preview=discover_roms_for_platform(&conn,folder.path(),Some(vec!["pkg".into()]),Some("Sony PlayStation 3"), |_|{}).unwrap();
+        let disabled=discover_roms_for_platform(&conn,folder.path(),Some(vec!["pkg".into(),"bin".into()]),Some("Sony PlayStation 3"), |_|{}).unwrap();
+        assert!(disabled.games.is_empty(),"without eboot, do not discover boot files even when bin is selected");
+        let preview=discover_roms_for_platform(&conn,folder.path(),Some(vec!["pkg".into(),"eboot".into()]),Some("Sony PlayStation 3"), |_|{}).unwrap();
         assert_eq!(preview.games.iter().map(|g|g.title.as_str()).collect::<Vec<_>>(),vec!["First Game"]);
         assert_eq!(preview.total_found,1);
         let first=&preview.games[0];assert!(first.rom_path.ends_with("EBOOT.BIN"));
@@ -1650,7 +1671,9 @@ mod scan_tests {
         scan_roms(&mut conn, folder.path(), "PS2", None, |_| {}).unwrap();
         let ids: Vec<i32> = conn.prepare("SELECT id FROM games ORDER BY id").unwrap()
             .query_map([], |row| row.get(0)).unwrap().collect::<Result<_, _>>().unwrap();
-        assert_eq!(delete_game_records(&mut conn, &ids[..2]).unwrap(), 2);
+        let mut progress=Vec::new();
+        assert_eq!(delete_game_records_with_progress(&mut conn, &ids[..2], None, &mut |phase,count,total|progress.push((phase,count,total))).unwrap(), 2);
+        assert_eq!(progress,vec![("deleting",0,Some(2)),("deleting",1,Some(2)),("deleting",2,Some(2)),("done",2,Some(2))]);
         let remaining: i32 = conn.query_row("SELECT id FROM games", [], |row| row.get(0)).unwrap();
         assert_eq!(remaining, ids[2]);
         for name in ["first.iso", "second.iso", "third.iso"] {
@@ -1676,7 +1699,9 @@ mod scan_tests {
              CREATE TRIGGER reject_delete BEFORE DELETE ON games WHEN OLD.id = 2
              BEGIN SELECT RAISE(ABORT, 'test failure'); END;",
         ).unwrap();
-        assert!(delete_game_records(&mut conn, &[1, 2]).is_err());
+        let mut progress=Vec::new();
+        assert!(delete_game_records_with_progress(&mut conn, &[1, 2],None,&mut |phase,_,_|progress.push(phase)).is_err());
+        assert!(!progress.contains(&"done"),"progress cannot claim completion for a rolled-back batch");
         let count: i64 = conn.query_row("SELECT COUNT(*) FROM games", [], |row| row.get(0)).unwrap();
         assert_eq!(count, 2);
     }
