@@ -63,6 +63,15 @@ test('Applying layouts moves existing panels, preserves their focus and toggles 
   assert.equal(e.root.style['--accent-color'],theme.colors.accent);assert.equal(e.events.at(-1).detail.layout.detailsWidth,420);
   e.api.apply(e.api.builtins[0],{document:e.document,window:e.window});assert.equal(e.row.attrs['data-theme-hidden'],'false');
 });
+test('Restoring the default theme retains every custom theme in native storage',async()=>{
+  const e=environment(),custom={...e.api.builtins[0],id:'user-custom',name:'Custom'};
+  let library={format:'OpenCabinet Themes',version:1,active:custom.id,themes:[custom]};
+  const controller=e.api.create({document:e.document,window:e.window,invoke:async(command,args)=>{
+    if(command==='save_theme_library'){library=args.library;return;}return library;
+  }});
+  await controller.resetDefaults();assert.equal(library.active,e.api.builtins[0].id);assert.equal(library.themes.length,1);assert.equal(library.themes[0].id,custom.id);
+});
+
 test('Startup uses the active theme saved in native user data and falls back safely on invalid files',async()=>{
   const e=environment(),library={format:'OpenCabinet Themes',version:1,active:'builtin-forest',themes:[]};
   let reads=0;const controller=e.api.create({document:e.document,window:e.window,invoke:async()=>{reads++;return library;}});

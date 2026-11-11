@@ -1214,6 +1214,10 @@
               <option value="12h" data-i18n="msg.7811f362fb"></option>
             </select>
           </div>
+          <div class="form-group">
+            <label for="preference-release-date-format" data-i18n="preferences.releaseDateFormat"></label>
+            <select id="preference-release-date-format"><option value="DD-MM-YYYY">DD-MM-YYYY</option><option value="MM-DD-YYYY">MM-DD-YYYY</option><option value="YYYY-MM-DD">YYYY-MM-DD</option></select>
+          </div>
           <label class="preference-toggle">
             <input id="preference-covers-only" type="checkbox" aria-describedby="preference-covers-only-help" />
             <span><span data-i18n="msg.88cf1841f9"></span></span>
@@ -1262,6 +1266,8 @@
             <span data-i18n="source.useCatalogTitles"></span>
           </label>
           <p class="preference-help" id="preference-catalog-titles-help" data-i18n="source.useCatalogTitlesHelp"></p>
+          <label class="preference-toggle"><input id="preference-auto-update-catalog" type="checkbox"><span data-i18n="preferences.autoUpdateCatalog"></span></label>
+          <p class="preference-help" data-i18n="preferences.autoUpdateCatalogHelp"></p>
           <div class="form-group">
             <label for="preference-metadata-catalog" data-i18n="source.catalog"></label>
             <input id="preference-metadata-catalog" type="text" readonly>
@@ -1355,11 +1361,17 @@
         <p id="preferences-error" class="preferences-error hidden" role="alert"></p>
         <div class="form-actions">
           <button class="secondary-btn" id="btn-cancel-preferences" type="button"><span data-i18n="msg.bb9dbb406d"></span></button>
+          <button class="secondary-btn" id="btn-reset-preferences" type="button" data-i18n="preferences.reset"></button>
           <button class="primary-btn" id="btn-save-preferences" type="submit"><span data-i18n="msg.13e51a210f"></span></button>
         </div>
       </form>
     </dialog>
 
+    <dialog id="preferences-reset-confirm" class="confirmation-dialog" aria-labelledby="preferences-reset-title">
+      <form method="dialog" class="modal-body"><h3 id="preferences-reset-title" data-i18n="preferences.reset"></h3><p data-i18n="preferences.resetConfirm"></p>
+        <div class="form-actions"><button type="submit" value="cancel" class="secondary-btn" data-i18n="msg.bb9dbb406d" autofocus></button><button type="submit" value="reset" class="primary-btn" data-i18n="preferences.reset"></button></div>
+      </form>
+    </dialog>
     <dialog id="language-restart-dialog" class="confirmation-dialog" aria-labelledby="language-restart-title" aria-describedby="language-restart-message">
       <form method="dialog" class="modal-body">
         <h3 id="language-restart-title" data-i18n="language.restart_title"></h3>

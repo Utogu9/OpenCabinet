@@ -4,6 +4,15 @@
     "name": "English (United States)"
   },
   "messages": {
+    "manuals.delete": "Delete manual",
+    "manuals.deleteNamed": "Delete {0}",
+    "manuals.deleteConfirm": "Permanently delete {0} from this game's manuals folder? The original file you imported will be kept.",
+    "preferences.releaseDateFormat": "Release date format",
+    "preferences.invalidDateFormat": "Choose a valid release date format.",
+    "preferences.autoUpdateCatalog": "Automatically check for catalog updates when importing games",
+    "preferences.autoUpdateCatalogHelp": "When the OpenCabinet-BDD catalog is more than a week old, check for newer versions and download available updates. Keep using the saved catalog if offline.",
+    "preferences.reset": "Restore defaults",
+    "preferences.resetConfirm": "Restore the default preferences, theme, metadata source and automatic backup settings? Your library, files, custom themes and active user data location will be kept.",
     "maintenance.storage": "Storage",
     "maintenance.diagnostics": "Export diagnostics",
     "maintenance.refresh": "Calculate storage",

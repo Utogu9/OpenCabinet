@@ -489,6 +489,19 @@ test("Explorer PDFs refresh without discarding pending manuals and open through 
   assert.deepEqual(app.calls.find(c => c.command === "update_game").args.details.manuals, ["C:/docs/Extra.pdf"]);
 });
 
+test('Manual deletion confirms, preserves scroll and refreshes the managed list without saving other drafts',async()=>{
+  let manuals=['C:/data/images/collection/manuals/Guide.pdf'];
+  const app=mediaApp({handlers:{get_game_manuals:()=>[...manuals],delete_game_manual:()=>{manuals=[];}}});await app.open();
+  app.get('game-editor-panels').scrollTop=260;
+  app.evaluate('confirmDeletion=async()=>false;showGameDetails=()=>{}');
+  await app.get('game-manual-list').children[0].children[3].trigger('click');assert.equal(app.calls.some(call=>call.command==='delete_game_manual'),false);
+  app.evaluate('confirmDeletion=async()=>true');
+  await app.get('game-manual-list').children[0].children[3].trigger('click');
+  assert.deepEqual(app.calls.find(call=>call.command==='delete_game_manual').args,{id:1,path:'C:/data/images/collection/manuals/Guide.pdf'});
+  assert.equal(app.get('game-manual-list').children.length,0);assert.equal(app.get('game-editor-panels').scrollTop,260);
+  assert.equal(app.calls.some(call=>call.command==='update_game'),false);
+});
+
 test("Cancelling a PDF picker leaves the editor unchanged, and failed saves retain its draft", async () => {
   const app = mediaApp(); await app.open();
   await app.get("btn-add-game-manuals").trigger("click");

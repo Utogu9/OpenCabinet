@@ -1302,6 +1302,22 @@ mod tests {
         fs::write(folder.join("manuals/notes.txt"), b"%PDF-1.7").unwrap();
         assert_eq!(crate::manuals::scan(&folder).unwrap().len(), 3);
     }
+
+    #[test]
+    fn deleting_a_manual_updates_the_manifest_preserves_originals_and_rolls_back_failures() {
+        let files=Sandbox::new();let mut conn=db();let id=game(&conn,&files.rom("Manual.iso"),None);
+        let source=pdf(&files.0.join("incoming/Guide.pdf"),"Guide");
+        crate::save_game_with_media(&mut conn,manual_edit(id,vec![source.clone()]),&files.0).unwrap();
+        let (_,dir)=collection(&conn,id);let folder=files.0.join(dir);let manual=folder.join("manuals/Guide.pdf");
+        assert!(crate::manuals::delete_manual(&mut conn,&files.0,id,Path::new(&source)).is_err());
+        crate::manuals::set_preferred(&conn,&files.0,id as i32,manual.to_str().unwrap()).unwrap();
+        conn.execute_batch("CREATE TRIGGER stop_manual_delete BEFORE DELETE ON game_manual_preferences BEGIN SELECT RAISE(ABORT,'test'); END;").unwrap();
+        assert!(crate::manuals::delete_manual(&mut conn,&files.0,id,&manual).is_err());assert!(manual.is_file());
+        conn.execute_batch("DROP TRIGGER stop_manual_delete").unwrap();
+        crate::manuals::delete_manual(&mut conn,&files.0,id,&manual).unwrap();
+        assert!(!manual.exists());assert!(Path::new(&source).is_file());assert!(crate::manuals::preference(&conn,id as i32).unwrap().is_none());
+        let manifest:Manifest=serde_json::from_slice(&fs::read(folder.join("manifest.json")).unwrap()).unwrap();assert!(manifest.manuals.is_empty());
+    }
     #[test]
     fn cbz_manuals_keep_their_format_and_survive_collection_recovery() {
         let files=Sandbox::new();let mut conn=db();let rom=files.rom("CBZ game.iso");let id=game(&conn,&rom,None);

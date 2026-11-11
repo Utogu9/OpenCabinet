@@ -759,7 +759,7 @@ fn safe_image_name(filename: &str) -> bool {
             .extension()
             .and_then(|s| s.to_str())
             .is_some_and(|ext| {
-                ["png", "jpg", "jpeg", "webp", "gif", "bmp", "svg"]
+                ["png", "jpg", "jpeg", "webp", "gif", "bmp", "svg", "avif"]
                     .contains(&ext.to_ascii_lowercase().as_str())
             })
 }
@@ -1610,13 +1610,14 @@ pub async fn start_metadata_import(
 pub async fn prepare_metadata_catalog(
     job_id: String,
     refresh: bool,
+    auto_update: Option<bool>,
     on_progress: Channel<MetadataProgress>,
     jobs: tauri::State<'_, MetadataJobs>,
 ) -> Result<CatalogSummary> {
     let job = jobs.get(&job_id)?;
     tauri::async_runtime::spawn_blocking(move || {
         let _busy = job.enter()?;
-        repository::prepare(&job, refresh, |progress| {
+        repository::prepare_for_import(&job, refresh, auto_update.unwrap_or(false), |progress| {
             let _ = on_progress.send(progress);
         })
     })

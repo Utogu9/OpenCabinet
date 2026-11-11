@@ -437,6 +437,67 @@ pub(super) fn prepare(
             |n,total|progress(job.progress("catalog",n,total,None)))
     })
 }
+
+fn weekly_check_due(conn: &Connection) -> Result<bool> {
+    let checked: Option<String> = conn.query_row("SELECT checked_at FROM repository_update_check LIMIT 1",[],|r|r.get(0)).ok();
+    conn.query_row("SELECT COALESCE(julianday('now')-julianday(COALESCE(?1,(SELECT downloaded_at FROM catalog_info LIMIT 1)))>7,1)",[checked],|r|r.get(0)).map_err(err)
+}
+
+pub(super) fn prepare_for_import(job: &ImportJob, refresh: bool, automatic: bool, mut progress: impl FnMut(MetadataProgress)) -> Result<CatalogSummary> {
+    let path=job.catalog_path();
+    let due=automatic&&!refresh&&!job.personal_catalog&&path.exists()&&weekly_check_due(&open_catalog(&path)?)?;
+    let previous_date=if due {Some(cached_catalog_summary(&path)?.downloaded_at)}else{None};
+    let summary=prepare(job,refresh,&mut progress)?;
+    if !due { return Ok(summary); }
+    // Stage the entire refresh. Network/validation failures keep the previous
+    // catalog usable offline; cancellation still ends the import immediately.
+    match update_cached_platforms(job,previous_date.as_deref(),&mut progress) {
+        Ok(())=>cached_catalog_summary(&path),
+        Err(error)=>{ job.check()?;eprintln!("Automatic catalog check: {error}");Ok(summary) }
+    }
+}
+
+fn update_cached_platforms(job: &ImportJob, since: Option<&str>, progress: impl FnMut(MetadataProgress)) -> Result<()> {
+    let client=http_client()?;
+    update_cached_platforms_with(job,since,progress,|url,path,limit,progress|download(&client,url,path,limit,job,progress))
+}
+fn update_cached_platforms_with(job: &ImportJob, since: Option<&str>, mut progress: impl FnMut(MetadataProgress), mut fetch: impl FnMut(&str,&Path,u64,&mut dyn FnMut(u64,Option<u64>))->Result<()>) -> Result<()> {
+    let path=job.catalog_path();let next=job.directory.join("automatic-catalog.next.db");
+    fs::copy(&path,&next).map_err(err)?;
+    let mut conn=Connection::open(&next).map_err(err)?;
+    let platforms=conn.prepare("SELECT name FROM ready_platforms").map_err(err)?.query_map([],|r|r.get::<_,String>(0)).map_err(err)?.collect::<rusqlite::Result<Vec<_>>>().map_err(err)?;
+    conn.execute_batch("CREATE TABLE IF NOT EXISTS repository_revisions(name TEXT PRIMARY KEY,revision TEXT NOT NULL)").map_err(err)?;
+    let mut changed=false;
+    for source in platforms {
+        job.check()?;
+        let raw=sources::base(&conn,&source)?;
+        let url=reqwest::Url::parse(&raw).map_err(err)?;
+        let segments:Vec<_>=url.path_segments().ok_or("Invalid catalog URL")?.collect();
+        if url.host_str()!=Some("raw.githubusercontent.com")||segments.len()<3 {return Err("Invalid catalog URL".into());}
+        let mut api=reqwest::Url::parse(&format!("https://api.github.com/repos/{}/{}/commits",segments[0],segments[1])).map_err(err)?;
+        let catalog_path=if raw.starts_with(RAW_URL){format!("{source}/catalog.json")}else{"catalog.json".into()};
+        api.query_pairs_mut().append_pair("sha","main").append_pair("path",&catalog_path).append_pair("per_page","1");
+        let commits=job.directory.join("catalog-commit.json");
+        fetch(api.as_str(),&commits,2*1024*1024,&mut |_,_|())?;
+        let commits:serde_json::Value=serde_json::from_reader(File::open(commits).map_err(err)?).map_err(err)?;
+        let revision=commits[0]["sha"].as_str().filter(|s|!s.is_empty()).ok_or("Missing catalog revision")?;
+        let previous:Option<String>=conn.query_row("SELECT revision FROM repository_revisions WHERE name=?1",[&source],|r|r.get(0)).optional().map_err(err)?;
+        let newer:bool=conn.query_row("SELECT COALESCE(julianday(?1)>julianday(COALESCE(?2,downloaded_at)),1) FROM catalog_info LIMIT 1",(commits[0]["commit"]["committer"]["date"].as_str(),since),|r|r.get(0)).map_err(err)?;
+        if previous.as_deref()!=Some(revision)&&(previous.is_some()||newer) {
+            let file=job.directory.join("automatic-platform.json");
+            fetch(&format!("{raw}catalog.json"),&file,256*1024*1024,&mut |n,total|progress(job.progress("catalog",n,total,Some(source.clone()))))?;
+            insert_platform(&mut conn,job,&source,&file,&mut progress)?;
+            conn.execute("DELETE FROM repository_versions WHERE name=?1",[format!("artwork:{source}")]).map_err(err)?;
+            changed=true;
+        }
+        conn.execute("INSERT OR REPLACE INTO repository_revisions VALUES(?1,?2)",params![source,revision]).map_err(err)?;
+    }
+    conn.execute_batch("CREATE TABLE IF NOT EXISTS repository_update_check(checked_at TEXT NOT NULL);DELETE FROM repository_update_check;INSERT INTO repository_update_check VALUES(strftime('%Y-%m-%dT%H:%M:%SZ','now'));").map_err(err)?;
+    if changed {conn.execute("UPDATE catalog_info SET downloaded_at=strftime('%Y-%m-%dT%H:%M:%SZ','now')",[]).map_err(err)?;}
+    drop(conn);job.check()?;replace_catalog(&next,&path)?;
+    job.image_urls.lock().map_err(err)?.clear();
+    Ok(())
+}
 fn prepare_with_index(
     job: &ImportJob,
     refresh: bool,
@@ -631,7 +692,8 @@ fn insert_platform(
             if !valid_relative(&image.path) || !image.path.starts_with(&format!("{serial}/")) {
                 continue;
             }
-            let extension = if manual { Path::new(&image.path).extension().unwrap().to_str().unwrap().to_ascii_lowercase() } else { "webp".into() };
+            let extension = Path::new(&image.path).extension().and_then(|ext|ext.to_str()).unwrap_or("").to_ascii_lowercase();
+            if !manual && !["webp","avif","png","jpg","jpeg","gif","bmp","svg"].contains(&extension.as_str()) { continue; }
             let filename = format!("repo-{}.{extension}", -token(&format!("{source}/{}", image.path)));
             let url = format!("{raw}{}", url_path(&image.path));
             let names = image
@@ -902,11 +964,11 @@ fn insert_console_artwork(conn: &mut Connection, source: &str, file: &Path) -> R
     for (key,image) in data.images {
         if !valid_relative(&image.path) || image.path.contains('/') { continue; }
         let kind=match if image.kind.is_empty(){key.as_str()}else{image.kind.as_str()} {
-            "logo" if matches!(image.path.as_str(),"logo.svg"|"logo.webp"|"logo.png"|"logo.jpg"|"logo.jpeg")=>"logo",
+            "logo" if matches!(image.path.as_str(),"logo.svg"|"logo.webp"|"logo.png"|"logo.jpg"|"logo.jpeg"|"logo.avif")=>"logo",
             "render"|"screenshot"=>"screenshot", "artwork"|"fanart"=>"artwork", _=>"other",
         };
         let extension=Path::new(&image.path).extension().and_then(|s|s.to_str()).unwrap_or("");
-        if !["svg","webp","png","jpg","jpeg"].contains(&extension) { continue; }
+        if !["svg","webp","png","jpg","jpeg","avif"].contains(&extension) { continue; }
         let filename=console_image_filename(source,&image.path);
         tx.execute("INSERT INTO repository_platform_images VALUES(?1,?2,?3,'World',?4)",params![source,filename,kind,image.sha256]).map_err(err)?;
         tx.execute("INSERT OR REPLACE INTO image_urls VALUES(?1,?2)",params![filename,format!("{raw}{}",url_path(&image.path))]).map_err(err)?;
@@ -954,7 +1016,7 @@ pub(crate) fn retained_console_filename(path: &Path) -> Option<String> {
     let filename=path.file_name()?.to_str()?;
     let (_,suffix)=filename.rsplit_once("repo-console-")?;
     let (number,extension)=suffix.split_once('.')?;
-    if number.is_empty() || !number.bytes().all(|b|b.is_ascii_digit()) || !["svg","webp","png","jpg","jpeg"].contains(&extension) {return None;}
+    if number.is_empty() || !number.bytes().all(|b|b.is_ascii_digit()) || !["svg","webp","png","jpg","jpeg","avif"].contains(&extension) {return None;}
     Some(format!("repo-console-{suffix}"))
 }
 
@@ -1113,6 +1175,39 @@ mod tests {
             );
             let _ = fs::remove_dir_all(&self.root);
         }
+    }
+    #[test]
+    fn weekly_updates_only_download_changed_catalogs_and_preserve_the_previous_one_on_failure() {
+        let files=Sandbox::new();let conn=files.catalog();
+        assert!(!weekly_check_due(&conn).unwrap());
+        conn.execute("UPDATE catalog_info SET downloaded_at=datetime('now','-8 days')",[]).unwrap();assert!(weekly_check_due(&conn).unwrap());
+        let before=fs::read(files.job.catalog_path()).unwrap();drop(conn);
+        let mut downloads=0;
+        update_cached_platforms_with(&files.job,None,|_|(),|url,file,_,_|{
+            if url.contains("/commits?") {assert!(url.contains("path=Sony+-+PlayStation+2%2Fcatalog.json"));fs::write(file,r#"[{"sha":"revision-one","commit":{"committer":{"date":"2099-01-01T00:00:00Z"}}}]"#).map_err(err)}
+            else{downloads+=1;fs::write(file,FIXTURE).map_err(err)}
+        }).unwrap();assert_eq!(downloads,1);
+        let conn=open_catalog(&files.job.catalog_path()).unwrap();assert!(!weekly_check_due(&conn).unwrap());drop(conn);
+        update_cached_platforms_with(&files.job,None,|_|(),|url,file,_,_|{
+            assert!(url.contains("/commits?"));fs::write(file,r#"[{"sha":"revision-one"}]"#).map_err(err)
+        }).unwrap();
+        let current=fs::read(files.job.catalog_path()).unwrap();
+        assert!(update_cached_platforms_with(&files.job,None,|_|(),|_,_,_,_|Err("offline".into())).is_err());assert_eq!(fs::read(files.job.catalog_path()).unwrap(),current);
+        assert!(update_cached_platforms_with(&files.job,None,|_|(),|url,file,_,_|fs::write(file,if url.contains("/commits?"){r#"[{"sha":"revision-two"}]"#}else{"invalid"}).map_err(err)).is_err());assert_eq!(fs::read(files.job.catalog_path()).unwrap(),current);
+        assert_ne!(before,current);
+        assert!(prepare_for_import(&files.job,false,false,|_|()).is_ok());
+    }
+
+    #[test]
+    fn avif_repository_game_and_console_images_keep_their_extension() {
+        let files=Sandbox::new();let mut conn=files.catalog();let source="Sony - PlayStation 2";
+        let mut data:serde_json::Value=serde_json::from_str(FIXTURE).unwrap();
+        data["games"]["SLUS-12345"]["images"]["cover_front"]["path"]=serde_json::json!("SLUS-12345/cover_front.avif");
+        let file=files.job.directory.join("avif.json");fs::write(&file,serde_json::to_vec(&data).unwrap()).unwrap();insert_platform(&mut conn,&files.job,source,&file,|_|()).unwrap();
+        assert_eq!(conn.query_row("SELECT COUNT(*) FROM images WHERE game_id=?1 AND kind='cover' AND filename LIKE '%.avif'",[token("Sony - PlayStation 2/SLUS-12345")],|r|r.get::<_,i64>(0)).unwrap(),1);
+        fs::write(&file,serde_json::to_vec(&serde_json::json!({"schema_version":1,"system":source,"images":{"logo":{"path":"logo.avif","kind":"logo"}}})).unwrap()).unwrap();
+        insert_console_artwork(&mut conn,source,&file).unwrap();
+        let filename:String=conn.query_row("SELECT filename FROM repository_platform_images WHERE kind='logo'",[],|r|r.get(0)).unwrap();assert!(filename.ends_with(".avif"));assert_eq!(retained_console_filename(Path::new(&filename)),Some(filename));
     }
     #[test]
     fn discovers_submodules_from_contents_listings_and_uses_child_main_for_games_and_consoles() {

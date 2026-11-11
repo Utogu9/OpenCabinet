@@ -824,7 +824,7 @@ fn validate_game_images(images: &[GameImage]) -> Result<(), String> {
 fn image_extension(path: &Path) -> Result<String, String> {
     use std::io::Read;
     let extension = path.extension().and_then(|value| value.to_str()).unwrap_or("").to_lowercase();
-    let mut header = [0u8; 12];
+    let mut header = [0u8; 4096];
     let mut file = fs::File::open(path).map_err(|e| crate::i18n::i18n_format!("msg.1c822d5720", e))?;
     let size = file.read(&mut header).map_err(|e| e.to_string())?;
     let valid = match extension.as_str() {
@@ -833,11 +833,29 @@ fn image_extension(path: &Path) -> Result<String, String> {
         "gif" => size >= 6 && (&header[..6] == b"GIF87a" || &header[..6] == b"GIF89a"),
         "webp" => size >= 12 && &header[..4] == b"RIFF" && &header[8..12] == b"WEBP",
         "bmp" => size >= 2 && &header[..2] == b"BM",
+        "avif" => {
+            // ISO BMFF: accept an AVIF major or compatible brand, not any HEIF.
+            let length = u32::from_be_bytes(header[..4].try_into().unwrap()) as usize;
+            size >= 16 && &header[4..8] == b"ftyp" && length >= 16 && length <= size
+                && (&header[8..12] == b"avif" || &header[8..12] == b"avis"
+                    || header[16..length].chunks_exact(4).any(|brand| brand == b"avif" || brand == b"avis"))
+        },
         "svg" => svg_image::valid(path),
         _ => false,
     };
     if !valid { return Err(crate::i18n::text("msg.ff9fb24a20").into()); }
     Ok(extension)
+}
+
+#[cfg(test)]
+#[test]
+fn avif_images_validate_the_container_brand_and_reject_other_heif_files() {
+    let path=std::env::temp_dir().join(format!("opencabinet-avif-{}.avif",std::process::id()));
+    fs::write(&path,include_bytes!("../../tests/fixtures/manual-page.avif")).unwrap();
+    assert_eq!(image_extension(&path).unwrap(),"avif");
+    fs::write(&path,b"\0\0\0\x18ftypmif1\0\0\0\0mif1heic").unwrap();assert!(image_extension(&path).is_err());
+    fs::write(&path,b"\0\0\0\x18ftypavif").unwrap();assert!(image_extension(&path).is_err());
+    fs::remove_file(path).unwrap();
 }
 
 struct PendingImageCopies(Vec<std::path::PathBuf>);
@@ -899,7 +917,7 @@ async fn select_game_images(app: tauri::AppHandle, kind: String) -> Result<Vec<S
     validate_game_images(&[GameImage { path: "selection".into(), kind: kind.clone() }])?;
     tauri::async_runtime::spawn_blocking(move || {
         let dialog = rfd::FileDialog::new().set_title(crate::i18n::text("msg.cfe995fb19"))
-            .add_filter(crate::i18n::text("msg.98f60447c3"), &["png", "jpg", "jpeg", "webp", "gif", "bmp"]);
+            .add_filter(crate::i18n::text("msg.98f60447c3"), &["png", "jpg", "jpeg", "webp", "gif", "bmp", "avif"]);
         let paths = if ["cover", "logo"].contains(&kind.as_str()) {
             dialog.pick_file().map(|path| vec![path]).unwrap_or_default()
         } else { dialog.pick_files().unwrap_or_default() };
@@ -2722,6 +2740,7 @@ pub fn run() {
             select_game_images,
             manuals::select_game_manuals,
             manuals::get_game_manuals,
+            manuals::delete_game_manual,
             cbz::get_cbz_manifest,
             cbz::read_cbz_page,
             manuals::open_game_folder,

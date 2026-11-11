@@ -1,5 +1,11 @@
 # Manuales PDF y CBZ
 
+Cada manual guardado tiene un botón de papelera en **Editar juego → Manuales**.
+Tras confirmar, borra la copia administrada y actualiza el manifiesto de la
+colección; conserva el archivo de origen situado fuera de esa carpeta. Si era
+el manual preferido, se vuelve a utilizar el primero disponible. Quitar un
+manual pendiente de guardar solo lo retira del borrador.
+
 Los manuales se agregan desde **Editar juego → Manuales** o copiando los archivos
 en la carpeta `manuals` de su colección. Los originales elegidos en el editor
 se copian al guardar. Los CBZ mantienen su extensión y participan en los mismos

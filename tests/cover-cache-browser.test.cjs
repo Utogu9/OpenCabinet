@@ -9,6 +9,7 @@ test('Workers keep each cover attached to the correct game through batch loads a
   const root = path.resolve(__dirname, '../src');
   const server = http.createServer((req, res) => {
     const name = new URL(req.url, 'http://localhost').pathname;
+    if(name==='/test-cover.avif'){res.setHeader('Content-Type','image/avif');res.end(fs.readFileSync(path.join(__dirname,'fixtures/manual-page.avif')));return;}
     if (name === '/') { res.setHeader('Content-Type', 'text/html; charset=utf-8'); res.end('<!doctype html><meta charset="utf-8"><title>Thumbnail fixture</title>'); return; }
     const file = path.resolve(root, '.' + name);
     if (!file.startsWith(root + path.sep)) { res.writeHead(403).end(); return; }
@@ -21,6 +22,15 @@ test('Workers keep each cover attached to the correct game through batch loads a
   await page.goto(`http://127.0.0.1:${server.address().port}/`);
   await page.evaluate(() => { window.OpenCabinetI18n = { t: key => key }; });
   await page.addScriptTag({ url: '/cover-cache.js' });
+  const avif=await page.evaluate(async()=>{
+    const decoder=OpenCabinetCovers.createDecoder();const signal=new AbortController().signal;
+    try{
+      const bitmap=await decoder(location.origin+'/test-cover.avif',signal),canvas=document.createElement('canvas');canvas.width=bitmap.width;canvas.height=bitmap.height;
+      canvas.getContext('2d').drawImage(bitmap,0,0);const pixels=Array.from(canvas.getContext('2d').getImageData(16,24,1,1).data);
+      const result={width:bitmap.width,height:bitmap.height,pixels};bitmap.close();return result;
+    }finally{decoder.dispose();}
+  });
+  assert.equal(avif.width,64);assert.equal(avif.height,96);assert.ok(avif.pixels[0]>190&&avif.pixels[1]<60&&avif.pixels[2]<80,'AVIF artwork retains its colors in cover thumbnails');
   await page.addScriptTag({ content: fs.readFileSync(path.join(__dirname, 'helpers/cover-cache-browser.js'), 'utf8') });
   for (const transferPixels of [false, true]) {
     const result = await page.evaluate(transferPixels => checkCoverCachePixels({ transferPixels, imageCache: transferPixels }), transferPixels);

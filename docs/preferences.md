@@ -1,5 +1,22 @@
 # Preferencias
 
+En **Biblioteca**, **Formato de fecha de lanzamiento** permite elegir
+`DD-MM-YYYY` (predeterminado), `MM-DD-YYYY` o `YYYY-MM-DD`. Solo cambia la
+presentación de fechas completas; los datos guardados y las fechas que contienen
+únicamente un año o un mes conservan su precisión.
+
+En **Datos de juegos**, la búsqueda automática de actualizaciones del catálogo
+está activada por defecto. Al importar con un catálogo de OpenCabinet-BDD de más
+de siete días, se consultan las revisiones de los catálogos preparados y se
+descargan los que cambiaron, también cuando pertenecen a submódulos. Una revisión
+sin novedades no vuelve a consultarse durante una semana. Sin conexión o ante un
+error se conserva el catálogo local; los catálogos personales no se actualizan.
+
+**Restaurar valores predeterminados** solicita confirmación y aplica los valores
+iniciales de preferencias, tema, fuente de datos y copias automáticas. Conserva
+la biblioteca, los archivos, los temas personalizados y la carpeta activa de
+datos. Restablecer la fuente no elimina el catálogo personal importado.
+
 La ventana usa categorías a la izquierda: **Inicio**, **Biblioteca** y **Datos de usuario**. Cambiar de categoría conserva los cambios pendientes; Guardar aplica todas las secciones y Cancelar los descarta. Se pueden recorrer las categorías con las flechas arriba/abajo, Inicio y Fin. Al abrir la ventana se muestra Inicio.
 
 El botón **Acerca de** de la barra de menú abre la información de OpenCabinet y su versión instalada. Tanto esta ventana como Preferencias pueden cerrarse con Escape.

@@ -271,3 +271,35 @@ pub async fn open_game_manual(app: tauri::AppHandle, id: i64, path: String) -> R
     .await
     .map_err(err)?
 }
+
+pub(crate) fn delete_manual(conn: &mut Connection, root: &Path, id: i64, path: &Path) -> Result<()> {
+    let collection = existing_collection(conn, root, id)?.ok_or(crate::i18n::text("msg.a610277d50"))?;
+    let requested = path.canonicalize().map_err(err)?;
+    let allowed = scan(&collection)?.into_iter().find(|p|p.canonicalize().is_ok_and(|p|p==requested))
+        .ok_or(crate::i18n::text("msg.52ae8b6cfe"))?;
+    // Keep the file recoverable until the collection snapshot has committed.
+    let staged = allowed.with_extension(format!("{}-deleting",std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_err(err)?.as_nanos()));
+    fs::rename(&allowed, &staged).map_err(err)?;
+    let result = (|| {
+        crate::library_features::init(conn).map_err(err)?;
+        let tx = conn.transaction().map_err(err)?;
+        tx.execute("DELETE FROM game_manual_preferences WHERE game_id=?1 AND filename=?2",(id,allowed.file_name().unwrap().to_string_lossy().as_ref())).map_err(err)?;
+        let mut copies = PendingImageCopies(Vec::new());
+        media_library::sync_game(&tx,root,id,&mut copies)?;
+        tx.commit().map_err(err)?;
+        copies.0.clear();
+        Ok(())
+    })();
+    if let Err(error) = result { let _ = fs::rename(&staged,&allowed); return Err(error); }
+    fs::remove_file(staged).map_err(err)?;
+    let warnings = media_library::flush(conn,root);
+    if warnings.is_empty() { Ok(()) } else { Err(warnings.join(" · ")) }
+}
+
+#[tauri::command]
+pub async fn delete_game_manual(id: i64, path: String) -> Result<()> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let mut conn = crate::get_db_connection().map_err(err)?;
+        delete_manual(&mut conn,&crate::data_directory().map_err(err)?,id,Path::new(&path))
+    }).await.map_err(err)?
+}

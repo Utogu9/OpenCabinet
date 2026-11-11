@@ -22,6 +22,7 @@ function app(storage = new Map(), failSave = false, options = {}) {
         removeAttribute(name) { delete this.attributes[name]; },
         querySelector(selector) { return get(`${id}:${selector}`); },
         click() { return this.handlers.click?.(); },
+        requestSubmit() { return this.handlers.submit?.({preventDefault(){}}); },
       });
     }
     return elements.get(id);
@@ -72,6 +73,32 @@ function app(storage = new Map(), failSave = false, options = {}) {
     },
   };
 }
+
+test('Release date formats persist without changing stored dates and preserve partial dates',async()=>{
+  const instance=app();await instance.open();
+  assert.equal(instance.get('preference-auto-update-catalog').checked,true);
+  for(const [format,expected] of [['DD-MM-YYYY','28-04-2001'],['MM-DD-YYYY','04-28-2001'],['YYYY-MM-DD','2001-04-28']]){
+    instance.get('preference-release-date-format').value=format;await instance.save(400);
+    assert.equal(instance.evaluate('formatReleaseDate("2001-04-28")'),expected);
+    const restarted=app(instance.storage);await restarted.open();assert.equal(restarted.get('preference-release-date-format').value,format);
+  }
+  for(const date of ['2001','2001-04','2001-02-30','not a date'])assert.equal(instance.evaluate(`formatReleaseDate(${JSON.stringify(date)})`),date);
+  instance.get('preference-auto-update-catalog').checked=false;await instance.save(400);
+  const restarted=app(instance.storage);await restarted.open();assert.equal(restarted.get('preference-auto-update-catalog').checked,false);
+});
+
+test('Restoring defaults requires confirmation, resets settings and retains the active data folder',async()=>{
+  const storage=new Map([['opencabinet.preferences',JSON.stringify({maxCachedCovers:222,cacheMode:'ram',coversOnly:true,autoUpdateCatalog:false,releaseDateFormat:'MM-DD-YYYY'})]]);
+  const instance=app(storage,false,{location:{active_directory:'D:/Library',default_directory:'C:/Default',pending_directory:null}});await instance.open();
+  let reset=instance.get('btn-reset-preferences').handlers.click();instance.get('preferences-reset-confirm').returnValue='cancel';instance.get('preferences-reset-confirm').close();await reset;
+  assert.equal(JSON.parse(storage.get('opencabinet.preferences')).maxCachedCovers,222);
+  reset=instance.get('btn-reset-preferences').handlers.click();instance.get('preferences-reset-confirm').returnValue='reset';instance.get('preferences-reset-confirm').close();await reset;
+  for(let i=0;i<10;i++)await new Promise(setImmediate);
+  assert.deepEqual(JSON.parse(storage.get('opencabinet.preferences')),JSON.parse(instance.evaluate('JSON.stringify(DEFAULT_PREFERENCES)')));
+  assert.equal(instance.calls.some(call=>call.command==='schedule_data_directory'),false);
+  assert.equal(instance.calls.find(call=>call.command==='set_metadata_catalog').args.catalog,null);
+  assert.deepEqual(JSON.parse(JSON.stringify(instance.calls.find(call=>call.command==='save_backup_settings').args.settings)),{automatic:true,keep:7});
+});
 
 test('User Data separates backups from folder settings and preserves drafts when switching pages',async()=>{
  const instance=app();await instance.open();

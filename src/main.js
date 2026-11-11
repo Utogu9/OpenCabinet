@@ -139,7 +139,7 @@ let manualCoverCache = null;
 const isJewelManualGame = game => !!window.OpenCabinet3D?.jewelFamily(game?.platform);
 const pauseManualPrefetchForScroll=()=>manualCoverCache?.pauseForScroll();
 const PREFERENCES_KEY = "opencabinet.preferences";
-const DEFAULT_PREFERENCES = { language: globalThis.OpenCabinetI18n.defaultLocale, maxCachedCovers: 400, cacheMode: "disk", cacheDirectory: "", startMaximized: true, coversOnly: false, timeFormat: "24h", combineRegionStatistics: true, useCatalogTitles: true };
+const DEFAULT_PREFERENCES = { language: globalThis.OpenCabinetI18n.defaultLocale, maxCachedCovers: 400, cacheMode: "disk", cacheDirectory: "", startMaximized: true, coversOnly: false, timeFormat: "24h", releaseDateFormat: "DD-MM-YYYY", autoUpdateCatalog: true, combineRegionStatistics: true, useCatalogTitles: true };
 let preferences = readPreferences();
 let appThemes = null;
 const launchingGames = new Set();
@@ -164,6 +164,8 @@ function readPreferences() {
       startMaximized: typeof saved?.startMaximized === "boolean" ? saved.startMaximized : DEFAULT_PREFERENCES.startMaximized,
       coversOnly: typeof saved?.coversOnly === "boolean" ? saved.coversOnly : DEFAULT_PREFERENCES.coversOnly,
       timeFormat: ["12h", "24h"].includes(saved?.timeFormat) ? saved.timeFormat : DEFAULT_PREFERENCES.timeFormat,
+      releaseDateFormat: ["DD-MM-YYYY","MM-DD-YYYY","YYYY-MM-DD"].includes(saved?.releaseDateFormat) ? saved.releaseDateFormat : DEFAULT_PREFERENCES.releaseDateFormat,
+      autoUpdateCatalog: typeof saved?.autoUpdateCatalog === "boolean" ? saved.autoUpdateCatalog : true,
       combineRegionStatistics: typeof saved?.combineRegionStatistics === "boolean" ? saved.combineRegionStatistics : true,
       useCatalogTitles: typeof saved?.useCatalogTitles === "boolean" ? saved.useCatalogTitles : true,
     };
@@ -189,6 +191,10 @@ function setupPreferences() {
   const coversOnly = document.getElementById("preference-covers-only");
   const combineRegions = document.getElementById("preference-combine-region-statistics");
   const timeFormat = document.getElementById("preference-time-format");
+  const releaseDateFormat=document.getElementById("preference-release-date-format");
+  const autoUpdateCatalog=document.getElementById("preference-auto-update-catalog");
+  const restoreDefaults=document.getElementById("btn-reset-preferences");
+  let resettingDefaults=false;
   const directory = document.getElementById("preference-data-directory");
   const browse = document.getElementById("btn-browse-data-directory");
   const reset = document.getElementById("btn-reset-data-directory");
@@ -287,6 +293,7 @@ function setupPreferences() {
     document.getElementById("preference-cache-disk-options").classList.toggle("hidden", cacheMode.value !== "disk");
     startMaximized.disabled = coversOnly.disabled = busy;
     timeFormat.disabled = busy;
+    releaseDateFormat.disabled=autoUpdateCatalog.disabled=restoreDefaults.disabled=busy;
     document.getElementById("btn-close-preferences").disabled = busy;
     document.getElementById("btn-cancel-preferences").disabled = busy;
     restart.classList.toggle("hidden", !location?.pending_directory);
@@ -328,6 +335,9 @@ function setupPreferences() {
     combineRegions.checked = preferences.combineRegionStatistics;
     catalogTitles.checked = preferences.useCatalogTitles;
     timeFormat.value = preferences.timeFormat;
+    releaseDateFormat.value=preferences.releaseDateFormat;
+    autoUpdateCatalog.checked=preferences.autoUpdateCatalog;
+    resettingDefaults=false;
     error.classList.add("hidden");
     location = null;
     draftDirectory = "";
@@ -388,6 +398,19 @@ function setupPreferences() {
   });
   metadataReset.addEventListener('click',()=>{if(!saving&&!choosing){draftCatalog=null;update();}});
   cacheReset.addEventListener("click", () => { draftCacheDirectory = ""; update(); });
+  restoreDefaults.addEventListener("click",async()=>{
+    if(saving||choosing||backupsPanel?.busy||themesPanel?.busy||!location)return;
+    const confirm=document.getElementById("preferences-reset-confirm");
+    const accepted=await new Promise(resolve=>{confirm.returnValue="cancel";confirm.addEventListener("close",()=>resolve(confirm.returnValue==="reset"),{once:true});confirm.showModal();});
+    if(!accepted||!dialog.open)return;
+    input.value=String(DEFAULT_PREFERENCES.maxCachedCovers);cacheMode.value=DEFAULT_PREFERENCES.cacheMode;draftCacheDirectory="";
+    startMaximized.checked=DEFAULT_PREFERENCES.startMaximized;coversOnly.checked=DEFAULT_PREFERENCES.coversOnly;languageSelect.value=DEFAULT_PREFERENCES.language;
+    combineRegions.checked=DEFAULT_PREFERENCES.combineRegionStatistics;catalogTitles.checked=DEFAULT_PREFERENCES.useCatalogTitles;
+    timeFormat.value=DEFAULT_PREFERENCES.timeFormat;releaseDateFormat.value=DEFAULT_PREFERENCES.releaseDateFormat;autoUpdateCatalog.checked=DEFAULT_PREFERENCES.autoUpdateCatalog;
+    draftCatalog=null;draftDirectory=location.active_directory;selection=null;resettingDefaults=true;
+    showCategory("startup");update();
+    document.getElementById("preferences-form").requestSubmit();
+  });
   cacheBrowse.addEventListener("click", async () => {
     if (saving || choosing) return;
     const currentRequest = request;
@@ -419,9 +442,11 @@ function setupPreferences() {
     if (!globalThis.OpenCabinetI18n.hasLocale(languageSelect.value)) {
       showCategory("startup"); showError(globalThis.OpenCabinetI18n.t("language.invalid")); return;
     }
+    if (!["DD-MM-YYYY","MM-DD-YYYY","YYYY-MM-DD"].includes(releaseDateFormat.value)) { showCategory("library");showError(globalThis.OpenCabinetI18n.t("preferences.invalidDateFormat"));return; }
     const next = { ...preferences, language: languageSelect.value, maxCachedCovers: value,
       cacheMode: cacheMode.value === "ram" ? "ram" : "disk", cacheDirectory: draftCacheDirectory,
       startMaximized: startMaximized.checked, coversOnly: coversOnly.checked, timeFormat: timeFormat.value,
+      releaseDateFormat:releaseDateFormat.value,autoUpdateCatalog:autoUpdateCatalog.checked,
       combineRegionStatistics: combineRegions.checked, useCatalogTitles: catalogTitles.checked };
     let previous;
     saving = true; update();
@@ -472,6 +497,7 @@ function setupPreferences() {
       if (next.language !== preferences.language) await invoke("save_ui_language", { language: next.language });
       const cacheChanged = preferences.cacheMode !== next.cacheMode || preferences.cacheDirectory !== next.cacheDirectory;
       const statisticsChanged = preferences.combineRegionStatistics !== next.combineRegionStatistics;
+      if(resettingDefaults){await invoke("save_backup_settings",{settings:{automatic:true,keep:7}});await themesPanel?.resetDefaults();resettingDefaults=false;}
       preferences = next;
       void invoke("save_backup_preferences", { preferences }).catch(reason => console.error(reason));
       allGames.forEach(projectRegionalStatistics);
@@ -483,6 +509,7 @@ function setupPreferences() {
         catalogCoverCache?.dispose(); catalogCoverCache = null;
       } else catalogCoverCache?.setLimit(value);
       applyLibraryFilters();
+      const selected=allGames.find(game=>game.id===selectedGameId);if(selected)showGameDetails(selected);
       saving = false;
       update();
       if (!location.pending_directory) close();
@@ -505,6 +532,7 @@ function setupPreferences() {
       || cacheMode.value !== preferences.cacheMode || draftCacheDirectory !== preferences.cacheDirectory
       || startMaximized.checked !== preferences.startMaximized || coversOnly.checked !== preferences.coversOnly
       || timeFormat.value !== preferences.timeFormat
+      || releaseDateFormat.value !== preferences.releaseDateFormat || autoUpdateCatalog.checked !== preferences.autoUpdateCatalog
       || languageSelect.value !== preferences.language
       || combineRegions.checked !== preferences.combineRegionStatistics
       || catalogTitles.checked !== preferences.useCatalogTitles
@@ -2061,6 +2089,15 @@ async function setupPlayStatistics() {
   }
 }
 
+function formatReleaseDate(value) {
+  if(!value)return "";
+  const match=/^(\d{4})-(\d{2})-(\d{2})(?:T.*)?$/.exec(value);
+  if(!match)return value;
+  const [,year,month,day]=match,date=new Date(`${year}-${month}-${day}T00:00:00Z`);
+  if(!Number.isFinite(date.getTime())||date.toISOString().slice(0,10)!==`${year}-${month}-${day}`)return value;
+  return preferences.releaseDateFormat==="YYYY-MM-DD"?`${year}-${month}-${day}`:preferences.releaseDateFormat==="MM-DD-YYYY"?`${month}-${day}-${year}`:`${day}-${month}-${year}`;
+}
+
 function showGameDetails(game) {
   ++platformDetailsRequest;
   selectedGameId = game.id;
@@ -2092,7 +2129,7 @@ function showGameDetails(game) {
   }
 
   const releaseDateEl = document.getElementById("details-release-date");
-  if (releaseDateEl) releaseDateEl.textContent = game.release_date || "-";
+  if (releaseDateEl) releaseDateEl.textContent = formatReleaseDate(game.release_date) || "-";
 
   const developerEl = document.getElementById("details-developer");
   if (developerEl) developerEl.textContent = game.developer || "-";
@@ -2588,7 +2625,7 @@ function metadataResultLabel(game) {
   const regionKeys={World:'world','North America':'northAmerica',Europe:'europe',Japan:'japan',Korea:'korea',China:'china',Taiwan:'taiwan','Hong Kong':'hongKong',Asia:'asia',Australia:'australia',Brazil:'brazil'};
   const regions=(game.regions||[]).map(region=>regionKeys[region]
     ?globalThis.OpenCabinetI18n.t('metadata.region.'+regionKeys[region]):region).join(' / ');
-  return `${game.title} · ${game.platform}${regions ? ` · ${regions}` : ""}${game.source_key ? ` · ${game.source_key}` : ""}${game.release_date ? ` · ${game.release_date}` : ""}`;
+  return `${game.title} · ${game.platform}${regions ? ` · ${regions}` : ""}${game.source_key ? ` · ${game.source_key}` : ""}${game.release_date ? ` · ${formatReleaseDate(game.release_date)}` : ""}`;
 }
 
 function preferredMetadataMatch(games) {
@@ -3091,7 +3128,7 @@ function setupGameEditor() {
   function previewMetadata() {
     const game = metadataResults.find((game) => String(game.id) === metadataResult.value);
     document.getElementById("editor-metadata-preview").textContent = game ? [game.title, globalThis.OpenCabinetI18n.t("msg.a3011897b1", game.platform),
-      `Lanzamiento: ${game.release_date || "—"}`, globalThis.OpenCabinetI18n.t("msg.3ea6961dd5", game.developer || "—"), globalThis.OpenCabinetI18n.t("msg.647325454a", game.publisher || "—"),
+      `Lanzamiento: ${formatReleaseDate(game.release_date) || "—"}`, globalThis.OpenCabinetI18n.t("msg.3ea6961dd5", game.developer || "—"), globalThis.OpenCabinetI18n.t("msg.647325454a", game.publisher || "—"),
       globalThis.OpenCabinetI18n.t("msg.439c200421", game.genre || "—"), globalThis.OpenCabinetI18n.t("msg.22b204f176", globalThis.OpenCabinetI18n.gameMode(game.game_mode) || "—"), globalThis.OpenCabinetI18n.t("msg.e4eefae773", game.max_players || "—"),
       "", game.description || globalThis.OpenCabinetI18n.t("msg.591e5cef97")].join("\n") : "";
     metadataControls();
@@ -3263,6 +3300,7 @@ function setupGameEditor() {
   }
 
   function renderManuals() {
+    const panels = document.getElementById("game-editor-panels"), scrollTop = panels.scrollTop;
     const list = document.getElementById("game-manual-list");
     list.replaceChildren();
     if (!savedManuals.length && !draftManuals.length) list.textContent = globalThis.OpenCabinetI18n.t("msg.dc75c4bee8");
@@ -3292,10 +3330,31 @@ function setupGameEditor() {
         const preferred=document.createElement("button");preferred.type="button";preferred.className="media-preference-button";
         globalThis.OpenCabinetIcons.set(preferred,"star");preferred.title=globalThis.OpenCabinetI18n.t("media.preferred");preferred.setAttribute("aria-label",preferred.title);preferred.setAttribute("aria-pressed",String((draftPreferredManual||savedManuals[0]||draftManuals[0])===path));
         preferred.addEventListener("click",()=>{if(saving||networkBusy||choosingImages||closing)return;draftPreferredManual=path;renderManuals();});
-        preferred.classList.toggle("hidden",savedManuals.length+draftManuals.length<2);row.append(name, action, preferred); list.appendChild(row);
+        const remove=document.createElement("button");remove.type="button";remove.className="delete-btn";
+        globalThis.OpenCabinetIcons.set(remove,"trash-2");remove.title=globalThis.OpenCabinetI18n.t("manuals.delete");remove.setAttribute("aria-label",globalThis.OpenCabinetI18n.t("manuals.deleteNamed",name.textContent));
+        remove.disabled=saving||choosingImages||closing||networkBusy;
+        remove.addEventListener("click",async()=>{
+          if(saving||choosingImages||closing||networkBusy)return;
+          if(pending){draftManuals=draftManuals.filter(p=>p!==path);if(draftPreferredManual===path)draftPreferredManual="";renderManuals();return;}
+          const id=editingId;
+          if(!await confirmDeletion(globalThis.OpenCabinetI18n.t("manuals.delete"),globalThis.OpenCabinetI18n.t("manuals.deleteConfirm",name.textContent)))return;
+          if(id!==editingId||closing||saving||networkBusy)return;
+          choosingImages=true;metadataControls();
+          try{
+            editorManualReader?.close(false,false);editorManualData=null;
+            await invoke("delete_game_manual",{id,path});
+            if(draftPreferredManual===path)draftPreferredManual="";
+            await refreshManuals();
+            detailsGameBox?.refreshManuals?.();
+            const selected=allGames.find(game=>game.id===selectedGameId);if(selected)showGameDetails(selected);
+          }catch(error){showToast(String(error),true);}
+          finally{choosingImages=false;metadataControls();}
+        });
+        preferred.classList.toggle("hidden",savedManuals.length+draftManuals.length<2);row.append(name, action, preferred,remove); list.appendChild(row);
       }
     }
     metadataControls();
+    panels.scrollTop=scrollTop;
   }
   async function refreshManuals() {
     const id = editingId;
@@ -3305,6 +3364,7 @@ function setupGameEditor() {
       const paths = await invoke("get_game_manuals", { id });
       if (id !== editingId || closing || version !== manualVersion) return;
       savedManuals = paths;
+      manualCoverCache?.trackGame(id,paths);
       if(!draftPreferredManual)draftPreferredManual=paths[0]||"";
       draftManuals = draftManuals.filter(path => !paths.includes(path));
       renderManuals();
@@ -5163,6 +5223,11 @@ function reviewMetadataImport(preview, platform, task, operation=null) {
           catalog = null; metadataCatalogSummary = null; platformSelect.replaceChildren(); platformSelect.value = "";
           document.getElementById("lb-catalog-status").textContent = globalThis.OpenCabinetI18n.t("msg.4e6a7aaa24");
         }
+        if(preferences.autoUpdateCatalog&&session.catalog&&Date.now()-Date.parse(session.catalog.downloaded_at)>7*86400000){
+          const summary=await invoke("prepare_metadata_catalog",{jobId:id,refresh:false,autoUpdate:true,onProgress:channel("catalog")});
+          if(!alive)return false;
+          if(summary)renderCatalog(summary);
+        }
         return true;
       })().finally(() => { startingSession = null; });
       return startingSession;
@@ -5329,7 +5394,7 @@ function reviewMetadataImport(preview, platform, task, operation=null) {
           else card.classList.add("metadata-match-unmatched");
           status.textContent = chosen ? `${chosen.exact ? globalThis.OpenCabinetI18n.t("msg.c6aba42fdd") : globalThis.OpenCabinetI18n.t("msg.331570c2ec")} · ${chosen.platform}`
             : row.candidates.length ? globalThis.OpenCabinetI18n.t("msg.1e11ef651d") : globalThis.OpenCabinetI18n.t("msg.24aa8da1b9");
-          body.textContent = chosen ? [chosen.title, globalThis.OpenCabinetI18n.t("msg.a3011897b1", chosen.platform), globalThis.OpenCabinetI18n.t("msg.66e351ec27", chosen.release_date || "—"),
+          body.textContent = chosen ? [chosen.title, globalThis.OpenCabinetI18n.t("msg.a3011897b1", chosen.platform), globalThis.OpenCabinetI18n.t("msg.66e351ec27", formatReleaseDate(chosen.release_date) || "—"),
             globalThis.OpenCabinetI18n.t("msg.3ea6961dd5", chosen.developer || "—"), globalThis.OpenCabinetI18n.t("msg.647325454a", chosen.publisher || "—"), globalThis.OpenCabinetI18n.t("msg.439c200421", chosen.genre || "—"),
             globalThis.OpenCabinetI18n.t("msg.22b204f176", globalThis.OpenCabinetI18n.gameMode(chosen.game_mode) || "—"), globalThis.OpenCabinetI18n.t("msg.e4eefae773", chosen.max_players || "—"),
             "", chosen.description || globalThis.OpenCabinetI18n.t("msg.591e5cef97")].join("\n") : globalThis.OpenCabinetI18n.t("msg.00a1bafb3d");
@@ -5457,7 +5522,7 @@ function reviewMetadataImport(preview, platform, task, operation=null) {
       if (!await ensureSession()) return;
       if (!catalog) {
         search.textContent = globalThis.OpenCabinetI18n.t("msg.e8a203706e");
-        const summary = await invoke("prepare_metadata_catalog", { jobId, refresh: false, onProgress: channel("catalog") });
+        const summary = await invoke("prepare_metadata_catalog", { jobId, refresh: false, autoUpdate:preferences.autoUpdateCatalog, onProgress: channel("catalog") });
         if (!alive) return;
         renderCatalog(summary);
       }

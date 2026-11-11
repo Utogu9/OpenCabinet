@@ -54,7 +54,7 @@ function importer(options = {}) {
     "btn-lb-skip", "btn-lb-cancel", "btn-lb-retry", "lb-download-report", "import-media-recovery-list"].forEach((id) => root.appendChild(get(id)));
   const count = options.count ?? 1;
   const preview = { games: Array.from({ length: count }, (_, index) => ({ title: `Reviewed ${index}`, rom_path: `C:/roms/Game ${index} (USA).rom` })), total_found: count + 2, skipped_count: 2 };
-  const catalog = { downloaded_at: "2026-10-16T08:00:00Z", game_count: 123456, platforms: ["Sega Genesis", "Sega Master System"] };
+  const catalog = { downloaded_at: options.catalogDate || new Date().toISOString(), game_count: 123456, platforms: ["Sega Genesis", "Sega Master System"] };
   const game = (id = 1, exact = true) => ({ id, title: `Catalog title ${id}`, platform: "Sega Genesis", exact,
     release_date: "1991-06-23", developer: "Sonic Team", publisher: "Sega", genre: "Platform", max_players: 1,
     game_mode: null, description: "<script>plain text</script>" });
@@ -91,6 +91,7 @@ function importer(options = {}) {
   `, context);
   // Single-game metadata tests begin after title review; review itself is covered separately.
   if (options.useCatalogTitles === false) vm.runInContext("preferences.useCatalogTitles = false", context);
+  if (options.autoUpdateCatalog === false) vm.runInContext("preferences.autoUpdateCatalog = false", context);
   if (count === 1) vm.runInContext("reviewScannedGames = async () => true", context);
   return { get, calls, preview, catalog, game, matches, start: () => vm.runInContext("handleExecuteScan()", context),
     evaluate: (code) => vm.runInContext(code, context),
@@ -98,6 +99,17 @@ function importer(options = {}) {
     media: (kind) => get("lb-media-options").querySelectorAll("input").find((input) => input.name === kind),
     commands: () => calls.map((call) => call.command) };
 }
+
+test('Old import catalogs are checked automatically unless disabled',async()=>{
+  for(const enabled of [true,false]){
+    const app=importer({catalogDate:'2000-01-01T00:00:00Z',autoUpdateCatalog:enabled});
+    const pending=app.start();for(let i=0;i<6;i++)await turn();
+    const checks=app.calls.filter(call=>call.command==='prepare_metadata_catalog'&&call.args.autoUpdate);
+    assert.equal(checks.length,enabled?1:0);
+    if(enabled)assert.equal(checks[0].args.refresh,false);
+    await app.get('btn-lb-cancel').click();await pending;
+  }
+});
 
 test("Import can download only PDF/CBZ manuals without selecting any image types", async () => {
   const app = importer({ handlers: {

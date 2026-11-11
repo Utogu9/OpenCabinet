@@ -4,6 +4,15 @@
     "name": "Español (Argentina)"
   },
   "messages": {
+    "manuals.delete": "Borrar manual",
+    "manuals.deleteNamed": "Borrar {0}",
+    "manuals.deleteConfirm": "¿Borrar definitivamente {0} de la carpeta de manuales de este juego? Se conservará el archivo original que importaste.",
+    "preferences.releaseDateFormat": "Formato de fecha de lanzamiento",
+    "preferences.invalidDateFormat": "Elegí un formato de fecha de lanzamiento válido.",
+    "preferences.autoUpdateCatalog": "Buscar actualizaciones del catálogo automáticamente al importar juegos",
+    "preferences.autoUpdateCatalogHelp": "Cuando el catálogo de OpenCabinet-BDD tenga más de una semana, buscar versiones nuevas y descargar las actualizaciones disponibles. Sin conexión, se seguirá usando el catálogo guardado.",
+    "preferences.reset": "Restaurar valores predeterminados",
+    "preferences.resetConfirm": "¿Restaurar las preferencias, el tema, la fuente de datos y las copias automáticas a sus valores predeterminados? Se conservarán tu biblioteca, archivos, temas personalizados y ubicación activa de los datos de usuario.",
     "maintenance.storage": "Almacenamiento",
     "maintenance.diagnostics": "Exportar diagnóstico",
     "maintenance.refresh": "Calcular almacenamiento",

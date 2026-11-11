@@ -226,6 +226,7 @@
         renderList();controls();
       },
       close(){if(!busy)cancelDraft();},
+      async resetDefaults(){await this.load();const saved=validateLibrary(await invoke('get_theme_library'));draft=null;await persist({...saved,active:defaults.id});ui?.closeEditor();},
     };
   }
   globalThis.OpenCabinetThemes={FORMAT,COLORS,SECTIONS,FIELDS,builtins:copy(builtins),validate,validateLibrary,apply,create};
