@@ -224,15 +224,17 @@ pub fn open_path(app: &tauri::AppHandle, path: &Path) -> Result<(), String> {
 }
 #[tauri::command]
 pub fn open_project_repository() -> Result<(), String> {
+    open_web_url("https://github.com/Utogu9/OpenCabinet")
+}
+
+pub(crate) fn open_web_url(url: &str) -> Result<(), String> {
     #[cfg(target_os = "linux")]
     {
-        desktop_open(std::ffi::OsStr::new(
-            "https://github.com/Utogu9/OpenCabinet",
-        ))
+        desktop_open(std::ffi::OsStr::new(url))
     }
     #[cfg(not(target_os = "linux"))]
     {
-        tauri_plugin_opener::open_url("https://github.com/Utogu9/OpenCabinet", None::<&str>)
+        tauri_plugin_opener::open_url(url, None::<&str>)
             .map_err(|e| e.to_string())
     }
 }

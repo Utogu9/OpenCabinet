@@ -271,6 +271,8 @@ pub struct ImportSession {
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct CatalogGame {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    source: Option<crate::media_provenance::Source>,
     id: i64,
     title: String,
     platform: String,
@@ -372,6 +374,8 @@ impl MediaOptions {
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 struct CatalogImage {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    source: Option<crate::media_provenance::Source>,
     filename: String,
     kind: String,
     region: String,
@@ -776,7 +780,7 @@ fn insert_record(conn: &Connection, tag: &str, fields: &HashMap<String, String>)
             else {
                 return Ok(());
             };
-            let game = CatalogGame {
+            let game = CatalogGame { source: None,
                 id,
                 title,
                 platform,
@@ -1295,11 +1299,11 @@ fn prepare_batch(
                     params![id, source_platform], |r| r.get(0)).optional().map_err(err)?
                     .ok_or(crate::i18n::text("msg.d813f346bd"))?;
                 prepared.metadata = Some(repository_metadata::read_game(&json)?);
-                let images = catalog
+                let mut images = catalog
                     .prepare("SELECT filename,kind,region,crc FROM images WHERE game_id=?1")
                     .map_err(err)?
                     .query_map([id], |r| {
-                        Ok(CatalogImage {
+                        Ok(CatalogImage { source: None,
                             filename: r.get(0)?,
                             kind: r.get(1)?,
                             region: r.get(2)?,
@@ -1309,6 +1313,7 @@ fn prepare_batch(
                     .map_err(err)?
                     .collect::<rusqlite::Result<Vec<_>>>()
                     .map_err(err)?;
+                repository::attach_image_sources(&catalog, &mut images)?;
                 for image in select_images(images, options, &candidate.rom_path) {
                     let path = job
                         .directory
@@ -1419,7 +1424,7 @@ fn download_batch(
             batch.games[task.game_index].manuals.push(task.path.to_string_lossy().into_owned());
             continue;
         }
-        batch.games[task.game_index].images.push(GameImage {
+        batch.games[task.game_index].images.push(GameImage { source: task.image.source.clone(),
             path: task.path.to_string_lossy().into_owned(),
             kind: task.image.kind.clone(),
         });
@@ -1515,6 +1520,7 @@ pub(super) fn commit_import(
         if !direct { crate::discs::replace(&tx,id,&sources)?; }
         if let Some(data) = &game.metadata {
             repository::record_match(&tx,id,data.id)?;
+            crate::media_provenance::save_metadata(&tx,id,data.source.as_ref())?;
             tx.execute("UPDATE games SET release_date=?2,developer=?3,publisher=?4,genre=?5,
                 game_mode=?6,max_players=?7,description=?8 WHERE id=?9",
                 params![data.id, data.release_date, data.developer, data.publisher, data.genre,
@@ -1547,6 +1553,7 @@ pub(super) fn commit_import(
                 params![id, relative, image.kind, position as i64],
             )
             .map_err(err)?;
+            crate::media_provenance::save_image(&tx,&relative,image.source.as_ref())?;
             if image.kind == "cover" {
                 tx.execute(
                     "UPDATE games SET cover_path=?1 WHERE id=?2 AND cover_path IS NULL",
@@ -1957,11 +1964,11 @@ fn prepare_editor_images(
     if !exists {
         return Err(crate::i18n::text("msg.264b4977ed").into());
     }
-    let images = catalog
+    let mut images = catalog
         .prepare("SELECT filename,kind,region,crc FROM images WHERE game_id=?1")
         .map_err(err)?
         .query_map([source_id], |r| {
-            Ok(CatalogImage {
+            Ok(CatalogImage { source: None,
                 filename: r.get(0)?,
                 kind: r.get(1)?,
                 region: r.get(2)?,
@@ -1971,6 +1978,7 @@ fn prepare_editor_images(
         .map_err(err)?
         .collect::<rusqlite::Result<Vec<_>>>()
         .map_err(err)?;
+    repository::attach_image_sources(catalog, &mut images)?;
     // Separate rounds retain earlier draft images, even if a later download fails.
     let round = job.directory.join(crate::i18n::i18n_format!(
         "msg.f573c72c3d",
@@ -2115,7 +2123,7 @@ fn download_additional_images_with_client(
                 if duplicate { let _ = fs::remove_file(&task.path); continue; }
                 task.done = true;
                 *counts.entry(task.image.kind.clone()).or_default() += 1;
-                batch.games[0].images.push(GameImage { path: task.path.to_string_lossy().into_owned(), kind: task.image.kind.clone() });
+                batch.games[0].images.push(GameImage { source: task.image.source.clone(), path: task.path.to_string_lossy().into_owned(), kind: task.image.kind.clone() });
                 progress(job.progress("images", batch.games[0].images.len() as u64, None, Some(batch.games[0].candidate.title.clone())));
             }
             Err(message) => { task.failure = Some(message); let _ = fs::remove_file(&task.path); }
@@ -2151,10 +2159,11 @@ fn append_bulk_images(conn: &mut Connection, job: &ImportJob, id: i32, images: &
         copies.0.push(destination.clone());
         std::io::copy(&mut File::open(&image.path).map_err(err)?, &mut output).map_err(err)?;
         tx.execute("INSERT INTO game_images(game_id,path,kind,position) VALUES (?1,?2,?3,?4)", params![id, relative, image.kind, position]).map_err(err)?;
+        crate::media_provenance::save_image(&tx,&relative,image.source.as_ref())?;
         if image.kind == "cover" && !current.iter().any(|saved| saved.kind == "cover") {
             tx.execute("UPDATE games SET cover_path=?1 WHERE id=?2", params![relative, id]).map_err(err)?;
         }
-        current.push(GameImage { path: destination.to_string_lossy().into_owned(), kind: image.kind.clone() });
+        current.push(GameImage { source: image.source.clone(), path: destination.to_string_lossy().into_owned(), kind: image.kind.clone() });
         added += 1; position += 1;
     }
     crate::media_library::sync_game(&tx,&job.root,id as i64,&mut copies)?;
@@ -2184,7 +2193,7 @@ fn available_image_types(catalog: &Connection, sources: &[i64], job: &ImportJob)
     for id in sources.iter().copied().collect::<HashSet<_>>() {
         job.check()?;
         let images = catalog.prepare("SELECT filename,kind,region,crc FROM images WHERE game_id=?1")
-            .map_err(err)?.query_map([id], |r| Ok(CatalogImage {
+            .map_err(err)?.query_map([id], |r| Ok(CatalogImage { source: None,
                 filename: r.get(0)?, kind: r.get(1)?, region: r.get(2)?, crc: r.get(3)?,
             })).map_err(err)?.collect::<rusqlite::Result<Vec<_>>>().map_err(err)?;
         // Availability is independent for each type: the same artwork can be
@@ -2561,6 +2570,32 @@ mod tests {
     }
 
     #[test]
+    fn downloaded_attribution_survives_staging_import_bulk_and_editor_rounds() {
+        let sandbox=Sandbox::new(); let mut conn=library(); let catalog=sandbox.catalog();
+        let source=crate::media_provenance::Source {uploader:Some("Scanner".into()),url:Some("https://segaretro.org/File:Exact_scan.jpg".into())};
+        let mut batch=sandbox.batch(&conn,&catalog,1,options());
+        batch.tasks.truncate(1);
+        batch.tasks[0].image.source=Some(source.clone());
+        batch.games[0].metadata.as_mut().unwrap().source=Some(crate::media_provenance::Source {uploader:None,url:Some("https://www.wikidata.org/wiki/Q123".into())});
+        let filename=batch.tasks[0].image.filename.clone();
+        let server=MockServer::new(vec![(filename.as_str(),vec![(200,PNG.to_vec())])],false);
+        download_batch(&mut batch,&sandbox.job,&server.base,|_|()).unwrap();
+        assert_eq!(batch.games[0].images[0].source.as_ref(),Some(&source));
+        let report=editor_image_report(&batch,&[],&[],&sandbox.job).unwrap();
+        assert_eq!(report.images[0].source.as_ref(),Some(&source));
+        let preview=batch.preview.clone();*sandbox.job.staged.lock().unwrap()=Some(batch);
+        commit_import(&mut conn,&sandbox.job,preview,"My Genesis",|_|()).unwrap();
+        let saved=crate::read_game_images(&conn,1).unwrap();
+        assert_eq!(saved[0].source.as_ref(),Some(&source));
+        let article:String=conn.query_row("SELECT details FROM game_metadata_sources WHERE game_id=1",[],|r|r.get(0)).unwrap();
+        assert!(article.contains("https://www.wikidata.org/wiki/Q123"));
+        let extra=sandbox.root.join("extra.png");
+        let mut bytes=PNG.to_vec();bytes.extend_from_slice(b"additional artwork");fs::write(&extra,bytes).unwrap();
+        append_bulk_images(&mut conn,&sandbox.job,1,&[GameImage {path:extra.to_string_lossy().into_owned(),kind:"screenshot".into(),source:Some(source.clone())}],None).unwrap();
+        assert_eq!(crate::read_game_images(&conn,1).unwrap()[1].source.as_ref(),Some(&source));
+    }
+
+    #[test]
     fn downloads_pdf_and_cbz_before_import_and_commits_portable_manuals() {
         let sandbox = Sandbox::new(); let mut conn = library(); let catalog = sandbox.catalog();
         catalog_manuals(&catalog);
@@ -2881,8 +2916,8 @@ mod tests {
         }
         // Existing generic classifications still validate without being renamed.
         crate::validate_game_images(&[
-            GameImage { path: "legacy-art.png".into(), kind: "artwork".into() },
-            GameImage { path: "legacy-other.png".into(), kind: "other".into() },
+            GameImage { source: None, path: "legacy-art.png".into(), kind: "artwork".into() },
+            GameImage { source: None, path: "legacy-other.png".into(), kind: "other".into() },
         ]).unwrap();
     }
 
@@ -2981,7 +3016,7 @@ mod tests {
         // Bulk preparation must keep these categories enabled even if primary images already exist.
         let mut prepared = prepare_editor_images(&conn, &catalog, &sandbox.job, 1, 1, "Sega Genesis", &options, Some(&saved)).unwrap();
         assert_eq!(prepared.tasks.len(), 29);
-        let existing: Vec<_> = saved.iter().map(|image| GameImage {
+        let existing: Vec<_> = saved.iter().map(|image| GameImage { source: None,
             path: crate::resolve_image_path(&sandbox.root, &image.path), kind: image.kind.clone(),
         }).collect();
         // All candidates already present: do not add duplicates or replace the primary cover.
@@ -3031,7 +3066,7 @@ mod tests {
         let spines: Vec<_> = batch.tasks.iter().filter(|task| task.image.kind == "spine").collect();
         assert_eq!(spines.len(), 1);
         assert_eq!(spines[0].image.filename, "spine-eu.png");
-        crate::validate_game_images(&[GameImage { path: "spine.png".into(), kind: "spine".into() }]).unwrap();
+        crate::validate_game_images(&[GameImage { source: None, path: "spine.png".into(), kind: "spine".into() }]).unwrap();
         selected.spine = 21;
         assert!(selected.validate().is_err());
     }
@@ -3073,7 +3108,7 @@ mod tests {
             ("M:\\Roms (Japan)\\Game (En,Es) (REV02).gen", vec![]),
         ] { assert_eq!(rom_regions(path), expected, "{path}"); }
         let images: Vec<_> = ["World", "North America", "Europe", "Japan"].into_iter()
-            .map(|region|CatalogImage{filename:format!("{}.png",region.replace(' ',"-")),kind:"cover".into(),region:region.into(),crc:region.into()}).collect();
+            .map(|region|CatalogImage{ source: None,filename:format!("{}.png",region.replace(' ',"-")),kind:"cover".into(),region:region.into(),crc:region.into()}).collect();
         let options=MediaOptions{cover:1,..Default::default()};
         for (tag,region) in [("U","North America"),("E","Europe"),("J","Japan"),("W","World"),("UE","North America"),("JU","Japan")] {
             assert_eq!(select_images(images.clone(),&options,&format!("Game ({tag}) [!].gen"))[0].region,region,"{tag}");
@@ -3292,7 +3327,7 @@ mod tests {
             let mut batch = prepare_batch(&conn, &catalog, &sandbox.job, preview.clone(), "PC".into(), "Sega Genesis", selected, &options()).unwrap();
             for task in &mut batch.tasks {
                 fs::write(&task.path, PNG).unwrap(); task.done = true;
-                batch.games[task.game_index].images.push(GameImage { path: task.path.to_string_lossy().into_owned(), kind: task.image.kind.clone() });
+                batch.games[task.game_index].images.push(GameImage { source: None, path: task.path.to_string_lossy().into_owned(), kind: task.image.kind.clone() });
             }
             *sandbox.job.staged.lock().unwrap() = Some(batch);
             if fail { conn.execute_batch("CREATE TRIGGER fail_pc_import BEFORE UPDATE OF launch\u{0062}ox_id ON games BEGIN SELECT RAISE(ABORT,'simulated failure'); END;").unwrap(); }
@@ -3318,7 +3353,7 @@ mod tests {
             let preview=ScanPreview {games:vec![RomCandidate { linux_execution: None, recomp: false, launch_directly: false, discs: Vec::new(), existing_game_id: None,title:"Reviewed Steam title".into(),rom_path:crate::steam::uri(730),epic:None,steam:Some(crate::steam::SteamSource {app_id:730,client_path:client.join("steam.exe").to_string_lossy().into_owned(),manifest_path:manifest.to_string_lossy().into_owned()})}],total_found:1,skipped_count:0};
             let selected=vec![MatchSelection {rom_path:preview.games[0].rom_path.clone(),id:Some(1)}];
             let mut batch=prepare_batch(&conn,&catalog,&sandbox.job,preview.clone(),"PC".into(),"Sega Genesis",selected,&options()).unwrap();
-            for task in &mut batch.tasks {fs::write(&task.path,PNG).unwrap();task.done=true;batch.games[task.game_index].images.push(GameImage {path:task.path.to_string_lossy().into_owned(),kind:task.image.kind.clone()});}
+            for task in &mut batch.tasks {fs::write(&task.path,PNG).unwrap();task.done=true;batch.games[task.game_index].images.push(GameImage { source: None,path:task.path.to_string_lossy().into_owned(),kind:task.image.kind.clone()});}
             *sandbox.job.staged.lock().unwrap()=Some(batch);
             if uninstall {fs::remove_file(&manifest).unwrap();}
             let result=commit_import(&mut conn,&sandbox.job,preview.clone(),"PC",|_|{});
@@ -3348,7 +3383,7 @@ mod tests {
             let mut batch = prepare_batch(&conn, &catalog, &sandbox.job, preview.clone(), "PC".into(), "Sega Genesis", selected, &options()).unwrap();
             for task in &mut batch.tasks {
                 fs::write(&task.path, PNG).unwrap(); task.done = true;
-                batch.games[task.game_index].images.push(GameImage { path: task.path.to_string_lossy().into_owned(), kind: task.image.kind.clone() });
+                batch.games[task.game_index].images.push(GameImage { source: None, path: task.path.to_string_lossy().into_owned(), kind: task.image.kind.clone() });
             }
             *sandbox.job.staged.lock().unwrap() = Some(batch);
             if failure == "uninstall" { fs::remove_file(&manifest).unwrap(); }
@@ -3380,7 +3415,7 @@ mod tests {
         for task in &mut batch.tasks {
             fs::write(&task.path, PNG).unwrap();
             task.done = true;
-            batch.games[task.game_index].images.push(GameImage {
+            batch.games[task.game_index].images.push(GameImage { source: None,
                 path: task.path.to_string_lossy().into_owned(),
                 kind: task.image.kind.clone(),
             });
@@ -3476,7 +3511,7 @@ mod tests {
             let mut batch = sandbox.batch(&conn, &catalog, 2, options());
             let image = sandbox.job.directory.join("local.png");
             fs::write(&image, PNG).unwrap();
-            batch.games[0].images.push(GameImage {
+            batch.games[0].images.push(GameImage { source: None,
                 path: image.to_string_lossy().into_owned(),
                 kind: "cover".into(),
             });
@@ -3550,7 +3585,7 @@ mod tests {
         let mut batch = sandbox.batch(&conn, &catalog, 1, options());
         let image = sandbox.job.directory.join("local.png");
         fs::write(&image, PNG).unwrap();
-        batch.games[0].images.push(GameImage {
+        batch.games[0].images.push(GameImage { source: None,
             path: image.to_string_lossy().into_owned(),
             kind: "cover".into(),
         });
@@ -3801,7 +3836,7 @@ mod tests {
         let source = sandbox.job.directory.join("screen.png");
         fs::write(&source, PNG).unwrap();
         conn.execute_batch("CREATE TRIGGER reject_bulk_image BEFORE INSERT ON game_images BEGIN SELECT RAISE(ABORT,'Failure'); END;").unwrap();
-        assert!(append_bulk_images(&mut conn, &sandbox.job, id, &[GameImage { path: source.to_string_lossy().into_owned(), kind: "screenshot".into() }], None).is_err());
+        assert!(append_bulk_images(&mut conn, &sandbox.job, id, &[GameImage { source: None, path: source.to_string_lossy().into_owned(), kind: "screenshot".into() }], None).is_err());
         assert!(super::super::read_game_images(&conn, id).unwrap().is_empty());
         assert!(files_in(&sandbox.root.join("images")).is_empty());
     }
@@ -3829,7 +3864,7 @@ mod tests {
         let conn = library();
         let catalog = sandbox.catalog();
         let id = editor_game(&conn);
-        let existing = vec![GameImage { path: "cover.png".into(), kind: "cover".into() }, GameImage { path: "logo.png".into(), kind: "logo".into() }];
+        let existing = vec![GameImage { source: None, path: "cover.png".into(), kind: "cover".into() }, GameImage { source: None, path: "logo.png".into(), kind: "logo".into() }];
         let mut batch = prepare_editor_images(&conn, &catalog, &sandbox.job, id, 1, "Sega Genesis", &options(), Some(&existing)).unwrap();
         assert!(batch.tasks.iter().all(|task| !["cover", "logo"].contains(&task.image.kind.as_str())));
         let server = MockServer::new(vec![("screen-duplicate.png", vec![(503, b"Unavailable".to_vec())]), ("screen-2.png", vec![(200, PNG.to_vec())])], false);
@@ -3921,12 +3956,12 @@ mod tests {
         fs::write(&different, &other).unwrap();
         for (index, path) in [same, different].iter().enumerate() {
             batch.tasks[index].done = true;
-            batch.games[0].images.push(GameImage {
+            batch.games[0].images.push(GameImage { source: None,
                 path: path.to_string_lossy().into_owned(),
                 kind: batch.tasks[index].image.kind.clone(),
             });
         }
-        let existing = vec![GameImage {
+        let existing = vec![GameImage { source: None,
             path: old_image.to_string_lossy().into_owned(),
             kind: "cover".into(),
         }];
@@ -3996,7 +4031,7 @@ mod tests {
         .unwrap();
         let source = &batch.tasks[0].path;
         fs::write(source, PNG).unwrap();
-        let details = crate::GameDetails { launch_actions:None, personal:None, manual_preference:None, rom_path:None, order_group:None, box_3d:None, regions: None, variables: None, execution: None, discs: None,
+        let details = crate::GameDetails { metadata_source: None, launch_actions:None, personal:None, manual_preference:None, rom_path:None, order_group:None, box_3d:None, regions: None, variables: None, execution: None, discs: None,
             manuals: None,
             id,
             title: "Custom title".into(),
@@ -4009,7 +4044,7 @@ mod tests {
             max_players: None,
             description: Some("Custom description".into()),
             catalog_id: None,
-            images: Some(vec![GameImage {
+            images: Some(vec![GameImage { source: None,
                 path: source.to_string_lossy().into_owned(),
                 kind: "cover".into(),
             }]),

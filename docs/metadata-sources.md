@@ -32,6 +32,17 @@ Si no hay conexión, se conserva el catálogo anterior y se puede reintentar con
 
 El repositorio proporciona imágenes, nombres de ediciones e identificadores
 comerciales, y fichas opcionales de metadatos compartidas mediante `metadata_id`.
+Las descargas nuevas conservan el uploader y el enlace de origen de cada imagen,
+cuando el catálogo los proporciona. Se prefiere la página del archivo o artículo
+al enlace directo a la imagen; no se deduce un uploader cuando falta. En Editar
+juego → Imágenes aparecen etiquetas junto al nombre del archivo: el uploader y
+el sitio, cuyo botón abre la URL exacta. La atribución se guarda también en el
+manifiesto de la colección para conservarla al respaldar o recuperar imágenes.
+Los metadatos conservan su `source_url`; el sitio se muestra encima de Completar
+datos, con un enlace al artículo de la ficha seleccionada o guardada. Las
+atribuciones no guardadas por versiones anteriores no se reconstruyen
+automáticamente al abrir el editor.
+
 Al importar ROMs se busca primero su nombre original, conservando región,
 idiomas, revisión y disco, y quitando las extensiones conocidas. Si no coincide,
 se busca por el título revisado. Los resultados muestran su ID comercial.

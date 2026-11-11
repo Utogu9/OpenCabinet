@@ -128,7 +128,7 @@ pub(super) fn parse_images(html: &str) -> Vec<CatalogImage> {
         } else {
             "other"
         };
-        images.push(CatalogImage {
+        images.push(CatalogImage { source: None,
             filename: filename.to_owned(),
             kind: kind.into(),
             region: "World".into(),
@@ -529,7 +529,7 @@ pub(super) fn commit_auto(
             params![platform.id, relative, image.kind, position],
         )
         .map_err(err)?;
-        existing.push(GameImage {
+        existing.push(GameImage { source: None,
             path: destination.to_string_lossy().into_owned(),
             kind: image.kind.clone(),
         });
@@ -632,7 +632,7 @@ mod download_options_tests {
     use super::*;
     #[test]
     fn additional_logos_are_kept_without_replacing_the_primary() {
-        let image = |path: &str| GameImage { path: path.into(), kind: "logo".into() };
+        let image = |path: &str| GameImage { source: None, path: path.into(), kind: "logo".into() };
         let mut images = vec![image("logo.webp"),image("logo9.webp")];
         retain_primary_logo(&mut images, &[]);
         assert_eq!(images[0].kind,"logo");
@@ -644,9 +644,9 @@ mod download_options_tests {
     #[test]
     fn checked_console_types_default_to_one_and_can_download_all() {
         let images = vec![
-            CatalogImage{filename:"logo.webp".into(),kind:"logo".into(),region:"World".into(),crc:String::new()},
-            CatalogImage{filename:"logo9.webp".into(),kind:"other".into(),region:"World".into(),crc:String::new()},
-            CatalogImage{filename:"logo2.svg".into(),kind:"other".into(),region:"World".into(),crc:String::new()},
+            CatalogImage{ source: None,filename:"logo.webp".into(),kind:"logo".into(),region:"World".into(),crc:String::new()},
+            CatalogImage{ source: None,filename:"logo9.webp".into(),kind:"other".into(),region:"World".into(),crc:String::new()},
+            CatalogImage{ source: None,filename:"logo2.svg".into(),kind:"other".into(),region:"World".into(),crc:String::new()},
         ];
         let counts=image_counts(&images);
         assert_eq!(counts["logo"],1);assert_eq!(counts["other"],2);

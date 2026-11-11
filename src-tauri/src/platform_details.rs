@@ -230,7 +230,7 @@ pub(super) fn read(conn: &Connection, id: i32, root: &Path) -> Result<PlatformDe
         .prepare("SELECT path,kind FROM platform_images WHERE platform_id=?1 ORDER BY position")
         .map_err(|e| e.to_string())?
         .query_map([id], |row| {
-            Ok(GameImage {
+            Ok(GameImage { source: None,
                 path: row.get(0)?,
                 kind: row.get(1)?,
             })
@@ -430,7 +430,7 @@ mod tests {
         fn image(&self, kind: &str) -> GameImage {
             let path = self.root.join(format!("source-{kind}.png"));
             fs::write(&path, b"\x89PNG\r\n\x1a\n").unwrap();
-            GameImage {
+            GameImage { source: None,
                 path: path.to_string_lossy().into_owned(),
                 kind: kind.into(),
             }
@@ -485,7 +485,7 @@ mod tests {
         let source=library.root.join(&filename);
         fs::write(&source,b"<svg xmlns='http://www.w3.org/2000/svg'><path d='M0 0'/></svg>").unwrap();
         let mut details=library.details();
-        details.images.push(GameImage{path:source.to_string_lossy().into_owned(),kind:"other".into()});
+        details.images.push(GameImage{ source: None,path:source.to_string_lossy().into_owned(),kind:"other".into()});
         let saved=save(&mut library.conn,details,&library.root).unwrap();
         let managed=Path::new(&saved.images[0].path);
         assert!(managed.is_file());assert_ne!(managed,source);

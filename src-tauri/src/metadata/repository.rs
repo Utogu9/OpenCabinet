@@ -12,7 +12,7 @@ const RAW_URL: &str = "https://raw.githubusercontent.com/Utogu9/OpenCabinet-BDD/
 const CONFIG: &str = "metadata/source.json";
 const MIN_REPOSITORY_ID: i64 = 1_000_000_000_000;
 // Retain release names and canonical title aliases for regional ROM matching.
-const REPOSITORY_GAME_VERSION: i64 = 6;
+const REPOSITORY_GAME_VERSION: i64 = 7;
 
 #[derive(Default, Serialize, Deserialize)]
 struct Settings {
@@ -378,9 +378,43 @@ struct RepoImage {
 #[derive(Deserialize)]
 struct RepoImageSource {
     #[serde(default)]
+    uploader_hidden: bool,
+    #[serde(default)]
+    uploader: Option<String>,
+    #[serde(default)]
+    file_page: Option<String>,
+    #[serde(default)]
+    page: Option<String>,
+    #[serde(default)]
+    source: Option<String>,
+    #[serde(default)]
+    url: Option<String>,
+    #[serde(default)]
     dat_name: String,
     #[serde(default)]
     region: String,
+}
+
+fn image_origin(sources: &[RepoImageSource]) -> Option<crate::media_provenance::Source> {
+    let make = |source: &RepoImageSource| {
+        crate::media_provenance::Source {
+            uploader: if source.uploader_hidden { None } else { source.uploader.clone() },
+            url: [&source.file_page, &source.page, &source.source, &source.url].into_iter()
+                .filter_map(|s| s.as_deref()).find_map(crate::media_provenance::web_url),
+        }.clean()
+    };
+    sources.iter().filter_map(make).find(|s| s.uploader.is_some())
+        .or_else(|| sources.iter().find_map(make))
+}
+
+pub(super) fn attach_image_sources(conn: &Connection, images: &mut [CatalogImage]) -> Result<()> {
+    let exists: bool = conn.query_row("SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE name='repository_image_sources')", [], |r|r.get(0)).map_err(err)?;
+    if !exists { return Ok(()); }
+    let mut query = conn.prepare("SELECT details FROM repository_image_sources WHERE filename=?1").map_err(err)?;
+    for image in images {
+        image.source = crate::media_provenance::decode(query.query_row([&image.filename], |r|r.get(0)).optional().map_err(err)?);
+    }
+    Ok(())
 }
 
 fn token(value: &str) -> i64 {
@@ -428,6 +462,7 @@ fn create_repository(conn: &Connection) -> Result<()> {
     conn.execute_batch("CREATE TABLE image_urls(filename TEXT PRIMARY KEY,url TEXT NOT NULL);CREATE TABLE repository_keys(id INTEGER PRIMARY KEY,source_key TEXT UNIQUE NOT NULL);CREATE TABLE ready_platforms(name TEXT PRIMARY KEY);CREATE INDEX idx_names_normalized ON names(normalized);CREATE INDEX idx_games_platform ON games(platform);CREATE INDEX idx_images_game ON images(game_id);CREATE VIRTUAL TABLE names_fts USING fts5(name,content='names',content_rowid='rowid',tokenize='unicode61 remove_diacritics 2');INSERT INTO catalog_info VALUES(strftime('%Y-%m-%dT%H:%M:%SZ','now'));").map_err(err)
 }
 fn metadata_schema(conn: &Connection) -> Result<()> {
+    conn.execute_batch("CREATE TABLE IF NOT EXISTS repository_image_sources(filename TEXT PRIMARY KEY, details TEXT NOT NULL);").map_err(err)?;
     conn.execute_batch("CREATE TABLE IF NOT EXISTS repository_versions(name TEXT PRIMARY KEY,version INTEGER NOT NULL);CREATE TABLE IF NOT EXISTS repository_console_metadata(name TEXT PRIMARY KEY,details TEXT NOT NULL);CREATE TABLE IF NOT EXISTS repository_platform_images(platform TEXT NOT NULL,filename TEXT PRIMARY KEY,kind TEXT NOT NULL,region TEXT NOT NULL,crc TEXT NOT NULL);").map_err(err)
 }
 
@@ -605,6 +640,7 @@ fn insert_platform(
         console_localized.insert(locale.into(),serde_json::json!({"name":source,"release_date":values.release_date,"developer":values.developer,"manufacturer":values.manufacturer}));
     }
     tx.execute("INSERT OR REPLACE INTO repository_console_metadata VALUES(?1,?2)",params![source,serde_json::to_string(&console_localized).map_err(err)?]).map_err(err)?;
+    tx.execute("DELETE FROM repository_image_sources WHERE filename IN (SELECT filename FROM images WHERE game_id IN (SELECT id FROM games WHERE platform=?1))",[source]).map_err(err)?;
     tx.execute("DELETE FROM image_urls WHERE filename IN (SELECT filename FROM images WHERE game_id IN (SELECT id FROM games WHERE platform=?1))",[source]).map_err(err)?;
     for table in ["images", "names"] {
         tx.execute(
@@ -634,7 +670,7 @@ fn insert_platform(
         if title.is_empty() {
             return Ok(());
         }
-        let details = CatalogGame {
+        let details = CatalogGame { source: None,
             id,
             title: metadata.and_then(|record| record.title("en")).unwrap_or(&title).to_owned(),
             platform: source.into(),
@@ -647,6 +683,9 @@ fn insert_platform(
             description: None,
         };
         let mut json=serde_json::to_value(&details).map_err(err)?;
+        if let Some(origin) = metadata.and_then(repository_metadata::Record::origin) {
+            json["source"] = serde_json::to_value(origin).map_err(err)?;
+        }
         json["_regions"]=serde_json::to_value(regions::from_entries(&game.entries)).map_err(err)?;
         json["_release_names"]=serde_json::to_value(game.entries.iter()
             .flat_map(|entry|[entry.name.as_str(),entry.dat_name.as_str()]).filter(|name|!name.is_empty()).collect::<Vec<_>>()).map_err(err)?;
@@ -724,6 +763,10 @@ fn insert_platform(
             if !manual && !["webp","avif","png","jpg","jpeg","gif","bmp","svg"].contains(&extension.as_str()) { continue; }
             let filename = format!("repo-{}.{extension}", -token(&format!("{source}/{}", image.path)));
             let url = format!("{raw}{}", url_path(&image.path));
+            if let Some(origin) = image_origin(&image.sources) {
+                tx.execute("INSERT OR REPLACE INTO repository_image_sources VALUES(?1,?2)",
+                    params![filename,serde_json::to_string(&origin).map_err(err)?]).map_err(err)?;
+            }
             let names = image
                 .sources
                 .iter()
@@ -1025,7 +1068,7 @@ pub(super) fn console_images(job: &ImportJob, source: &str) -> Result<Vec<Catalo
     }
     let conn=open_catalog(&path)?;
     conn.prepare("SELECT filename,kind,region,crc FROM repository_platform_images WHERE platform=?1 ORDER BY kind,filename").map_err(err)?
-        .query_map([source],|r|Ok(CatalogImage{filename:r.get(0)?,kind:r.get(1)?,region:r.get(2)?,crc:r.get(3)?})).map_err(err)?
+        .query_map([source],|r|Ok(CatalogImage{ source: None,filename:r.get(0)?,kind:r.get(1)?,region:r.get(2)?,crc:r.get(3)?})).map_err(err)?
         .collect::<rusqlite::Result<Vec<_>>>().map_err(err)
 }
 
@@ -1685,7 +1728,7 @@ mod tests {
         assert_eq!(available.counts["cart_label"], 3);
         assert_eq!(available.counts["cart_front"], 1);
         let images = conn.prepare("SELECT filename,kind,region,crc FROM images WHERE game_id=?1").unwrap()
-            .query_map([id], |r| Ok(CatalogImage { filename: r.get(0)?, kind: r.get(1)?, region: r.get(2)?, crc: r.get(3)? }))
+            .query_map([id], |r| Ok(CatalogImage { source: None, filename: r.get(0)?, kind: r.get(1)?, region: r.get(2)?, crc: r.get(3)? }))
             .unwrap().collect::<rusqlite::Result<Vec<_>>>().unwrap();
         let mut options: MediaOptions = serde_json::from_value(serde_json::json!({"selected_types": ["cart_label"]})).unwrap();
         options.validate().unwrap();

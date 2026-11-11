@@ -5,6 +5,8 @@ use serde_json::Value;
 #[derive(Default, Deserialize)]
 pub(super) struct Record {
     #[serde(default)]
+    source_url: Option<String>,
+    #[serde(default)]
     pub labels: std::collections::HashMap<String, String>,
     #[serde(default)]
     short_descriptions: Value,
@@ -43,6 +45,20 @@ pub(super) fn localized(value: &Value, locale: &str) -> Option<String> {
 }
 
 impl Record {
+    pub fn origin(&self) -> Option<crate::media_provenance::Source> {
+        if let Some(url) = self.source_url.as_deref().and_then(crate::media_provenance::web_url) {
+            return Some(crate::media_provenance::Source { uploader: None, url: Some(url) });
+        }
+        // Only per-entry article references; database-wide license/download links
+        // are not the source article for a game's metadata.
+        let sources = self.sources.as_object()?;
+        sources.values().find_map(|source| {
+            ["source_url", "url", "page"].into_iter()
+                .filter_map(|key| source[key].as_str())
+                .find_map(crate::media_provenance::web_url)
+                .map(|url| crate::media_provenance::Source { uploader: None, url: Some(url) })
+        })
+    }
     pub fn title(&self, locale: &str) -> Option<&str> {
         let language = locale.split('-').next().unwrap_or("en");
         [locale, language, "mul", "en", "es"]
@@ -183,14 +199,18 @@ pub(super) fn read_game(json: &str) -> super::Result<super::CatalogGame> {
 fn read_game_locale(json: &str, locale: &str) -> super::Result<super::CatalogGame> {
     let value: Value = serde_json::from_str(json).map_err(super::err)?;
     let language = locale.split('-').next().unwrap_or("en");
-    serde_json::from_value(
+    let mut game: super::CatalogGame = serde_json::from_value(
         value
             .get("_localized")
             .and_then(|v| v.get(language).or_else(|| v.get("en")))
             .unwrap_or(&value)
             .clone(),
     )
-    .map_err(super::err)
+    .map_err(super::err)?;
+    if game.source.is_none() {
+        game.source = value.get("source").and_then(|s|serde_json::from_value::<crate::media_provenance::Source>(s.clone()).ok()).and_then(|s|s.clean());
+    }
+    Ok(game)
 }
 
 #[cfg(test)]

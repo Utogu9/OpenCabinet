@@ -726,6 +726,35 @@ function imageSource(path) {
     ? path : window.__TAURI__.core.convertFileSrc(path);
 }
 
+function sourceBadge(source) {
+  if (!source?.url) return null;
+  let url;
+  try { url = new URL(source.url); } catch { return null; }
+  if (!["https:", "http:"].includes(url.protocol) || url.username || url.password) return null;
+  const host = url.hostname.replace(/^www\./, "");
+  const sites = { "segaretro.org": "Sega Retro", "psxdatacenter.com": "PSX Data Center", "gametdb.com": "GameTDB", "art.gametdb.com": "GameTDB", "wikidata.org": "Wikidata", "mobygames.com": "MobyGames" };
+  const badge = document.createElement("button");
+  badge.type = "button"; badge.className = "media-source-badge";
+  badge.textContent = sites[host] || host; badge.title = source.url;
+  badge.addEventListener("click", () => invoke("open_source_url", { url: source.url }).catch(error => showToast(String(error), true)));
+  return badge;
+}
+
+function imageFilename(image) {
+  const row = document.createElement("div"); row.className = "image-editor-filename";
+  const name = document.createElement("span"); name.className = "image-editor-name";
+  name.textContent = image.path.split(/[\\/]/).pop(); name.title = image.path;
+  row.appendChild(name);
+  if (image.source?.uploader) {
+    const uploader = document.createElement("span"); uploader.className = "media-uploader-badge";
+    uploader.textContent = image.source.uploader; uploader.title = image.source.uploader;
+    row.appendChild(uploader);
+  }
+  const site = sourceBadge(image.source);
+  if (site) row.appendChild(site);
+  return row;
+}
+
 function mediaImage(path, alt, className = "", onError = null) {
   const image = document.createElement("img");
   image.alt = alt;
@@ -3153,7 +3182,7 @@ function setupGameEditor() {
   let editorManualData=null;
   const editorManualReader=window.OpenCabinetManualReader?.create({imageSource,onClose:()=>{editorManualData?.dispose();editorManualData=null;}});
   let manualVersion = 0;
-  let draftCatalogId = null;
+  let draftCatalogId = null, draftMetadataSource = null;
   let metadataResults = [], metadataVersion = 0;
   const metadataPanel = document.getElementById("editor-metadata-panel");
   const metadataResult = document.getElementById("editor-metadata-result");
@@ -3161,6 +3190,12 @@ function setupGameEditor() {
   const metadataApply = document.getElementById("btn-editor-metadata-apply");
   const metadataMessage = document.getElementById("editor-metadata-message");
   const metadataProgress = document.getElementById("editor-metadata-progress");
+  function showMetadataSource(source = draftMetadataSource) {
+    const host = document.getElementById("game-metadata-source");
+    host.replaceChildren();
+    const badge = sourceBadge(source);
+    if (badge) host.appendChild(badge);
+  }
   function metadataControls() {
     updateEditorActions();
     const disabled = saving || choosingImages || closing || networkBusy;
@@ -3175,10 +3210,12 @@ function setupGameEditor() {
   function resetMetadata() {
     ++metadataVersion; metadataResults = []; metadataResult.replaceChildren(); metadataResult.value = "";
     document.getElementById("editor-metadata-preview").textContent = "";
+    showMetadataSource();
     metadataProgress.classList.add("hidden"); metadataControls();
   }
   function previewMetadata() {
     const game = metadataResults.find((game) => String(game.id) === metadataResult.value);
+    showMetadataSource(game ? game.source : draftMetadataSource);
     document.getElementById("editor-metadata-preview").textContent = game ? [game.title, globalThis.OpenCabinetI18n.t("msg.a3011897b1", game.platform),
       `Lanzamiento: ${formatReleaseDate(game.release_date) || "—"}`, globalThis.OpenCabinetI18n.t("msg.3ea6961dd5", game.developer || "—"), globalThis.OpenCabinetI18n.t("msg.647325454a", game.publisher || "—"),
       globalThis.OpenCabinetI18n.t("msg.439c200421", game.genre || "—"), globalThis.OpenCabinetI18n.t("msg.22b204f176", globalThis.OpenCabinetI18n.gameMode(game.game_mode) || "—"), globalThis.OpenCabinetI18n.t("msg.e4eefae773", game.max_players || "—"),
@@ -3270,6 +3307,8 @@ function setupGameEditor() {
       }
     }
     draftCatalogId = game.id;
+    draftMetadataSource = game.source || {};
+    showMetadataSource();
     downloader.useSource(game);
     metadataMessage.textContent = globalThis.OpenCabinetI18n.t("msg.3b7644cc13");
   });
@@ -3313,9 +3352,8 @@ function setupGameEditor() {
       thumbnail.appendChild(mediaImage(image.path, globalThis.OpenCabinetI18n.t("msg.c5341f198f")));
       const fields = document.createElement("div");
       fields.className = "image-editor-fields";
-      const name = document.createElement("span");
-      name.textContent = image.path.split(/[\\/]/).pop();
-      name.title = image.path;
+      const filename = imageFilename(image);
+      const name = filename.firstChild || filename.children[0];
       const kind = document.createElement("select");
       kind.setAttribute("aria-label", globalThis.OpenCabinetI18n.t("msg.1cc7c11dd8", name.textContent));
       GAME_IMAGE_TYPES.forEach(([key, label]) => {
@@ -3330,7 +3368,7 @@ function setupGameEditor() {
         draftImages = assignImageType(draftImages, image.path, kind.value);
         renderImageEditor();
       });
-      fields.append(name, kind);
+      fields.append(filename, kind);
       const remove = document.createElement("button");
       remove.type = "button";
       remove.disabled = networkBusy || saving || closing;
@@ -3528,7 +3566,14 @@ function setupGameEditor() {
       customArguments.checked = game.execution?.arguments != null && !editingStore;
       argumentsInput.value = game.execution?.arguments ?? "";
       draftCatalogId = null;
+      draftMetadataSource = null;
       resetMetadata(); metadataPanel.classList.add("hidden");
+      const sourceVersion = metadataVersion;
+      invoke("get_game_metadata_source", { id: game.id }).then(source => {
+        if (editingId === game.id && metadataVersion === sourceVersion && draftMetadataSource === null && !closing) {
+          draftMetadataSource = source; showMetadataSource();
+        }
+      }).catch(error => console.error("Could not read metadata source:", error));
       draftImages = gameImages(game);
       savedManuals = []; draftManuals = []; renderManuals();
       renderImageEditor();
@@ -3628,6 +3673,7 @@ function setupGameEditor() {
       },
       discs: discEditor?.value() ?? null,
       catalogId: draftCatalogId,
+      metadataSource: draftMetadataSource,
       title: document.getElementById("game-edit-name").value.trim(),
       platform: platformSelect.value,
       releaseDate: document.getElementById("game-edit-release-date").value || null,

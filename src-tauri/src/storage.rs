@@ -449,6 +449,7 @@ pub(crate) fn rebase_library(path: &Path, source: &Path, destination: &Path) -> 
         ("games", "epic_manifest_path"),
         ("games", "cover_path"),
         ("game_images", "path"),
+        ("image_sources", "path"),
         ("platform_images", "path"),
         ("emulators", "executable_path"),
         ("emulators", "retroarch_core_path"),

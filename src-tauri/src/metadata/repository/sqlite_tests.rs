@@ -188,17 +188,27 @@ fn sqlite_and_json_keep_identical_matches_metadata_and_media_identities() {
         .iter_mut()
         .next()
         .unwrap();
-    game["images"]["cover_front"] = json!({"kind":"cover_front","path":format!("{serial}/cover_front.avif"),"sources":[{"region":"US"}]});
+    game["images"]["cover_front"] = json!({"kind":"cover_front","path":format!("{serial}/cover_front.avif"),"sources":[{"region":"US","uploader":"Scanner Name","file_page":"https://segaretro.org/File:Exact_scan.jpg","url":"https://segaretro.org/images/scan.jpg"}]});
     game["images"]["manual"] = json!({"path":format!("{serial}/manual.cbz")});
+    data["metadata"]["wikidata:Q975773"]["source_url"] = "https://www.wikidata.org/wiki/Q975773".into();
     let json = files.job.directory.join("input.json");
     fs::write(&json, serde_json::to_vec(&data).unwrap()).unwrap();
     insert_platform(&mut conn, &files.job, source, &json, |_| ()).unwrap();
+    let filename: String = conn.query_row("SELECT filename FROM images WHERE kind='cover'",[],|r|r.get(0)).unwrap();
+    let mut image = [CatalogImage { filename, kind:"cover".into(), region:"World".into(), crc:String::new(), source:None }];
+    attach_image_sources(&conn,&mut image).unwrap();
+    let origin = image[0].source.as_ref().unwrap();
+    assert_eq!(origin.uploader.as_deref(),Some("Scanner Name"));
+    assert_eq!(origin.url.as_deref(),Some("https://segaretro.org/File:Exact_scan.jpg"));
+    let details: String = conn.query_row("SELECT details FROM games WHERE details LIKE '%Q975773%'",[],|r|r.get(0)).unwrap();
+    assert_eq!(repository_metadata::read_game(&details).unwrap().source.unwrap().url.as_deref(),Some("https://www.wikidata.org/wiki/Q975773"));
     let snapshot = |conn: &Connection| {
         [
             "SELECT details FROM games ORDER BY id",
             "SELECT game_id||name||normalized FROM names ORDER BY game_id,name",
             "SELECT game_id||filename||kind||region||crc FROM images ORDER BY game_id,filename",
             "SELECT filename||url FROM image_urls ORDER BY filename",
+            "SELECT filename||details FROM repository_image_sources ORDER BY filename",
             "SELECT details FROM repository_console_metadata ORDER BY name",
         ]
         .iter()

@@ -156,6 +156,7 @@ function mediaApp(options = {}) {
             play_time_seconds: 0, session_count: 1, is_running: true };
           if (command === "select_game_images") return pickerPaths;
           if (command === "get_game_manuals") return [];
+          if (command === "get_game_metadata_source") return null;
           if (command === "select_game_manuals") return pickerPaths;
           assert.equal(command, "update_game");
           if (failSave) throw new Error("Save failed");
@@ -172,7 +173,7 @@ function mediaApp(options = {}) {
       } } },
       addEventListener(name,handler) { (windowHandlers[name] ||= []).push(handler); },
     },
-    console,
+    console, URL,
   });
   vm.runInContext(fs.readFileSync(path.join(__dirname, "../src/game-box.js"), "utf8"), context);
   if (options.box3D) context.window.OpenCabinet3D.jewelFamily = context.OpenCabinet3D.jewelFamily;
@@ -194,7 +195,7 @@ function mediaApp(options = {}) {
     setupGameEditor();
   `, context);
   const evaluate = (code) => vm.runInContext(code, context);
-  const rowFor = (filename) => get("game-image-list").children.find((row) => row.children[1].children[0].textContent === filename);
+  const rowFor = (filename) => get("game-image-list").children.find((row) => row.children[1].children[0].children[0].textContent === filename);
   return { get, calls, channels, evaluate, rowFor, document, boxCalls, boxConfig: () => boxConfig,
     emitWindow:name=>(windowHandlers[name]||[]).forEach(handler=>handler({type:name})),
     nativeIdle: () => context.OpenCabinetWindowFullscreen.forWindow(options.nativeWindow)?.idle() || Promise.resolve(),
@@ -622,6 +623,49 @@ test("Metadata errors and empty results allow another title search and manual ed
     assert.equal(app.get("btn-save-game-edit").disabled, false); assert.equal(app.get("btn-editor-metadata-search").disabled, false);
     await app.get("btn-cancel-game-edit").trigger("click");
   }
+});
+
+test("Image attribution badges preserve the exact article and uploader through reclassification and saving", async () => {
+  const source = {uploader:'Scanner <name>',url:'https://segaretro.org/File:Exact_cover.jpg?oldid=12#history'};
+  const app = mediaApp({handlers:{open_source_url:()=>null}});
+  app.evaluate(`allGames[0].images[0].source=${JSON.stringify(source)}`);
+  await app.open();
+  const row=app.rowFor('cover.png');
+  const header=row.children[1].children[0];
+  assert.equal(header.children[0].textContent,'cover.png');
+  assert.equal(header.children[1].textContent,'Scanner <name>');
+  assert.equal(header.children[2].textContent,'Sega Retro');
+  assert.equal(header.children[2].title,source.url);
+  assert.equal(app.rowFor('logo.png').children[1].children[0].children.length,1);
+  await header.children[2].trigger('click');
+  assert.deepEqual(app.calls.find(call=>call.command==='open_source_url').args,{url:source.url});
+  row.children[1].children[1].value='back_cover';await row.children[1].children[1].trigger('change');
+  assert.equal(app.rowFor('cover.png'),row,'changing classification keeps badges and focus mounted');
+  await app.save();
+  const image=app.calls.find(call=>call.command==='update_game').args.details.images.find(image=>image.path.endsWith('cover.png'));
+  assert.deepEqual(image.source,source);
+});
+
+test("Metadata article badges follow result selection, persist on Apply and show the saved source on reopening", async () => {
+  let savedSource={url:'https://www.wikidata.org/wiki/Q123'};
+  const selectedSource={url:'https://www.gametdb.com/PS3/BCAS20003'};
+  const app=mediaApp({handlers:{
+    get_game_metadata_source:()=>savedSource,
+    open_source_url:()=>null,
+    search_metadata_games:()=>[{id:42,title:'Test Game',platform:'SNES',exact:true,developer:'Studio',source:selectedSource}],
+  }});
+  await app.open();
+  assert.equal(app.get('game-metadata-source').children[0].textContent,'Wikidata');
+  await app.get('btn-editor-metadata-search').trigger('click');
+  const badge=app.get('game-metadata-source').children[0];
+  assert.equal(badge.textContent,'GameTDB');await badge.trigger('click');
+  assert.deepEqual(app.calls.find(call=>call.command==='open_source_url').args,{url:selectedSource.url});
+  await app.get('btn-editor-metadata-apply').trigger('click');
+  await app.save();
+  assert.deepEqual(app.calls.find(call=>call.command==='update_game').args.details.metadataSource,selectedSource);
+  savedSource=selectedSource;
+  await app.open();assert.equal(app.get('game-metadata-source').children[0].title,selectedSource.url);
+  assert.equal(app.evaluate('sourceBadge({url:"javascript:alert(1)"})'),null);
 });
 
 test("Editor downloads missing image types into a draft and only persists them on Save", async () => {

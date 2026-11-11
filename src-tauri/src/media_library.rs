@@ -306,7 +306,8 @@ pub fn sync_game(
                 rel
             }
         };
-        entries.push(GameImage {
+        crate::media_provenance::save_image(conn,&format!("{dir}/{rel}"),image.source.as_ref())?;
+        entries.push(GameImage { source: image.source,
             path: rel,
             kind: image.kind,
         });
@@ -481,7 +482,7 @@ fn available(root: &Path, dir: &str, manifest: &Manifest) -> Vec<GameImage> {
             {
                 return None;
             }
-            Some(GameImage {
+            Some(GameImage { source: image.source.clone(),
                 path: format!("{dir}/{}", image.path),
                 kind: image.kind.clone(),
             })
@@ -751,6 +752,7 @@ pub fn attach(conn: &Connection, root: &Path, game_id: i64, id: &str) -> Result<
             params![game_id, image.path, image.kind, position as i64],
         )
         .map_err(err)?;
+        crate::media_provenance::save_image(conn,&image.path,image.source.as_ref())?;
     }
     if let Some(image) = images.iter().find(|i| i.kind == "cover") {
         conn.execute(
@@ -1424,6 +1426,8 @@ mod tests {
         files.png("images/1/disc.png");
         image(&conn, id, "images/1/disc.png", "disc", 0);
         image(&conn, id, "images/1/cover.png", "cover", 1);
+        let provenance = crate::media_provenance::Source { uploader: Some("Original uploader".into()), url: Some("https://segaretro.org/File:Cover.jpg".into()) };
+        crate::media_provenance::save_image(&conn,"images/1/cover.png",Some(&provenance)).unwrap();
         let report = reconcile(&mut conn, &files.0).unwrap();
         assert!(report.warnings.is_empty(), "{:?}", report.warnings);
         let (uuid, dir) = collection(&conn, id);
@@ -1434,6 +1438,7 @@ mod tests {
                 .unwrap();
         assert_eq!(manifest.images[0].kind, "disc");
         assert_eq!(manifest.images[1].kind, "cover");
+        assert_eq!(manifest.images[1].source.as_ref(),Some(&provenance));
         preserve_before_delete(&mut conn, &files.0, &[id as i32]).unwrap();
         crate::delete_game_records(&mut conn, &[id as i32]).unwrap();
         assert!(files.0.join(&dir).join("disc.png").is_file());
@@ -1478,6 +1483,7 @@ mod tests {
         let saved = crate::read_game_images(&restored, 1).unwrap();
         assert_eq!(saved[0].kind, "disc");
         assert_eq!(saved[1].kind, "cover");
+        assert_eq!(saved[1].source.as_ref(),Some(&provenance));
         assert_eq!(collection(&restored, 1).0, uuid);
     }
     #[test]

@@ -26,6 +26,7 @@ mod playlists;
 mod steam;
 mod epic;
 mod media_library;
+mod media_provenance;
 mod manuals;
 mod cbz;
 mod discs;
@@ -95,6 +96,8 @@ pub struct Game {
 pub struct GameImage {
     path: String,
     kind: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    source: Option<media_provenance::Source>,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -112,6 +115,8 @@ pub struct Emulator {
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct GameDetails {
+    #[serde(default)]
+    metadata_source: Option<media_provenance::Source>,
     #[serde(default)]
     launch_actions: Option<launch_actions::Actions>,
     #[serde(default)]
@@ -355,12 +360,13 @@ fn init_game_images(conn: &Connection) -> rusqlite::Result<()> {
          BEGIN DELETE FROM game_images WHERE game_id = OLD.id; END;
          INSERT OR IGNORE INTO game_images (game_id, path, kind, position)
          SELECT id, cover_path, 'cover', 0 FROM games WHERE cover_path IS NOT NULL AND cover_path <> '';",
-    )
+    )?;
+    media_provenance::init(conn)
 }
 
 fn read_game_images(conn: &Connection, id: i32) -> Result<Vec<GameImage>, String> {
-    conn.prepare("SELECT path, kind FROM game_images WHERE game_id = ?1 ORDER BY position")
-        .map_err(|e| e.to_string())?.query_map([id], |row| Ok(GameImage { path: row.get(0)?, kind: row.get(1)? }))
+    conn.prepare("SELECT i.path,i.kind,s.details FROM game_images i LEFT JOIN image_sources s ON s.path=i.path WHERE i.game_id = ?1 ORDER BY i.position")
+        .map_err(|e| e.to_string())?.query_map([id], |row| Ok(GameImage { path: row.get(0)?, kind: row.get(1)?, source: media_provenance::decode(row.get(2)?) }))
         .map_err(|e| e.to_string())?.collect::<Result<_, _>>().map_err(|e| e.to_string())
 }
 
@@ -425,9 +431,9 @@ fn read_library_games(conn: &Connection, root: &Path, tracker: &PlayTracker) -> 
     let mut games = Vec::new();
     // Read artwork in one batch instead of preparing one query for every game.
     let mut by_game = std::collections::HashMap::<i32, Vec<GameImage>>::new();
-    let mut artwork = conn.prepare("SELECT game_id,path,kind FROM game_images ORDER BY game_id,position,path")
+    let mut artwork = conn.prepare("SELECT i.game_id,i.path,i.kind,s.details FROM game_images i LEFT JOIN image_sources s ON s.path=i.path ORDER BY i.game_id,i.position,i.path")
         .map_err(|e| e.to_string())?;
-    let rows = artwork.query_map([], |row| Ok((row.get::<_,i32>(0)?, GameImage { path: row.get(1)?, kind: row.get(2)? })))
+    let rows = artwork.query_map([], |row| Ok((row.get::<_,i32>(0)?, GameImage { path: row.get(1)?, kind: row.get(2)?, source: media_provenance::decode(row.get(3)?) })))
         .map_err(|e| e.to_string())?;
     for row in rows {
         let (id, image) = row.map_err(|e| e.to_string())?;
@@ -770,12 +776,14 @@ fn save_game_details_in_transaction(conn: &Connection, details: GameDetails) -> 
     if let Some(source_id) = details.catalog_id {
         metadata::repository::record_match(tx,details.id as i64,source_id)?;
     }
+    media_provenance::save_metadata(tx,details.id as i64,details.metadata_source.as_ref())?;
     if let Some(images) = &details.images {
         validate_game_images(images)?;
         tx.execute("DELETE FROM game_images WHERE game_id = ?1", [details.id]).map_err(|e| e.to_string())?;
         for (position, image) in images.iter().enumerate() {
             tx.execute("INSERT INTO game_images (game_id, path, kind, position) VALUES (?1, ?2, ?3, ?4)",
                 (details.id, &image.path, &image.kind, i64::try_from(position).map_err(|e| e.to_string())?)).map_err(|e| e.to_string())?;
+            media_provenance::save_image(tx,&image.path,image.source.as_ref())?;
         }
         let cover = images.iter().find(|image| image.kind == "cover").map(|image| image.path.as_str());
         tx.execute("UPDATE games SET cover_path = ?1 WHERE id = ?2", (cover, details.id)).map_err(|e| e.to_string())?;
@@ -914,7 +922,7 @@ fn save_game_with_media(conn: &mut Connection, mut details: GameDetails, root: &
 
 #[tauri::command]
 async fn select_game_images(app: tauri::AppHandle, kind: String) -> Result<Vec<String>, String> {
-    validate_game_images(&[GameImage { path: "selection".into(), kind: kind.clone() }])?;
+    validate_game_images(&[GameImage { source: None, path: "selection".into(), kind: kind.clone() }])?;
     tauri::async_runtime::spawn_blocking(move || {
         let dialog = rfd::FileDialog::new().set_title(crate::i18n::text("msg.cfe995fb19"))
             .add_filter(crate::i18n::text("msg.98f60447c3"), &["png", "jpg", "jpeg", "webp", "gif", "bmp", "avif"]);
@@ -1956,7 +1964,7 @@ mod game_edit_tests {
     }
 
     fn details() -> GameDetails {
-        GameDetails { launch_actions:None, personal:None, manual_preference:None, rom_path:None, order_group:None, box_3d:None, regions:None, variables: None, execution: None, discs: None,
+        GameDetails { metadata_source: None, launch_actions:None, personal:None, manual_preference:None, rom_path:None, order_group:None, box_3d:None, regions:None, variables: None, execution: None, discs: None,
             id: 1, title: "  New Title  ".into(), platform: "genesis".into(),
             release_date: Some("1992-11-24".into()),
             developer: Some("  Developer  ".into()), publisher: Some("Publisher".into()),
@@ -2269,7 +2277,7 @@ mod game_edit_tests {
         let mut invalid = details(); invalid.catalog_id = Some(-1);
         assert!(save_game_details(&mut conn, invalid).is_err());
         let mut invalid = details(); invalid.catalog_id = Some(88);
-        invalid.images = Some(vec![GameImage { path: "invalid".into(), kind: "invalid".into() }]);
+        invalid.images = Some(vec![GameImage { source: None, path: "invalid".into(), kind: "invalid".into() }]);
         assert!(save_game_details(&mut conn, invalid).is_err());
         assert_eq!(conn.query_row("SELECT launch\u{0062}ox_id FROM games WHERE id=1", [], |row| row.get::<_, i64>(0)).unwrap(), 77);
     }
@@ -2425,14 +2433,16 @@ mod game_edit_tests {
         let cover = directory.image("cover.PNG");
         let logo = directory.image("logo.png");
         let screenshot = directory.image("screenshot.png");
+        let provenance = media_provenance::Source { uploader: Some("Scanner".into()), url: Some("https://segaretro.org/File:Cover.jpg".into()) };
         let mut conn = database();
         let mut edit = details();
         edit.images = Some(vec![
-            GameImage { path: cover.clone(), kind: "cover".into() },
-            GameImage { path: logo.clone(), kind: "logo".into() },
-            GameImage { path: screenshot.clone(), kind: "screenshot".into() },
+            GameImage { source: Some(provenance.clone()), path: cover.clone(), kind: "cover".into() },
+            GameImage { source: None, path: logo.clone(), kind: "logo".into() },
+            GameImage { source: None, path: screenshot.clone(), kind: "screenshot".into() },
         ]);
         let saved = save_game_with_media(&mut conn, edit, &root).unwrap();
+        assert_eq!(saved.images[0].source.as_ref(),Some(&provenance));
         assert_eq!(saved.images.len(), 3);
         assert_eq!(saved.cover_path.as_deref(), Some(saved.images[0].path.as_str()));
         for image in &saved.images {
@@ -2447,6 +2457,7 @@ mod game_edit_tests {
         edit.images = Some(saved.images.clone());
         let again = save_game_with_media(&mut conn, edit, &root).unwrap();
         assert_eq!(again.images[0].path, saved.images[0].path);
+        assert_eq!(again.images[0].source.as_ref(),Some(&provenance));
         assert_eq!(fs::read_dir(root.join(&collection_dir)).unwrap().filter_map(Result::ok).filter(|entry|entry.path().extension().is_some_and(|e|e=="png")).count(), 3);
         assert!(root.join(&collection_dir).join("manifest.json").is_file());
         // La biblioteca puede moverse: las rutas persistidas son relativas.
@@ -2465,7 +2476,7 @@ mod game_edit_tests {
         let label = directory.image("sticker.png");
         let mut conn = database();
         let mut edit = details();
-        edit.images = Some(vec![GameImage { path: label.clone(), kind: "cart_label".into() }]);
+        edit.images = Some(vec![GameImage { source: None, path: label.clone(), kind: "cart_label".into() }]);
         let saved = save_game_with_media(&mut conn, edit, &root).unwrap();
         assert_eq!(saved.images[0].kind, "cart_label");
         assert!(Path::new(&saved.images[0].path).is_file());
@@ -2483,7 +2494,7 @@ mod game_edit_tests {
         let original = directory.image("inlay.png");
         let mut conn = database();
         let mut edit = details();
-        edit.images = Some(vec![GameImage { path: original.clone(), kind: "inlay".into() }]);
+        edit.images = Some(vec![GameImage { source: None, path: original.clone(), kind: "inlay".into() }]);
         let saved = save_game_with_media(&mut conn, edit, &root).unwrap();
         assert_eq!(saved.images[0].kind, "inlay");
         assert!(Path::new(&saved.images[0].path).is_file());
@@ -2501,7 +2512,7 @@ mod game_edit_tests {
         let original = directory.image("cover.png");
         let mut conn = database();
         let mut edit = details();
-        edit.images = Some(vec![GameImage { path: original.clone(), kind: "cover".into() }]);
+        edit.images = Some(vec![GameImage { source: None, path: original.clone(), kind: "cover".into() }]);
         let saved = save_game_with_media(&mut conn, edit, &root).unwrap();
         let copy = saved.images[0].path.clone();
         let mut edit = details();
@@ -2523,7 +2534,7 @@ mod game_edit_tests {
         let mut conn = database();
         let mut edit = details();
         edit.title = "   ".into();
-        edit.images = Some(vec![GameImage { path: original.clone(), kind: "cover".into() }]);
+        edit.images = Some(vec![GameImage { source: None, path: original.clone(), kind: "cover".into() }]);
         assert!(save_game_with_media(&mut conn, edit, &root).is_err());
         assert_eq!(fs::read_dir(root.join("images")).unwrap().filter_map(Result::ok)
             .flat_map(|entry|fs::read_dir(entry.path()).unwrap()).count(), 0);
@@ -2535,7 +2546,7 @@ mod game_edit_tests {
 
     #[test]
     fn rejects_invalid_images_and_allows_multiple_cover_and_logo_variants() {
-        let make = |path: &str, kind: &str| GameImage { path: path.into(), kind: kind.into() };
+        let make = |path: &str, kind: &str| GameImage { source: None, path: path.into(), kind: kind.into() };
         assert!(validate_game_images(&[make("one.png", "invalid")]).is_err());
         assert!(validate_game_images(&[make("one.png", "cover"), make("two.png", "cover")]).is_ok());
         assert!(validate_game_images(&[make("one.png", "logo"), make("two.png", "logo")]).is_ok());
@@ -2804,6 +2815,8 @@ pub fn run() {
             metadata::get_metadata_image_types,
             metadata::download_bulk_game_images,
             metadata::retry_editor_game_images,
+            media_provenance::get_game_metadata_source,
+            media_provenance::open_source_url,
             select_folder,
             platform_runtime::get_runtime_capabilities,
             platform_runtime::open_project_repository,

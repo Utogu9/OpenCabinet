@@ -1598,6 +1598,36 @@ html[data-os="linux"] .game-box-model .game-box-face { will-change: transform; }
   color: var(--text-main);
 }
 
+.image-editor-filename {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+.image-editor-filename .image-editor-name { flex: 1 1 0; min-width: 0; }
+.media-uploader-badge,
+button.media-source-badge {
+  display: inline-block;
+  border: 1px solid var(--border-color);
+  border-radius: 5px;
+  padding: 3px 7px;
+  color: var(--text-muted);
+  background: var(--bg-color);
+  font: inherit;
+  font-size: 0.78rem;
+  line-height: 1.4;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.image-editor-filename .media-uploader-badge { flex: 0 1 auto; max-width: 45%; }
+.image-editor-filename .media-source-badge { flex: 0 1 auto; max-width: 35%; }
+button.media-source-badge { cursor: pointer; width: auto; }
+button.media-source-badge:hover { color: var(--text-main); border-color: var(--accent-color); }
+.metadata-title-actions { display: flex; flex-direction: column; align-items: flex-end; gap: 5px; flex-shrink: 0; max-width: 45%; }
+#game-metadata-source:empty { display: none; }
+#game-metadata-source .media-source-badge { max-width: 100%; }
+
 button:disabled {
   opacity: 0.45;
   cursor: default;
