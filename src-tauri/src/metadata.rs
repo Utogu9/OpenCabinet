@@ -73,7 +73,6 @@ pub(super) fn valid_image_kind(kind: &str) -> bool {
 fn valid_download_image_kind(kind: &str) -> bool {
     matches!(kind, "artwork" | "other" | "cart_label") || GAME_IMAGE_TYPES.iter().any(|(_, key)| *key == kind)
 }
-#[cfg(test)]
 const MAX_CATALOG_BYTES: u64 = 512 * 1024 * 1024;
 const MAX_XML_BYTES: u64 = 3 * 1024 * 1024 * 1024;
 const MAX_IMAGE_BYTES: u64 = 32 * 1024 * 1024;

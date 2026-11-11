@@ -3,6 +3,9 @@ use super::*;
 mod matching;
 mod regions;
 mod sources;
+mod sqlite;
+#[cfg(test)]
+mod sqlite_tests;
 pub(super) use matching::{finish_search_results, search_candidate, shortest_match};
 const ROOT_URL: &str = "https://api.github.com/repos/Utogu9/OpenCabinet-BDD/contents?ref=main";
 const RAW_URL: &str = "https://raw.githubusercontent.com/Utogu9/OpenCabinet-BDD/main/";
@@ -427,6 +430,22 @@ fn create_repository(conn: &Connection) -> Result<()> {
 fn metadata_schema(conn: &Connection) -> Result<()> {
     conn.execute_batch("CREATE TABLE IF NOT EXISTS repository_versions(name TEXT PRIMARY KEY,version INTEGER NOT NULL);CREATE TABLE IF NOT EXISTS repository_console_metadata(name TEXT PRIMARY KEY,details TEXT NOT NULL);CREATE TABLE IF NOT EXISTS repository_platform_images(platform TEXT NOT NULL,filename TEXT PRIMARY KEY,kind TEXT NOT NULL,region TEXT NOT NULL,crc TEXT NOT NULL);").map_err(err)
 }
+
+const CATALOG_FILES: [&str;2] = ["catalog.sqlite","catalog.json"];
+
+// Fall back only when a format is absent (HTTP 404). A failed or damaged SQLite
+// download must never silently replace a usable catalog with unrelated data.
+fn fetch_catalog_with(raw:&str,file:&Path,mut fetch:impl FnMut(&str,&Path)->Result<bool>)->Result<()> {
+    for name in CATALOG_FILES {
+        if fetch(&format!("{raw}{name}"),file)? {return Ok(());}
+    }
+    Err(crate::i18n::text("source.invalid").into())
+}
+
+fn catalog_filename(conn:&Connection,source:&str)->String {
+    conn.query_row("SELECT filename FROM repository_catalog_files WHERE name=?1",[source],|r|r.get::<_,String>(0)).ok()
+        .filter(|name|CATALOG_FILES.contains(&name.as_str())).unwrap_or_else(||"catalog.json".into())
+}
 pub(super) fn prepare(
     job: &ImportJob,
     refresh: bool,
@@ -459,9 +478,9 @@ pub(super) fn prepare_for_import(job: &ImportJob, refresh: bool, automatic: bool
 
 fn update_cached_platforms(job: &ImportJob, since: Option<&str>, progress: impl FnMut(MetadataProgress)) -> Result<()> {
     let client=http_client()?;
-    update_cached_platforms_with(job,since,progress,|url,path,limit,progress|download(&client,url,path,limit,job,progress))
+    update_cached_platforms_with(job,since,progress,|url,path,limit,progress|download_file(&client,url,path,limit,job,true,progress))
 }
-fn update_cached_platforms_with(job: &ImportJob, since: Option<&str>, mut progress: impl FnMut(MetadataProgress), mut fetch: impl FnMut(&str,&Path,u64,&mut dyn FnMut(u64,Option<u64>))->Result<()>) -> Result<()> {
+fn update_cached_platforms_with(job: &ImportJob, since: Option<&str>, mut progress: impl FnMut(MetadataProgress), mut fetch: impl FnMut(&str,&Path,u64,&mut dyn FnMut(u64,Option<u64>))->Result<bool>) -> Result<()> {
     let path=job.catalog_path();let next=job.directory.join("automatic-catalog.next.db");
     fs::copy(&path,&next).map_err(err)?;
     let mut conn=Connection::open(&next).map_err(err)?;
@@ -474,18 +493,24 @@ fn update_cached_platforms_with(job: &ImportJob, since: Option<&str>, mut progre
         let url=reqwest::Url::parse(&raw).map_err(err)?;
         let segments:Vec<_>=url.path_segments().ok_or("Invalid catalog URL")?.collect();
         if url.host_str()!=Some("raw.githubusercontent.com")||segments.len()<3 {return Err("Invalid catalog URL".into());}
-        let mut api=reqwest::Url::parse(&format!("https://api.github.com/repos/{}/{}/commits",segments[0],segments[1])).map_err(err)?;
-        let catalog_path=if raw.starts_with(RAW_URL){format!("{source}/catalog.json")}else{"catalog.json".into()};
-        api.query_pairs_mut().append_pair("sha","main").append_pair("path",&catalog_path).append_pair("per_page","1");
-        let commits=job.directory.join("catalog-commit.json");
-        fetch(api.as_str(),&commits,2*1024*1024,&mut |_,_|())?;
-        let commits:serde_json::Value=serde_json::from_reader(File::open(commits).map_err(err)?).map_err(err)?;
+        let saved_file=catalog_filename(&conn,&source);
+        let mut commits=serde_json::Value::Null;
+        for filename in std::iter::once(saved_file.as_str()).chain(CATALOG_FILES.into_iter().filter(|name|*name!=saved_file)) {
+            let mut api=reqwest::Url::parse(&format!("https://api.github.com/repos/{}/{}/commits",segments[0],segments[1])).map_err(err)?;
+            let catalog_path=if raw.starts_with(RAW_URL){format!("{source}/{filename}")}else{filename.into()};
+            api.query_pairs_mut().append_pair("sha","main").append_pair("path",&catalog_path).append_pair("per_page","1");
+            let file=job.directory.join("catalog-commit.json");
+            if !fetch(api.as_str(),&file,2*1024*1024,&mut |_,_|())? {return Err(crate::i18n::text("source.invalid").into());}
+            commits=serde_json::from_reader(File::open(file).map_err(err)?).map_err(err)?;
+            if commits.as_array().is_none() {return Err(crate::i18n::text("source.invalid").into());}
+            if commits.as_array().is_some_and(|rows|!rows.is_empty()) {break;}
+        }
         let revision=commits[0]["sha"].as_str().filter(|s|!s.is_empty()).ok_or("Missing catalog revision")?;
         let previous:Option<String>=conn.query_row("SELECT revision FROM repository_revisions WHERE name=?1",[&source],|r|r.get(0)).optional().map_err(err)?;
         let newer:bool=conn.query_row("SELECT COALESCE(julianday(?1)>julianday(COALESCE(?2,downloaded_at)),1) FROM catalog_info LIMIT 1",(commits[0]["commit"]["committer"]["date"].as_str(),since),|r|r.get(0)).map_err(err)?;
         if previous.as_deref()!=Some(revision)&&(previous.is_some()||newer) {
-            let file=job.directory.join("automatic-platform.json");
-            fetch(&format!("{raw}catalog.json"),&file,256*1024*1024,&mut |n,total|progress(job.progress("catalog",n,total,Some(source.clone()))))?;
+            let file=job.directory.join("automatic-platform.catalog");
+            fetch_catalog_with(&raw,&file,|url,file|fetch(url,file,MAX_CATALOG_BYTES,&mut |n,total|progress(job.progress("catalog",n,total,Some(source.clone())))))?;
             insert_platform(&mut conn,job,&source,&file,&mut progress)?;
             conn.execute("DELETE FROM repository_versions WHERE name=?1",[format!("artwork:{source}")]).map_err(err)?;
             changed=true;
@@ -564,17 +589,19 @@ fn insert_platform(
     file: &Path,
     mut progress: impl FnMut(MetadataProgress),
 ) -> Result<()> {
-    let data: RepoCatalog =
-        serde_json::from_reader(BufReader::new(File::open(file).map_err(err)?)).map_err(err)?;
-    if data.schema_version != 2 || !same_system(&data.system, source) {
+    let data=sqlite::Catalog::open(file,job)?;
+    if data.version() != 2 || !same_system(data.system(), source) {
         return Err(crate::i18n::text("source.invalid").into());
     }
     let tx = conn.transaction().map_err(err)?;
     metadata_schema(&tx)?;
+    tx.execute_batch("CREATE TABLE IF NOT EXISTS repository_catalog_files(name TEXT PRIMARY KEY,filename TEXT NOT NULL)").map_err(err)?;
+    tx.execute("INSERT OR REPLACE INTO repository_catalog_files VALUES(?1,?2)",params![source,data.filename()]).map_err(err)?;
     let raw = sources::base(&tx, source)?;
+    let console_entity=data.console().entity().map(str::to_owned);
     let mut console_localized=serde_json::Map::new();
     for locale in ["es", "en"] {
-        let values=data.console_metadata.values(locale,None,&[]);
+        let values=data.console().values(locale,None,&[]);
         console_localized.insert(locale.into(),serde_json::json!({"name":source,"release_date":values.release_date,"developer":values.developer,"manufacturer":values.manufacturer}));
     }
     tx.execute("INSERT OR REPLACE INTO repository_console_metadata VALUES(?1,?2)",params![source,serde_json::to_string(&console_localized).map_err(err)?]).map_err(err)?;
@@ -590,22 +617,23 @@ fn insert_platform(
     }
     tx.execute("DELETE FROM games WHERE platform=?1", [source])
         .map_err(err)?;
-    let total = data.games.len() as u64;
-    for (i, (serial, game)) in data.games.into_iter().enumerate() {
+    let total = data.len() as u64;
+    let mut i=0;
+    data.games(|serial,game,metadata| {
         job.check()?;
         if i % 100 == 0 {
             progress(job.progress("indexing", i as u64, Some(total), Some(source.into())));
         }
+        i+=1;
         if !valid_relative(&serial) || serial.contains('/') || game.entries.is_empty() {
-            continue;
+            return Ok(());
         }
         let key = format!("{source}/{serial}");
         let id = token(&key);
         let title = game.entries[0].name.trim().to_string();
         if title.is_empty() {
-            continue;
+            return Ok(());
         }
-        let metadata=game.metadata_id.as_ref().and_then(|id|data.metadata.get(id));
         let details = CatalogGame {
             id,
             title: metadata.and_then(|record| record.title("en")).unwrap_or(&title).to_owned(),
@@ -626,7 +654,7 @@ fn insert_platform(
             let region=rom_regions(&game.entries[0].name);
             let mut languages=serde_json::Map::new();
             for locale in ["es", "en"] {
-                let fields=metadata.values(locale,data.console_metadata.entity(),&region);
+                let fields=metadata.values(locale,console_entity.as_deref(),&region);
                 let mut localized=serde_json::to_value(&fields).map_err(err)?;
                 let object=localized.as_object_mut().unwrap();
                 object.remove("manufacturer");
@@ -725,7 +753,8 @@ fn insert_platform(
             )
             .map_err(err)?;
         }
-    }
+        Ok(())
+    })?;
     tx.execute(
         "INSERT OR REPLACE INTO ready_platforms VALUES(?1)",
         [source],
@@ -771,25 +800,19 @@ pub(super) fn ensure_platform(
         return Err(crate::i18n::text("source.invalid").into());
     }
     drop(conn);
-    let json = job.directory.join("platform-catalog.json");
+    let file = job.directory.join("platform.catalog");
     let raw = sources::base(&open_catalog(&path)?, source)?;
-    download(
-        &http_client()?,
-        &format!("{raw}catalog.json"),
-        &json,
-        256 * 1024 * 1024,
-        job,
-        |n, t| progress(job.progress("catalog", n, t, Some(source.into()))),
-    )?;
+    let client=http_client()?;
+    fetch_catalog_with(&raw,&file,|url,file|download_file(&client,url,file,MAX_CATALOG_BYTES,job,true,|n,t|progress(job.progress("catalog",n,t,Some(source.into())))))?;
     let next = job.directory.join("platform.next.db");
     fs::copy(&path, &next).map_err(err)?;
     let mut conn = Connection::open(&next).map_err(err)?;
-    insert_platform(&mut conn, job, source, &json, &mut progress)?;
+    insert_platform(&mut conn, job, source, &file, &mut progress)?;
     drop(conn);
     job.check()?;
     replace_catalog(&next, &path)?;
     job.image_urls.lock().map_err(err)?.clear();
-    let _ = fs::remove_file(json);
+    let _ = fs::remove_file(file);
     Ok(())
 }
 pub(super) fn equivalent_platform(job: &ImportJob, local: &str) -> Result<Option<String>> {
@@ -1136,7 +1159,7 @@ mod tests {
         assert_eq!(manuals.len(),2);
         assert!(manuals.iter().all(|(file,url)|safe_manual_name(file) && (url.ends_with("manual.pdf") || url.ends_with("manual2.cbz"))));
     }
-    const FIXTURE: &str = r#"{"schema_version":2,"system":"Sony - PlayStation 2","games":{
+    pub(super) const FIXTURE: &str = r#"{"schema_version":2,"system":"Sony - PlayStation 2","games":{
       "SLUS-12345":{"entries":[{"name":"Example Game (USA)"}],"images":{
         "cover_front":{"kind":"cover_front","path":"SLUS-12345/cover_front.webp","sha256":"a","sources":[{"dat_name":"Example Game (USA)"}]},
         "cover_front2":{"kind":"cover_front2","path":"SLUS-12345/cover_front2.webp","sha256":"b"},
@@ -1144,12 +1167,12 @@ mod tests {
         "bad":{"kind":"logo","path":"../bad.webp"}}},
       "SLES-54321":{"entries":[{"name":"Example Game (Europe)"}],"images":{"logo":{"kind":"logo","path":"SLES-54321/logo.webp"}}}
     }}"#;
-    struct Sandbox {
-        root: PathBuf,
-        job: Arc<ImportJob>,
+    pub(super) struct Sandbox {
+        pub(super) root: PathBuf,
+        pub(super) job: Arc<ImportJob>,
     }
     impl Sandbox {
-        fn new() -> Self {
+        pub(super) fn new() -> Self {
             let root = std::env::current_dir()
                 .unwrap()
                 .join("target/repository-tests")
@@ -1165,7 +1188,7 @@ mod tests {
             let job = MetadataJobs::default().start(root.clone()).unwrap();
             Self { root, job }
         }
-        fn catalog(&self) -> Connection {
+        pub(super) fn catalog(&self) -> Connection {
             let mut conn = Connection::open(self.job.catalog_path()).unwrap();
             create_repository(&conn).unwrap();
             conn.execute("INSERT INTO platforms VALUES('Sony - PlayStation 2')", [])
@@ -1203,18 +1226,38 @@ mod tests {
         let before=fs::read(files.job.catalog_path()).unwrap();drop(conn);
         let mut downloads=0;
         update_cached_platforms_with(&files.job,None,|_|(),|url,file,_,_|{
-            if url.contains("/commits?") {assert!(url.contains("path=Sony+-+PlayStation+2%2Fcatalog.json"));fs::write(file,r#"[{"sha":"revision-one","commit":{"committer":{"date":"2099-01-01T00:00:00Z"}}}]"#).map_err(err)}
-            else{downloads+=1;fs::write(file,FIXTURE).map_err(err)}
+            if url.contains("/commits?") {assert!(url.contains("path=Sony+-+PlayStation+2%2Fcatalog.json"));fs::write(file,r#"[{"sha":"revision-one","commit":{"committer":{"date":"2099-01-01T00:00:00Z"}}}]"#).map(|_|true).map_err(err)}
+            else if url.ends_with("catalog.sqlite") {Ok(false)}
+            else{downloads+=1;fs::write(file,FIXTURE).map(|_|true).map_err(err)}
         }).unwrap();assert_eq!(downloads,1);
         let conn=open_catalog(&files.job.catalog_path()).unwrap();assert!(!weekly_check_due(&conn).unwrap());drop(conn);
         update_cached_platforms_with(&files.job,None,|_|(),|url,file,_,_|{
-            assert!(url.contains("/commits?"));fs::write(file,r#"[{"sha":"revision-one"}]"#).map_err(err)
+            assert!(url.contains("/commits?"));fs::write(file,r#"[{"sha":"revision-one"}]"#).map(|_|true).map_err(err)
         }).unwrap();
         let current=fs::read(files.job.catalog_path()).unwrap();
         assert!(update_cached_platforms_with(&files.job,None,|_|(),|_,_,_,_|Err("offline".into())).is_err());assert_eq!(fs::read(files.job.catalog_path()).unwrap(),current);
-        assert!(update_cached_platforms_with(&files.job,None,|_|(),|url,file,_,_|fs::write(file,if url.contains("/commits?"){r#"[{"sha":"revision-two"}]"#}else{"invalid"}).map_err(err)).is_err());assert_eq!(fs::read(files.job.catalog_path()).unwrap(),current);
+        assert!(update_cached_platforms_with(&files.job,None,|_|(),|url,file,_,_|fs::write(file,if url.contains("/commits?"){r#"[{"sha":"revision-two"}]"#}else{"invalid"}).map(|_|true).map_err(err)).is_err());assert_eq!(fs::read(files.job.catalog_path()).unwrap(),current);
         assert_ne!(before,current);
         assert!(prepare_for_import(&files.job,false,false,|_|()).is_ok());
+    }
+
+    #[test]
+    #[ignore="Reads public SQLite samples downloaded into target; no network or user data"]
+    fn indexes_public_ps1_and_ps2_sqlite_samples() {
+        for (file,source) in [("ps1-repository.sqlite","Sony - PlayStation"),("ps2-repository.sqlite","Sony - PlayStation 2")] {
+            let files=Sandbox::new();let mut conn=files.catalog();
+            conn.execute("INSERT OR IGNORE INTO platforms VALUES(?1)",[source]).unwrap();
+            let path=Path::new(env!("CARGO_MANIFEST_DIR")).join("../target").join(file);
+            let started=Instant::now();
+            insert_platform(&mut conn,&files.job,source,&path,|_|()).unwrap();
+            let count:i64=conn.query_row("SELECT COUNT(*) FROM games WHERE platform=?1",[source],|r|r.get(0)).unwrap();
+            let images:i64=conn.query_row("SELECT COUNT(*) FROM images WHERE game_id IN (SELECT id FROM games WHERE platform=?1)",[source],|r|r.get(0)).unwrap();
+            assert!(count>1000);assert!(images>1000);
+            assert_eq!(catalog_filename(&conn,source),"catalog.sqlite");
+            let key:String=conn.query_row("SELECT source_key FROM repository_keys WHERE source_key LIKE ?1 LIMIT 1",[format!("{source}/%")],|r|r.get(0)).unwrap();
+            assert!(!search_catalog(&conn,key.split('/').next_back().unwrap(),source).unwrap().is_empty());
+            eprintln!("{source}: {count} games, {images} images in {:?}",started.elapsed());
+        }
     }
 
     #[test]

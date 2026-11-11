@@ -2,7 +2,9 @@
 
 La fuente predeterminada es [OpenCabinet-BDD](https://github.com/Utogu9/OpenCabinet-BDD).
 No requiere cuentas. Se consulta su índice de plataformas y se descarga únicamente
-el `catalog.json` de las plataformas necesarias. Cada catálogo queda indexado en
+el `catalog.sqlite` o `catalog.json` de las plataformas necesarias. Se prioriza
+SQLite cuando está disponible y se usa JSON cuando no existe ese archivo.
+Cada catálogo queda indexado en
 SQLite para reutilizarlo sin nuevas descargas. El botón de actualizar catálogo
 renueva el índice e invalida las plataformas preparadas; estas vuelven a
 descargarse cuando se necesitan.
@@ -18,6 +20,13 @@ el catálogo se comprueban las rutas una vez por operación, incluso si ya exist
 un índice local. Los nuevos submódulos se detectan sin actualizar la app,
 conservando las coincidencias y corrigiendo las URLs de plataformas trasladadas.
 Si las rutas no cambiaron, no se reconstruye ni se copia el catálogo local.
+Los catálogos SQLite normalizados de almacenamiento versión 2 se leen en modo
+de solo lectura y por juegos, sin reconstruir todo el JSON en memoria. Conservan
+los mismos identificadores, nombres, regiones, metadatos y rutas de imágenes y
+manuales que el formato JSON. La comprobación semanal de actualizaciones admite
+ambos formatos, incluidos los cambios de JSON a SQLite; una descarga o un catálogo
+inválido no reemplaza el índice local anterior. `console_artwork.json` sigue siendo
+el manifiesto independiente para las imágenes de cada consola.
 Si no hay conexión, se conserva el catálogo anterior y se puede reintentar con
 «Actualizar catálogo». Los cambios posteriores de contenido siguen siendo manuales.
 
