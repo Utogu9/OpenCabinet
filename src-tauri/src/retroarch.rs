@@ -651,7 +651,7 @@ fn extract_portable(
                 }
                 count += 1;
                 if count % 100 == 0 {
-                    job.progress(channel, "Preparando RetroArch", count, Some(total as u64));
+                    job.progress(channel, crate::i18n::text("retroarch.progress.preparing"), count, Some(total as u64));
                 }
                 Ok(())
             };
@@ -679,10 +679,10 @@ pub async fn install_retroarch(
         let target = root.join("emulators/RetroArch");
         if target.exists() { if target.join(retroarch_name()).is_file() { return Ok(target.join(retroarch_name()).to_string_lossy().into_owned()); } return Err("La carpeta de RetroArch ya existe y está incompleta. Selecciona una instalación existente o revisa esa carpeta.".into()); }
         let index = job.directory.join("stable.html");
-        download(job, &format!("{BUILDBOT}/stable/"), &index, 2*1024*1024, "Buscando versión estable", &on_progress)?;
+        download(job, &format!("{BUILDBOT}/stable/"), &index, 2*1024*1024, crate::i18n::text("retroarch.progress.stable"), &on_progress)?;
         let version = latest_version(&fs::read_to_string(index).map_err(err)?)?;
         let archive = job.directory.join("RetroArch.7z");
-        download(job, &format!("{BUILDBOT}/stable/{version}/{}/{}/RetroArch.7z", buildbot_os(),default_arch()), &archive, 512*1024*1024, "Descargando RetroArch", &on_progress)?;
+        download(job, &format!("{BUILDBOT}/stable/{version}/{}/{}/RetroArch.7z", buildbot_os(),default_arch()), &archive, 512*1024*1024, crate::i18n::text("retroarch.progress.downloading"), &on_progress)?;
         let extracted = job.directory.join("portable"); fs::create_dir(&extracted).map_err(err)?;
         let source = extract_portable(&archive, &extracted, job, &on_progress)?;
         if machine(&source.join(retroarch_name()))? != default_arch() { return Err("El paquete no coincide con la arquitectura solicitada.".into()); }
@@ -776,7 +776,7 @@ pub async fn install_retroarch_core(
             &format!("{BUILDBOT}/nightly/{}/{arch}/latest/{core_id}.{}.zip",buildbot_os(),core_extension()),
             &archive,
             256 * 1024 * 1024,
-            "Descargando núcleo",
+            crate::i18n::text("retroarch.progress.core"),
             &on_progress,
         )?;
         let staged = job.directory.join(format!("core.{}",core_extension()));

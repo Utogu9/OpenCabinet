@@ -5172,7 +5172,7 @@ function trackRetroArchOperation(modalId, event) {
             const progress = update.progress;
             label.textContent = progress.phase;
             if (progress.total) bar.value = Math.min(100, Math.round(progress.processed / progress.total * 100)); else bar.removeAttribute("value");
-            const unit = /Preparando/.test(progress.phase) ? globalThis.OpenCabinetI18n.t("msg.3340292fcf") : "bytes";
+            const unit = progress.phase === globalThis.OpenCabinetI18n.t("retroarch.progress.preparing") ? globalThis.OpenCabinetI18n.t("msg.3340292fcf") : "bytes";
             counts.textContent = progress.total ? unit === "bytes"
               ? globalThis.OpenCabinetI18n.t("msg.116095103a", (progress.processed / 1048576).toFixed(1), (progress.total / 1048576).toFixed(1))
               : globalThis.OpenCabinetI18n.t("msg.c3ecc74227", progress.processed, progress.total, unit) : "";

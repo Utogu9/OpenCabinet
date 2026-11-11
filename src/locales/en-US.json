@@ -4,6 +4,10 @@
     "name": "English (United States)"
   },
   "messages": {
+    "retroarch.progress.preparing": "Preparing RetroArch",
+    "retroarch.progress.stable": "Finding the stable version",
+    "retroarch.progress.downloading": "Downloading RetroArch",
+    "retroarch.progress.core": "Downloading core",
     "preferences.defaultRegion": "Default import region",
     "preferences.defaultRegionHelp": "When a filename has no recognizable region, prefer exact title matches from this region. Explicit filename regions always take priority.",
     "deletion.title": "Removing games",

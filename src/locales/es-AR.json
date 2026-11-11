@@ -4,6 +4,10 @@
     "name": "Español (Argentina)"
   },
   "messages": {
+    "retroarch.progress.preparing": "Preparando RetroArch",
+    "retroarch.progress.stable": "Buscando versión estable",
+    "retroarch.progress.downloading": "Descargando RetroArch",
+    "retroarch.progress.core": "Descargando núcleo",
     "preferences.defaultRegion": "Región predeterminada de importación",
     "preferences.defaultRegionHelp": "Si el nombre del archivo no tiene una región reconocible, priorizar coincidencias exactas del título de esta región. La región indicada en el archivo siempre tiene prioridad.",
     "deletion.title": "Eliminando juegos",
