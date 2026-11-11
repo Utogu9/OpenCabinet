@@ -26,3 +26,15 @@ test('A failing suite propagates its exit code and prevents a false successful r
   assert.equal(runTests({root,spawn:()=>{calls++;return {status:2};}}),2);assert.equal(calls,1);
   assert.equal(runTests({root,spawn:()=>({status:null,signal:'SIGTERM'})}),1);
 });
+
+test('Release unit suites omit browser files while full graphics remain explicitly selectable',t=>{
+  const root=fixture(t);
+  for(const suite of ['unit','browser']){
+    const calls=[];
+    assert.equal(runTests({root,suite,args:['--test-reporter=spec'],spawn:(exe,args)=>{calls.push(args);return {status:0};}}),0);
+    assert.equal(calls.length,1);assert.ok(calls[0].includes('--test-reporter=spec'));
+    assert.equal(calls[0].includes(path.join('tests','unit.test.cjs')),suite==='unit');
+    assert.equal(calls[0].includes(path.join('tests','nested','render.test.cjs')),suite==='browser');
+  }
+  assert.equal(runTests({root,suite:'missing',spawn:()=>{throw Error('must not spawn')}}),1);
+});

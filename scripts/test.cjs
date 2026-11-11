@@ -21,9 +21,11 @@ function partitionTests(root,files) {
   }
   return {unit,browser};
 }
-function runTests({root=path.resolve(__dirname,'..'),spawn=spawnSync,args=[]}={}) {
+function runTests({root=path.resolve(__dirname,'..'),spawn=spawnSync,args=[],suite='all'}={}) {
+  if(!['all','unit','browser'].includes(suite)){console.error(`Unknown test suite: ${suite}`);return 1;}
   const groups=partitionTests(root,discoverTests(root));
   for(const [name,files] of Object.entries(groups)) {
+    if(suite!=='all'&&name!==suite)continue;
     if(!files.length)continue;
     console.log(`Running ${name} test files: ${files.length}${name==='browser'?' (one browser suite at a time)':''}`);
     const result=spawn(process.execPath,['--test',...args,...(name==='browser'?['--test-concurrency=1']:[]),...files],{cwd:root,stdio:'inherit'});
@@ -32,5 +34,8 @@ function runTests({root=path.resolve(__dirname,'..'),spawn=spawnSync,args=[]}={}
   }
   return 0;
 }
-if(require.main===module)process.exitCode=runTests({args:process.argv.slice(2)});
+if(require.main===module){
+  const args=process.argv.slice(2),selection=args.filter(arg=>arg.startsWith('--suite='));
+  process.exitCode=selection.length>1?1:runTests({suite:selection[0]?.slice('--suite='.length)||'all',args:args.filter(arg=>!arg.startsWith('--suite='))});
+}
 module.exports={discoverTests,partitionTests,runTests};

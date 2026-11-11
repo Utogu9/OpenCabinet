@@ -14,6 +14,8 @@
     "prepare:icons": "node scripts/prepare-icons.cjs",
     "postinstall": "npm run prepare:locales && npm run prepare:pdf && npm run prepare:three",
     "test": "node scripts/test.cjs",
+    "test:unit": "node scripts/test.cjs --suite=unit",
+    "test:browser": "node scripts/test.cjs --suite=browser",
     "dev": "tauri dev",
     "build": "tauri build",
     "prepare:locales": "node scripts/prepare-locales.cjs",

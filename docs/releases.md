@@ -95,13 +95,20 @@ y biblioteca en las carpetas XDG del usuario, fuera del AppImage.
 
 El workflow `linux-check.yml` se ejecuta solo manualmente, desde Actions, sin publicar
 releases. Sus artefactos permiten probar Linux antes de crear una etiqueta. Las pruebas
-automáticas de Windows y Linux se ejecutan al publicar un tag de versión mediante el
-workflow de release. Ver [Linux](linux.md).
+unitarias de JavaScript y Rust para Windows y Linux se ejecutan al publicar un tag
+de versión mediante el workflow de release. Este también comprueba el AppImage con
+WebKitGTK antes de publicarlo. Ver [Linux](linux.md).
 
 `npm test` descubre las pruebas dentro de `tests/`: primero ejecuta las pruebas
 normales en paralelo y después las de navegador, una suite por vez. Esto evita
 que varios Chrome con WebGL por software compitan por los recursos del runner
 y fallen por tiempo de espera. No se incluyen copias temporales de `target/`.
+
+`npm run test:unit` ejecuta solo las pruebas unitarias y es el comando usado en las
+releases. `npm run test:browser` ejecuta todas las pruebas gráficas de cajas y modo
+sofá. Estas últimas se pueden correr en la PC antes de publicar o desde el workflow
+manual **Full browser validation** en Actions, que comprueba Windows y Linux sin
+publicar ni modificar tags. `npm test` sigue ejecutando ambas suites completas.
 
 Para compilar localmente los paquetes firmados en PowerShell:
 

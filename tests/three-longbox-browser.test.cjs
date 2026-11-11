@@ -3,8 +3,15 @@ test('Sega CD and Saturn share a tall acrylic case, matte tray, two persistent s
   let chromium;try{({chromium}=require('playwright-core'));}catch{t.skip('Optional browser test requires playwright-core.');return;}
   const root=path.resolve(__dirname,'..'),executable=process.env.OPENCABINET_CHROMIUM||(process.platform==='win32'?'C:/Program Files/Google/Chrome/Application/chrome.exe':chromium.executablePath());
   if(!fs.existsSync(executable)){t.skip('Chromium is unavailable.');return;}
+  let releaseSpine=null,spineBytes=null,spineReleased=false;
   const server=http.createServer((req,res)=>{
     const pathname=new URL(req.url,'http://localhost').pathname;if(pathname==='/favicon.ico'){res.writeHead(204).end();return;}
+    if(pathname==='/deferred-spine.png'){
+      const send=()=>{res.setHeader('Content-Type','image/png');res.end(spineBytes);};
+      releaseSpine=()=>{spineReleased=true;send();};
+      if(spineReleased)send();
+      return;
+    }
     const file=path.resolve(root,'.'+pathname);if(!file.startsWith(root+path.sep)){res.writeHead(403).end();return;}
     fs.readFile(file,(error,bytes)=>{if(error){res.writeHead(404).end();return;}
       res.setHeader('Content-Type',({'.html':'text/html','.js':'text/javascript','.css':'text/css','.json':'application/json','.svg':'image/svg+xml'})[path.extname(file)]||'application/octet-stream');res.end(bytes);});
@@ -32,9 +39,10 @@ test('Sega CD and Saturn share a tall acrylic case, matte tray, two persistent s
   assert.equal(properties.color,'343537');assert.equal(properties.matte,.84);assert.equal(properties.opaque,true);assert.equal(properties.clear,true);assert.equal(properties.ribs,true);assert.equal(properties.feet,false);assert.equal(properties.finite,true);
   assert.ok(Math.abs(properties.disc[0]-120)<.001);assert.ok(Math.abs(properties.disc[1]-6)<.001);assert.ok(Math.abs(properties.disc[2]+209*.14)<.001);
   assert.deepEqual(await page.evaluate(()=>{const canvas=debug.materials.get('Cover Outside').map.image;return Array.from(canvas.getContext('2d').getImageData(canvas.width*.9,10,1,1).data);}),[216,57,63,255],'The PDF front replaces the external front insert');
-  async function checkSpines(){
-    const hits=await page.evaluate(async()=>{
-      const THREE=await import('/src/vendor/three/three.module.js'),tray=debug.model.getObjectByName('Case tray');debug.scene.updateMatrixWorld(true);
+  await page.evaluate(async()=>{
+    const THREE=await import('/src/vendor/three/three.module.js');
+    window.readLongboxSpines=()=>{
+      const tray=debug.model.getObjectByName('Case tray');debug.scene.updateMatrixWorld(true);
       return [-1,1].map(side=>{
         const origin=new THREE.Vector3(side*100,60,-2).applyMatrix4(tray.matrixWorld),direction=new THREE.Vector3(-side,0,0).transformDirection(tray.matrixWorld);
         const hit=new THREE.Raycaster(origin,direction).intersectObject(tray,true).find(hit=>hit.object.material.name!=='Sleeve Film'&&!hit.object.material.transparent);
@@ -42,7 +50,11 @@ test('Sega CD and Saturn share a tall acrylic case, matte tray, two persistent s
         const canvas=hit.object.material.map.image;
         return {material:hit.object.material.name,color:Array.from(canvas.getContext('2d').getImageData(Math.floor(hit.uv.x*canvas.width),Math.floor(hit.uv.y*canvas.height),1,1).data)};
       });
-    });
+    };
+  });
+  async function checkSpines(expected){
+    if(expected)await page.waitForFunction(expected=>JSON.stringify(readLongboxSpines().map(hit=>hit?.color))===JSON.stringify(expected),expected);
+    const hits=await page.evaluate(()=>readLongboxSpines());
     assert.ok(hits.every(hit=>hit?.material==='Cover Outside'),JSON.stringify(hits));
     return hits.map(hit=>hit.color);
   }
@@ -67,9 +79,12 @@ test('Sega CD and Saturn share a tall acrylic case, matte tray, two persistent s
   await page.evaluate(()=>select(5,foldedArt.filter(image=>image.kind!=='spine')));
   await page.waitForFunction(()=>{const canvas=debug.materials.get('Cover Outside').map?.image;return canvas?.getContext('2d').getImageData(10,10,1,1).data[1]===176;});
   assert.deepEqual(await checkSpines(),[[32,80,208,255],[208,32,48,255]],'Folded rear scans supply both spines even without any standalone spine image');
-  await page.evaluate(()=>select(4,art));
+  spineBytes=Buffer.from(await page.evaluate(()=>art.find(image=>image.kind==='spine').path.split(',')[1]),'base64');
+  await page.evaluate(()=>select(4,art.map(image=>image.kind==='spine'?{...image,path:new URL('/deferred-spine.png',location.href).href}:image)));
   await page.waitForFunction(()=>{const canvas=debug.materials.get('Cover Outside').map?.image;return canvas?.getContext('2d').getImageData(10,10,1,1).data[0]===201;});
-  assert.deepEqual(await checkSpines(),[[244,186,47,255],[244,186,47,255]],'Cropped rear artwork still uses the separate spine on both sides');
+  assert.notDeepEqual(await checkSpines(),[[244,186,47,255],[244,186,47,255]],'The rear cover can finish before the separately loaded spine');
+  await new Promise((resolve,reject)=>{const started=Date.now();const poll=()=>{if(releaseSpine){releaseSpine();resolve();}else if(Date.now()-started>30000)reject(Error('The standalone spine was never requested'));else setTimeout(poll,20);};poll();});
+  assert.deepEqual(await checkSpines([[244,186,47,255],[244,186,47,255]]),[[244,186,47,255],[244,186,47,255]],'Cropped rear artwork still uses the separate spine on both sides once it finishes loading');
   await page.evaluate(()=>select(6,[...foldedArt,{kind:'box_full',path:solid('#8030c0',610,420).toDataURL()}]));
   await page.waitForFunction(()=>{const canvas=debug.materials.get('Cover Outside').map?.image;return canvas?.getContext('2d').getImageData(10,10,1,1).data[0]===128;});
   assert.deepEqual(await checkSpines(),[[128,48,192,255],[128,48,192,255]],'Full covers still take priority over rear scans with folded spines');

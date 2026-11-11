@@ -1,5 +1,5 @@
 const {test}=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path'),http=require('node:http');
-test('Optical discs slide beside the case, share one renderer and respond independently to selection, rotation and zoom',{timeout:240000},async t=>{
+test('Optical discs slide beside the case, share one renderer and respond independently to selection, rotation and zoom',{timeout:900000},async t=>{
  let chromium;try{({chromium}=require('playwright-core'));}catch{t.skip('Optional browser test requires playwright-core.');return;}
  const root=path.resolve(__dirname,'..'),executable=process.env.OPENCABINET_CHROMIUM||(process.platform==='win32'?'C:/Program Files/Google/Chrome/Application/chrome.exe':chromium.executablePath());
  if(!fs.existsSync(executable)){t.skip('Chromium is unavailable.');return;}
@@ -19,7 +19,7 @@ test('Optical discs slide beside the case, share one renderer and respond indepe
   assert.ok(planes.near<planes.closest&&planes.far>planes.farthest,`${label}: zoomed geometry must stay between clip planes: ${JSON.stringify(planes)}`);
  }
  for(const platform of ['Sony PlayStation 2','Sony PlayStation','Sega Dreamcast','Sony PlayStation 3','Sony PSP','Nintendo GameCube','Sega Saturn']){
-  t.diagnostic(platform);
+  await t.test(platform,{timeout:180000},async()=>{
   await page.goto(`http://127.0.0.1:${server.address().port}/tests/fixtures/three-disc.html?platform=${encodeURIComponent(platform)}`);
   await page.waitForFunction(()=>window.debug?.renderer.info.render.calls>0&&viewer.hasDisc&&parts().some(mesh=>mesh.material.map),{},{timeout:60000});
   const initialPlanes=await page.evaluate(()=>({near:debug.camera.near,far:debug.camera.far}));
@@ -151,6 +151,7 @@ test('Optical discs slide beside the case, share one renderer and respond indepe
   const color=await page.evaluate(()=>{const material=debug.materials instanceof Map?debug.materials.get('Disc Silver'):debug.materials.discSilver;return material.color.getHexString();});
   assert.equal(color,'263b9c','per-game blue reverse is applied without changing the label');
   await page.evaluate(()=>viewer.dispose());assert.equal(await page.locator('#stage canvas').count(),0);
+  });
  }
  await page.goto(`http://127.0.0.1:${server.address().port}/tests/fixtures/three-disc.html?platform=Nintendo%20Switch`);
  await page.waitForFunction(()=>window.debug?.renderer.info.render.calls>0,{},{timeout:60000});assert.equal(await page.evaluate(()=>viewer.hasDisc),false,'cartridge cases do not offer optical disc actions');

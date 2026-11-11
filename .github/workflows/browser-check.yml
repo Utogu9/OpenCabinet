@@ -1,0 +1,37 @@
+name: Full browser validation
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: browser-check-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  browser:
+    name: Browser tests (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, ubuntu-22.04]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+    env:
+      CI: 'true'
+      LIBGL_ALWAYS_SOFTWARE: '1'
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v7.1.0
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci
+      - run: npm run prepare:icons
+      - name: Install the test browser and its dependencies
+        run: npx playwright-core install --with-deps chromium
+      - name: Select the installed test browser
+        run: node --input-type=commonjs -e "require('node:fs').appendFileSync(process.env.GITHUB_ENV, 'OPENCABINET_CHROMIUM=' + require('playwright-core').chromium.executablePath() + '\n')"
+      - name: Require a browser for graphical validation
+        run: node --input-type=module -e "import fs from 'node:fs'; fs.accessSync(process.env.OPENCABINET_CHROMIUM)"
+      - run: npm run test:browser
