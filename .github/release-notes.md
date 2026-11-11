@@ -1,32 +1,18 @@
-## What's new in v0.6.0
+## What's new in v0.6.1
 
-- Remove discs from their cases and inspect the disc and case independently in the same 3D viewer, with animated extraction and reflective disc backs.
-- Fix camera clipping after reinserting discs, independent zoom controls, and Dreamcast/PlayStation disc center holes and artwork.
-- Use folded rear-cover spines on Sega CD/Saturn cases.
-- Improve original ROM title and regional matching, including compact Genesis region tags, and use localized catalog labels as game titles.
-- Support AVIF artwork imports, downloads and thumbnails.
-- Delete managed manuals directly from Edit game → Manuals.
-- Check for catalog updates automatically when importing with a catalog older than one week; this can be disabled in Preferences.
-- Choose the default import region for filenames without region tags, with USA/North America as the default.
-- Support normalized SQLite repository catalogs alongside JSON, including the new PlayStation and PlayStation 2 submodules.
-- Configure release date formats and restore preferences to their defaults.
-- Show a draggable progress panel while removing multiple games.
-- Make PS3/PS4 EBOOT folder searches controllable through the extensions list.
+- Manual import searches update the available matches without automatically selecting a new result.
+- Show original filenames in import match details, including unmatched and multidisc games.
+- Preserve artwork uploaders and source links, and display clickable source badges in the game editor for images and metadata.
+- Identify libretro-thumbnails artwork, including logos, and link to the original files.
+- Keep the Fill metadata button aligned when its source badge is visible.
 
-## Novedades de v0.6.0
+## Novedades de v0.6.1
 
-- Discos extraíbles para inspeccionar la caja y el disco de forma independiente en el mismo visor 3D, con animación de extracción y reversos reflectantes.
-- Correcciones del recorte de cámara al reinsertar discos, del zoom independiente y del agujero central y el arte de los discos de Dreamcast/PlayStation.
-- Uso de los lomos incluidos en la contraportada de las cajas de Sega CD/Saturn.
-- Mejoras en las coincidencias por nombre original y región, incluidas las etiquetas compactas de Genesis, y uso de los títulos localizados del catálogo.
-- Importación, descarga y miniaturas de imágenes AVIF.
-- Eliminación de manuales administrados desde Editar juego → Manuales.
-- Comprobación automática de actualizaciones al importar con un catálogo de más de una semana, desactivable en Preferencias.
-- Región de importación configurable para archivos sin región reconocible, con USA/Norteamérica como valor inicial.
-- Soporte de catálogos SQLite normalizados junto con JSON, incluidos los nuevos submódulos de PlayStation y PlayStation 2.
-- Formatos de fecha de lanzamiento configurables y restauración de preferencias predeterminadas.
-- Progreso flotante y arrastrable al eliminar varios juegos.
-- Búsqueda de carpetas EBOOT de PS3/PS4 controlable desde la lista de extensiones.
+- Las b?squedas manuales durante la importaci?n actualizan las coincidencias disponibles sin seleccionar un resultado nuevo autom?ticamente.
+- Nombres originales de los archivos en los detalles de coincidencias, incluidos juegos sin coincidencia y juegos multidisco.
+- Conservaci?n del uploader y los enlaces de origen, con etiquetas de fuente clickeables para im?genes y metadatos en el editor del juego.
+- Identificaci?n de im?genes de libretro-thumbnails, incluidos logos, con enlaces a los archivos originales.
+- El bot?n Completar datos mantiene su posici?n cuando aparece la etiqueta de origen.
 
 ## Downloads / Descargas
 
