@@ -1,18 +1,20 @@
-## What's new in v0.6.1
+## What's new in v0.6.2
 
-- Manual import searches update the available matches without automatically selecting a new result.
-- Show original filenames in import match details, including unmatched and multidisc games.
-- Preserve artwork uploaders and source links, and display clickable source badges in the game editor for images and metadata.
-- Identify libretro-thumbnails artwork, including logos, and link to the original files.
-- Keep the Fill metadata button aligned when its source badge is visible.
+- Preserve and display manual uploaders and source links alongside PDF and CBZ files.
+- Add a foreground view for extracted discs, with click-to-focus transitions between the disc and case and an optional side-by-side layout.
+- Use the main front/back control to flip the selected disc.
+- Improve Couch Mode navigation by using cached manual thumbnails on closed cases and pausing background manual preparation during rapid navigation.
+- Fix stale page layers when returning to a manual's cover, duplicate scrolling in Library Report, and inconsistent Switch 2 retaining tab transparency.
+- Localize RetroArch download and preparation progress messages.
 
-## Novedades de v0.6.1
+## Novedades de v0.6.2
 
-- Las b?squedas manuales durante la importaci?n actualizan las coincidencias disponibles sin seleccionar un resultado nuevo autom?ticamente.
-- Nombres originales de los archivos en los detalles de coincidencias, incluidos juegos sin coincidencia y juegos multidisco.
-- Conservaci?n del uploader y los enlaces de origen, con etiquetas de fuente clickeables para im?genes y metadatos en el editor del juego.
-- Identificaci?n de im?genes de libretro-thumbnails, incluidos logos, con enlaces a los archivos originales.
-- El bot?n Completar datos mantiene su posici?n cuando aparece la etiqueta de origen.
+- Créditos del uploader y enlaces de origen junto a los manuales PDF y CBZ, conservados al guardar y recuperar colecciones.
+- Nueva vista en primer plano para discos extraídos, con transiciones al seleccionar la caja o el disco y una vista opcional lado a lado.
+- El control principal de frente/dorso permite girar el disco seleccionado.
+- Navegación más fluida en Couch Mode mediante miniaturas de manuales en cajas cerradas y pausa de su preparación durante la navegación rápida.
+- Correcciones de rastros de páginas al volver a la portada del manual, doble scroll en el informe de biblioteca y transparencia desigual en las pestañas de Switch 2.
+- Traducción de los mensajes de progreso al descargar y preparar RetroArch.
 
 ## Downloads / Descargas
 
