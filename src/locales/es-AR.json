@@ -1835,6 +1835,7 @@
     "disc.examine": "Examinar disco",
     "disc.putBack": "Volver a colocar el disco",
     "disc.focusBox": "Caja",
+    "disc.sideBySide": "Lado a lado",
     "disc.focusDisc": "Disco",
     "disc.controls": "Seleccioná la caja o el disco para girar y acercar ese objeto.",
     "disc.flip": "Dar vuelta el disco",

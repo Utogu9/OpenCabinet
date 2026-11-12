@@ -15,3 +15,18 @@ test('Disc extraction lifts before moving sideways and settles at box height, wi
   assert.ok(a.distanceTo(b)<.01,'stages meet without a positional jump');
  }
 });
+
+test('Extracted media swaps foreground depth and size while leaving the other object accessible behind it',async()=>{
+ const {discFocusLayout,discExtractionPosition}=await import('../src/three-disc-interaction.js');
+ const disc=discFocusLayout(240,120,1),box=discFocusLayout(240,120,0);
+ assert.ok(disc.disc.z===0);assert.ok(disc.box.z<disc.disc.z);
+ assert.ok(box.box.z===0);assert.ok(box.disc.z<box.box.z);
+ assert.ok(disc.box.x<0&&box.disc.x>0,'background objects remain offset for selection');
+ assert.ok(disc.boxScale<box.boxScale);assert.ok(box.discScale<disc.discScale);
+ for(const blend of [0,.25,.5,.75,1]){
+  const p=discFocusLayout(240,120,blend);
+  assert.ok(p.boxScale>0&&p.discScale>0);
+  const destination=discExtractionPosition({x:35,y:-12,z:8},p.disc,1,60);
+  assert.ok(destination.distanceTo(p.disc)<1e-6,'extraction settles at either foreground or background position');
+ }
+});

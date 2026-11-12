@@ -475,8 +475,9 @@ export async function createViewer(host, options={}) {
   listen(host,'pointerdown',event=>{
     if(event.button!==0||!game||menu?.contains(event.target))return;
     event.preventDefault();host.focus({preventScroll:true});
+    const wasDiscFocused=discInteraction.focused;
     const media=discInteraction.select(event),rect=discInteraction.interactionRect(host.getBoundingClientRect());
-    drag={id:event.pointerId,rect,point:point(event,rect),x:event.clientX,y:event.clientY,moved:false,media,manual:!media&&hitsManual(event),disc:!media&&discInteraction.hit(event)};
+    drag={id:event.pointerId,rect,point:point(event,rect),x:event.clientX,y:event.clientY,moved:false,media,manual:!media&&!wasDiscFocused&&hitsManual(event),disc:!media&&discInteraction.hit(event)};
     host.setPointerCapture(event.pointerId);host.classList.add('dragging');
   });
   listen(host,'pointermove',event=>{

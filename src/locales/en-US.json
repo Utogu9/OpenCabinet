@@ -1835,6 +1835,7 @@
     "disc.examine": "Examine disc",
     "disc.putBack": "Put disc back",
     "disc.focusBox": "Box",
+    "disc.sideBySide": "Side by side",
     "disc.focusDisc": "Disc",
     "disc.controls": "Select the box or disc to rotate and zoom that object.",
     "disc.flip": "Flip disc",

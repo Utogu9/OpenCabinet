@@ -428,7 +428,8 @@ export async function createModelViewer(host,options={},definition) {
   listen(document,'pointerdown',event=>{if(menu&&!menu.contains(event.target))closeMenu();});
   listen(host,'pointerdown',event=>{
     if(event.button!==0||!game||menu?.contains(event.target))return;event.preventDefault();host.focus({preventScroll:true});
-    const media=discInteraction.select(event),rect=discInteraction.interactionRect(host.getBoundingClientRect());drag={id:event.pointerId,rect,point:arcballPoint(event,rect),x:event.clientX,y:event.clientY,startX:event.clientX,startY:event.clientY,moved:false,media,manual:!media&&hitsManual(event),disc:!media&&discInteraction.hit(event)};
+    const wasDiscFocused=discInteraction.focused;
+    const media=discInteraction.select(event),rect=discInteraction.interactionRect(host.getBoundingClientRect());drag={id:event.pointerId,rect,point:arcballPoint(event,rect),x:event.clientX,y:event.clientY,startX:event.clientX,startY:event.clientY,moved:false,media,manual:!media&&!wasDiscFocused&&hitsManual(event),disc:!media&&discInteraction.hit(event)};
     host.setPointerCapture(event.pointerId);host.classList.add('dragging');
   });
   listen(host,'pointermove',event=>{

@@ -1,5 +1,5 @@
 const {test}=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path'),http=require('node:http');
-test('Optical discs slide beside the case, share one renderer and respond independently to selection, rotation and zoom',{timeout:900000},async t=>{
+test('Optical discs and cases exchange foreground focus, share one renderer and respond independently to rotation and zoom',{timeout:900000},async t=>{
  let chromium;try{({chromium}=require('playwright-core'));}catch{t.skip('Optional browser test requires playwright-core.');return;}
  const root=path.resolve(__dirname,'..'),executable=process.env.OPENCABINET_CHROMIUM||(process.platform==='win32'?'C:/Program Files/Google/Chrome/Application/chrome.exe':chromium.executablePath());
  if(!fs.existsSync(executable)){t.skip('Chromium is unavailable.');return;}
@@ -10,6 +10,18 @@ test('Optical discs slide beside the case, share one renderer and respond indepe
  });await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));t.after(()=>new Promise(resolve=>{server.closeAllConnections();server.close(resolve);}));
  const browser=await chromium.launch({executablePath:executable,headless:true});t.after(()=>browser.close());
  const page=await browser.newPage({viewport:{width:1100,height:850}}),errors=[];page.on('pageerror',error=>errors.push(error.message));
+ async function visiblePoint(kind){return page.evaluate(async kind=>{
+  const THREE=await import('/src/vendor/three/three.module.js'),ray=new THREE.Raycaster();debug.scene.updateMatrixWorld(true);
+  const r=document.querySelector('#stage canvas').getBoundingClientRect(),box=debug.meshes.filter(mesh=>mesh.visible),disc=debug.discInteraction.object.children[0].children;
+  // With overlapping objects a triangle selected in model space can be hidden
+  // by the foreground object. Click a genuinely visible surface instead.
+  for(let y=.12;y<.85;y+=.025)for(let x=.08;x<.94;x+=.025){
+   ray.setFromCamera(new THREE.Vector2(x*2-1,1-y*2),debug.camera);
+   const b=ray.intersectObjects(box,false)[0],d=ray.intersectObjects(disc,false)[0];
+   if(kind==='box'?b&&(!d||b.distance<d.distance):d&&(!b||d.distance<b.distance))return {x:r.left+x*r.width,y:r.top+y*r.height};
+  }
+  throw Error('No visible '+kind+' surface');
+ },kind);}
  async function checkClipPlanes(label){
   const planes=await page.evaluate(async()=>{
     const THREE=await import('/src/vendor/three/three.module.js');debug.scene.updateMatrixWorld(true);
@@ -52,7 +64,7 @@ test('Optical discs slide beside the case, share one renderer and respond indepe
   await page.waitForFunction(()=>document.getElementById('stage').dataset.discAnimation==='ready');
   assert.equal(await page.locator('#stage canvas').count(),1,'box and disc share the same drawing surface');
   assert.equal(await page.locator('dialog').count(),0,'no additional dialog is opened');
-  assert.equal(await page.evaluate(()=>debug.root.position.x<0&&debug.discInteraction.object.position.x>0),true,'box on the left, disc on the right');
+  assert.equal(await page.evaluate(()=>debug.root.position.x<0&&debug.root.position.z<debug.discInteraction.object.position.z&&debug.discInteraction.object.position.x===0),true,'disc in the foreground, case offset behind it');
   const cameraDistance=await page.evaluate(()=>debug.camera.position.z);
   for(const [x,y] of [[70,0],[0,80],[-160,-30],[35,0]]){
     await page.evaluate(([x,y])=>viewer.rotate(x,y),[x,y]);await page.evaluate(()=>settle());
@@ -79,14 +91,12 @@ test('Optical discs slide beside the case, share one renderer and respond indepe
   const locked=await page.evaluate(()=>{viewer.setRotationLock('x');window.lockedDisc=debug.discInteraction.object.quaternion.toArray();viewer.rotate(0,25);return lockedDisc;});
   assert.deepEqual(await page.evaluate(()=>debug.discInteraction.object.quaternion.toArray()),locked,'axis locks also apply to the detached disc');
   await page.evaluate(()=>viewer.setRotationLock('free'));
-  const clickBox=await page.evaluate(async()=>{
-    const THREE=await import('/src/vendor/three/three.module.js');const mesh=debug.meshes.find(mesh=>mesh.visible&&(mesh.material.name==='Case Plastic'||mesh.material===debug.materials.acrylic));
-    const position=mesh.geometry.attributes.position,index=mesh.geometry.index,p=new THREE.Vector3();
-    for(let i=0;i<3;i++)p.add(new THREE.Vector3().fromBufferAttribute(position,index?index.getX(i):i));p.multiplyScalar(1/3).applyMatrix4(mesh.matrixWorld).project(debug.camera);
-    const r=document.querySelector('#stage canvas').getBoundingClientRect();return {x:r.left+(p.x+1)*r.width/2,y:r.top+(1-p.y)*r.height/2};
-  });
+  let clickBox=await visiblePoint('box');
   await page.mouse.click(clickBox.x,clickBox.y);
   assert.equal(await page.locator('#stage').getAttribute('data-disc-focus'),'box','clicking the case transfers control to it');
+  await page.waitForFunction(()=>document.getElementById('stage').dataset.discAnimation==='ready');
+  assert.equal(await page.evaluate(()=>debug.root.position.z>debug.discInteraction.object.position.z),true,'selecting the case brings it forward');
+  clickBox=await visiblePoint('box');
   const beforeWheel=await page.evaluate(()=>({position:debug.discInteraction.object.position.toArray(),scale:debug.discInteraction.object.scale.toArray(),rotation:debug.discInteraction.object.quaternion.toArray(),boxScale:debug.root.scale.toArray()}));
   await page.mouse.move(clickBox.x,clickBox.y);await page.mouse.down();await page.mouse.wheel(0,-200);
   for(const offset of [4,8,12]){await page.mouse.move(clickBox.x+offset,clickBox.y+offset/3);await page.evaluate(()=>settle());}
@@ -102,20 +112,27 @@ test('Optical discs slide beside the case, share one renderer and respond indepe
   const discRotation=await page.evaluate(()=>{window.discQuaternion=debug.discInteraction.object.quaternion.toArray();viewer.rotate(-15,5);return discQuaternion;});
   await page.evaluate(()=>settle());
   assert.deepEqual(await page.evaluate(()=>debug.discInteraction.object.quaternion.toArray()),discRotation,'rotating the box leaves the disc alone');
-  const clickDisc=await page.evaluate(async()=>{
-    const THREE=await import('/src/vendor/three/three.module.js'),mesh=debug.discInteraction.object.children[0].children.find(mesh=>mesh.material.map);
-    mesh.geometry.computeBoundingBox();const box=mesh.geometry.boundingBox,p=new THREE.Vector3(box.min.x*.25+box.max.x*.75,(box.min.y+box.max.y)/2,box.max.z);
-    p.applyMatrix4(mesh.matrixWorld).project(debug.camera);const r=document.querySelector('#stage canvas').getBoundingClientRect();return {x:r.left+(p.x+1)*r.width/2,y:r.top+(1-p.y)*r.height/2};
-  });
+  const clickDisc=await visiblePoint('disc');
   await page.mouse.click(clickDisc.x,clickDisc.y);assert.equal(await page.locator('#stage').getAttribute('data-disc-focus'),'disc','clicking the floating disc transfers control to it');
+  await page.waitForFunction(()=>document.getElementById('stage').dataset.discAnimation==='ready');
+  assert.equal(await page.evaluate(()=>debug.discInteraction.object.position.z>debug.root.position.z),true,'selecting the disc brings it forward again');
   const boxScale=await page.evaluate(()=>{window.boxScale=debug.root.scale.toArray();viewer.zoom(.2);return boxScale;});await page.evaluate(()=>settle());
   assert.deepEqual(await page.evaluate(()=>debug.root.scale.toArray()),boxScale,'zooming the selected disc leaves the box scale unchanged');
   const front=await page.locator('#stage').screenshot();
   await page.evaluate(()=>viewer.showBack());await page.evaluate(()=>settle());
   const back=await page.locator('#stage').screenshot();assert.notDeepEqual(front,back,`${platform}: front and reverse differ`);
   assert.equal(await page.evaluate(()=>debug.renderer.getContext().getError()),0,'reverse shaders render without WebGL errors');
+  const orientations=await page.evaluate(()=>[debug.root.quaternion.toArray(),debug.discInteraction.object.quaternion.toArray()]);
+  const layoutButton=page.locator('.game-box-disc-tools button').nth(2);
+  await layoutButton.click();await page.waitForFunction(()=>document.getElementById('stage').dataset.discAnimation==='ready');
+  assert.equal(await layoutButton.getAttribute('aria-pressed'),'true');
+  assert.equal(await page.evaluate(()=>debug.root.position.x<0&&debug.discInteraction.object.position.x>0&&debug.root.position.z===0&&debug.discInteraction.object.position.z===0),true,'the button restores side-by-side placement');
+  assert.deepEqual(await page.evaluate(()=>[debug.root.quaternion.toArray(),debug.discInteraction.object.quaternion.toArray()]),orientations,'switching layouts preserves both rotations');
+  await layoutButton.click();await page.waitForFunction(()=>document.getElementById('stage').dataset.discAnimation==='ready');
+  assert.equal(await layoutButton.getAttribute('aria-pressed'),'false');
+  assert.equal(await page.evaluate(()=>debug.discInteraction.object.position.z>debug.root.position.z),true,'the same button returns to foreground focus');
   if(platform==='Sony PlayStation 2'){
-    await page.screenshot({path:'target/disc-ps2-side-by-side.png'});
+    await page.screenshot({path:'target/disc-ps2-foreground.png'});
     const diffraction=await page.evaluate(async()=>{
       const THREE=await import('/src/vendor/three/three.module.js'),material=debug.materials.get('Disc Silver'),source=parts().find(mesh=>mesh.material===material);
       const scene=new THREE.Scene(),camera=new THREE.PerspectiveCamera(35,debug.camera.aspect,1,1000),mesh=new THREE.Mesh(source.geometry,material);
