@@ -60,7 +60,7 @@ export function createDiscInteraction({host,reference,root,scene,camera,meshes,g
         const node=button(key,()=>focus(value));node.dataset.discFocus=value;node.setAttribute('aria-pressed',String(focused===value));tools.append(node);
       }
       const layoutButton=button('disc.sideBySide',()=>api.toggleLayout());layoutButton.setAttribute('aria-pressed',String(sideBySide));
-      tools.append(layoutButton,button('disc.flip',()=>api.flip()),button('disc.putBack',()=>api.putBack()));host.appendChild(tools);
+      tools.append(layoutButton,button('disc.putBack',()=>api.putBack()));host.appendChild(tools);
     }
     if(removed)host.dataset.discRemoved='true';else {delete host.dataset.discRemoved;delete host.dataset.discFocus;delete host.dataset.discLayout;}
     schedule();

@@ -64,6 +64,7 @@ test('Optical discs and cases exchange foreground focus, share one renderer and 
   await page.waitForFunction(()=>document.getElementById('stage').dataset.discAnimation==='ready');
   assert.equal(await page.locator('#stage canvas').count(),1,'box and disc share the same drawing surface');
   assert.equal(await page.locator('dialog').count(),0,'no additional dialog is opened');
+  assert.equal(await page.locator('.game-box-disc-tools button').count(),4,'disc toolbar contains focus, layout and return controls without a separate flip button');
   assert.equal(await page.evaluate(()=>debug.root.position.x<0&&debug.root.position.z<debug.discInteraction.object.position.z&&debug.discInteraction.object.position.x===0),true,'disc in the foreground, case offset behind it');
   const cameraDistance=await page.evaluate(()=>debug.camera.position.z);
   for(const [x,y] of [[70,0],[0,80],[-160,-30],[35,0]]){
@@ -118,9 +119,15 @@ test('Optical discs and cases exchange foreground focus, share one renderer and 
   assert.equal(await page.evaluate(()=>debug.discInteraction.object.position.z>debug.root.position.z),true,'selecting the disc brings it forward again');
   const boxScale=await page.evaluate(()=>{window.boxScale=debug.root.scale.toArray();viewer.zoom(.2);return boxScale;});await page.evaluate(()=>settle());
   assert.deepEqual(await page.evaluate(()=>debug.root.scale.toArray()),boxScale,'zooming the selected disc leaves the box scale unchanged');
+  await page.evaluate(()=>{viewer.showBack();viewer.toggleSide();});await page.evaluate(()=>settle());
   const front=await page.locator('#stage').screenshot();
-  await page.evaluate(()=>viewer.showBack());await page.evaluate(()=>settle());
+  const boxBeforeFlip=await page.evaluate(()=>debug.root.quaternion.toArray());
+  await page.evaluate(()=>viewer.toggleSide());await page.evaluate(()=>settle());
   const back=await page.locator('#stage').screenshot();assert.notDeepEqual(front,back,`${platform}: front and reverse differ`);
+  assert.deepEqual(await page.evaluate(()=>debug.root.quaternion.toArray()),boxBeforeFlip,'the main front/back control affects only the selected disc');
+  await page.evaluate(()=>viewer.toggleSide());await page.evaluate(()=>settle());
+  assert.equal(await page.evaluate(()=>Math.abs(debug.discInteraction.object.quaternion.w-1)<1e-6),true,'pressing front/back again returns the disc to its printed front');
+  await page.evaluate(()=>viewer.toggleSide());await page.evaluate(()=>settle());
   assert.equal(await page.evaluate(()=>debug.renderer.getContext().getError()),0,'reverse shaders render without WebGL errors');
   const orientations=await page.evaluate(()=>[debug.root.quaternion.toArray(),debug.discInteraction.object.quaternion.toArray()]);
   const layoutButton=page.locator('.game-box-disc-tools button').nth(2);
