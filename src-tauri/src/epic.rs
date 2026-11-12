@@ -436,6 +436,7 @@ pub fn launch_plan(conn: &Connection, game_id: i32, game_uri: &str) -> Result<La
     Err(crate::i18n::text("msg.c01f7805de").into())
 }
 
+#[cfg(any(windows, test))]
 fn is_game_process(root: &Path, executable: &Path) -> bool {
     if !executable.starts_with(root) {
         return false;
