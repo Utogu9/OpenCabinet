@@ -326,9 +326,13 @@
             // A recycled Three.js viewer keeps its renderer, geometry, lights
             // and materials. update replaces the artwork for the incoming game.
             node._viewer ||= options.createViewer(node._preview, { renderGroup: activeBank,
-              hasManual:game=>node._wantManual?options.hasManual?.(game):false,
+              hasManual:game=>(node._wantManual||options.manualIsCover?.(game))?options.hasManual?.(game):false,
               loadManual:options.loadManual? (game,signal,onPreview,onPresence=()=>{})=>{
-                if(!active||Number(node.dataset.gameId)!==gameId||!node._wantManual){onPresence(false);return Promise.resolve(null);}
+                if(!active){onPresence(false);return Promise.resolve(null);}
+                if(Number(node.dataset.gameId)!==gameId||!node._wantManual){
+                  if(options.manualIsCover?.(game)&&options.loadManualPreview)return options.loadManualPreview(game,signal,onPreview,onPresence).then(()=>null);
+                  onPresence(false);return Promise.resolve(null);
+                }
                 return options.loadManual(game,signal,onPreview,onPresence);
               }:null,
               onManualState:state=>{node._manualState=state;},
@@ -579,6 +583,7 @@
     }
     function chooseGame(id, focus = false) {
       if (!games.some(game => game.id === id)) return;
+      options.onNavigate?.();
       closeBoxMenu();closeManual();
       gameId = id; remembered.set(platformName, id); zone = 'games';
       renderCards(); refreshSelected(); if (focus) focusCurrent();
@@ -589,6 +594,7 @@
     }
     function changePlatform(name, focus = true, reveal = true) {
       if (!platforms.some(platform => platform.name === name)) return;
+      options.onNavigate?.();
       closeBoxMenu();closeManual();
       zone = 'platforms';
       if (name === platformName) {

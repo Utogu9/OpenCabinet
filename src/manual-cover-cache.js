@@ -24,7 +24,7 @@
   function create({cache,decode,render,lookup,store,toUrl,getManuals,getCoverMode=()=> 'auto',disk=true,
     makeThumbnail=thumbnail,onError=()=>{},delay=1500}) {
     const controller=new AbortController(),seen=new Set(),queued=[],prepared=new Set(),known=new Map(),games=new Map();
-    let timer=null,running=false,disposed=false,scrolling=false,scrollTimer=null;
+    let timer=null,running=false,disposed=false,scrolling=false,scrollTimer=null,backgroundTask=null;
     const check=signal=>{if(disposed||controller.signal.aborted||signal?.aborted)throw cancelled();};
     const keyFor=(path,mode,entry)=>JSON.stringify(['manual-cover-v1',path,mode,entry?.key||'ram']);
     const sourceFor=(path,mode)=>JSON.stringify([path,mode]);
@@ -101,17 +101,21 @@
     async function pump() {
       if(disposed||scrolling||running)return;
       const job=queued.shift();if(job===undefined)return;running=true;
+      const task=new AbortController();backgroundTask=task;let paths,index=0;
       try {
-        const paths=typeof job==='object'?job.paths:await getManuals(job);check(controller.signal);
+        paths=typeof job==='object'?job.paths:await getManuals(job);check(task.signal);
         if(typeof job!=='object')games.set(job,[...paths]);
-        for(let index=0;index<paths.length;index++) {
-          check(controller.signal);
+        for(;index<paths.length;index++) {
+          check(task.signal);
           if(scrolling){queued.unshift({paths:paths.slice(index)});break;}
-          try{await warmPath(paths[index],controller.signal);}
-          catch(error){check(controller.signal);console.warn('Manual preview cache:',error);}
+          try{await warmPath(paths[index],task.signal);}
+          catch(error){check(task.signal);console.warn('Manual preview cache:',error);}
         }
-      }catch(error){if(error.name!=='AbortError')console.warn('Manual preview cache:',error);}
-      finally{running=false;schedule();}
+      }catch(error){
+        if(task.signal.aborted&&!disposed)queued.unshift(paths?{paths:paths.slice(index)}:job);
+        else if(error.name!=='AbortError')console.warn('Manual preview cache:',error);
+      }
+      finally{backgroundTask=null;running=false;schedule();}
     }
     return {
       render:load,
@@ -124,14 +128,24 @@
         showKnown(selected,validMode(getCoverMode(selected)),signal||controller.signal,onPreview);
         return selected;
       },
+      // Closed carousel boxes need pixels only, never a live PDF document.
+      async previewGame(id,{path,signal=controller.signal,onPreview,onPresence=()=>{}}={}) {
+        check(signal);
+        this.showGamePreview(id,{path,signal,onPreview});
+        const paths=games.get(id)||await getManuals(id);check(signal);games.set(id,[...paths]);
+        onPresence(paths.length>0);if(!paths.length)return;
+        const selected=paths.includes(path)?path:paths[0],mode=validMode(getCoverMode(selected));
+        const entry=await entryFor(selected,mode,signal),image=await preview(selected,mode,entry,signal);check(signal);
+        if(image)onPreview?.(image);else this.warm([id]);
+      },
       warm(ids) {
         if(!disk||disposed)return;
         for(const id of ids)if(!seen.has(id)){seen.add(id);queued.push(id);}
         schedule(delay);
       },
       refresh(id){seen.delete(id);this.warm([id]);},
-      pauseForScroll(){scrolling=true;clearTimeout(scrollTimer);scrollTimer=setTimeout(()=>{scrolling=false;schedule();},150);},
-      dispose(){disposed=true;controller.abort();clearTimeout(timer);clearTimeout(scrollTimer);queued.length=0;},
+      pauseForScroll(wait=150,interrupt=false){scrolling=true;if(interrupt)backgroundTask?.abort();clearTimeout(scrollTimer);scrollTimer=setTimeout(()=>{scrolling=false;schedule();},wait);},
+      dispose(){disposed=true;controller.abort();backgroundTask?.abort();clearTimeout(timer);clearTimeout(scrollTimer);queued.length=0;},
     };
   }
   globalThis.OpenCabinetManualCovers={create};

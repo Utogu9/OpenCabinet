@@ -67,6 +67,12 @@ queda como alternativa cuando no hay manual o su carga falla sin una vista previ
 Una selección sin caché reutiliza ese mismo render
 para generar la miniatura: no abre dos veces el PDF para crear ambas versiones.
 El resto de las páginas y la contraportada siguen cargándose bajo demanda.
+En Couch Mode, las cajas cerradas de PS1/Dreamcast usan únicamente la miniatura
+del manual disponible en caché. El documento completo se prepara al abrir la
+caja. Navegar entre juegos o consolas interrumpe la generación de miniaturas
+en segundo plano; se reanuda tras 400 ms sin navegación. Si falta una miniatura,
+se utiliza la portada habitual mientras queda pendiente su preparación. Esta
+restricción no cambia la carga de manuales en la biblioteca normal.
 En modo sólo RAM no se leen ni escriben estas carpetas, y las vistas previas
 se preparan al seleccionar el juego. Se respetan la ubicación de caché elegida,
 el presupuesto compartido de RAM y las cancelaciones al cambiar de juego.

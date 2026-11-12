@@ -46,5 +46,30 @@ test('Jewel cases immediately reuse cached cover pixels while full wraps and man
   assert.deepEqual(await page.evaluate(()=>Array.from(debug.materials.cover.map.image.getContext('2d').getImageData(0,0,1,1).data)),[170,34,204,255],'A known manual keeps priority over the normal cached cover');
   await page.evaluate(()=>{finishManual({front:makeCanvas('#aa22cc',300,400),dispose(){}});});
   await page.waitForFunction(()=>debug.materials.cover.map.image.width===300);
-  await page.evaluate(()=>viewer.dispose());assert.deepEqual(errors,[]);
+  await page.evaluate(()=>viewer.dispose());
+  for(const file of ['styles.css','sofa-mode.css'])await page.addStyleTag({url:'/src/'+file});
+  for(const file of ['carousel-boxes.js','three-box-router.js','sofa-mode.js'])await page.addScriptTag({url:'/src/'+file});
+  await page.evaluate(async()=>{
+    Object.defineProperty(navigator,'getGamepads',{configurable:true,value:()=>[]});
+    window.manualCalls={preview:0,full:0,navigation:0};
+    const games=Array.from({length:3},(_,id)=>({id:id+10,title:'Manual '+id,platform:'Sony PlayStation',rom_path:'/game'+id+'.chd'}));
+    window.sofa=OpenCabinetSofa.create({document,window,games:()=>games,platforms:()=>[],sortGames:games=>games,
+      images:()=>[{kind:'cover',path:'cover'}],sourceGame:game=>game,formatPlayTime:()=>'',platformDetails:async()=>({images:[]}),boxSettings:async()=>null,
+      manualIsCover:()=>true,hasManual:()=>true,onNavigate:()=>manualCalls.navigation++,
+      loadManualPreview:async(game,signal,onPreview,onPresence)=>{manualCalls.preview++;onPresence(true);onPreview(makeCanvas('#aa22cc'));},
+      loadManual:async()=>{manualCalls.full++;return {path:'manual.pdf',front:makeCanvas('#aa22cc',300,400),pageCount:4,aspectRatio:.75,dispose(){}};},
+      createViewer:(host,session)=>OpenCabinet3D.createViewer(host,{...session,carousel:true,imageSource:()=>'/original.svg',
+        getCoverPreview:()=>makeCanvas('#145ac8'),debug:state=>{host._debug=state;}}),onError:error=>{throw error;}
+    });await sofa.open();
+  });
+  await page.waitForFunction(()=>manualCalls.preview>=3);
+  assert.equal(await page.evaluate(()=>manualCalls.full),0,'closed couch boxes only request manual thumbnail pixels');
+  assert.deepEqual(await page.evaluate(()=>Array.from(document.querySelector('.sofa-card.is-selected .sofa-preview')._debug.materials.cover.map.image.getContext('2d').getImageData(0,0,1,1).data)),[170,34,204,255]);
+  await page.locator('.sofa-card.is-selected').focus();
+  for(let i=0;i<5;i++)await page.keyboard.press('ArrowRight');
+  assert.equal(await page.evaluate(()=>manualCalls.full),0,'rapid game navigation never starts a full manual render');
+  assert.ok(await page.evaluate(()=>manualCalls.navigation)>=5,'navigation notifies the background prefetch pause');
+  await page.keyboard.press('o');
+  await page.waitForFunction(()=>manualCalls.full===1);
+  await page.evaluate(()=>sofa.close());assert.deepEqual(errors,[]);
 });

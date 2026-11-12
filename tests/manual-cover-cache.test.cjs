@@ -131,3 +131,42 @@ test('Manual presence distinguishes an undiscovered game from a known empty fold
   service.trackGame(1,[]);assert.equal(service.hasManuals(1),false);
   service.dispose();app.cache.dispose();
 });
+
+test('Closed carousel manuals decode an existing thumbnail without parsing the PDF or CBZ',async()=>{
+  const app=setup();app.stored.set('9.pdf:v1:auto',[1]);
+  const service=app.create(),shown=[],presence=[];
+  await service.previewGame(9,{onPreview:image=>shown.push(image.label),onPresence:value=>presence.push(value)});
+  assert.deepEqual(shown,['9.pdf:v1:auto.webp']);assert.deepEqual(presence,[true]);
+  assert.equal(app.calls.some(call=>call[0]==='render'),false);
+  assert.equal(service.hasManuals(9),true);
+  service.dispose();app.cache.dispose();
+});
+
+test('A missing carousel thumbnail queues background work instead of parsing during selection',async()=>{
+  const app=setup(),service=app.create();service.pauseForScroll(400);
+  await service.previewGame(9,{});
+  assert.equal(app.calls.some(call=>call[0]==='render'),false);
+  await app.runTimers(400);await app.runTimers(75);
+  assert.deepEqual(app.calls.filter(call=>call[0]==='render'),[['render','9.pdf',800,'auto']]);
+  service.dispose();app.cache.dispose();
+});
+
+test('Fast navigation aborts an active background manual and retries it only after input settles',async()=>{
+  const app=setup();let first=true,aborted=false;
+  const service=app.create({render:(file,options)=>{
+    app.calls.push(['render',file]);
+    if(!first)return Promise.resolve(app.pdf(file,options));
+    first=false;return new Promise((resolve,reject)=>options.signal.addEventListener('abort',()=>{
+      aborted=true;reject(new DOMException('Aborted','AbortError'));
+    },{once:true}));
+  }});
+  service.warm([9]);await app.runTimers(1500);
+  service.pauseForScroll();await tick();assert.equal(aborted,false,'ordinary library scrolling retains its existing prefetch behavior');
+  service.pauseForScroll(400,true);await tick();assert.equal(aborted,true);
+  assert.equal(app.calls.filter(call=>call[0]==='store').length,0);
+  await app.runTimers(75);assert.equal(app.calls.filter(call=>call[0]==='render').length,1);
+  await app.runTimers(400);await app.runTimers(75);
+  assert.equal(app.calls.filter(call=>call[0]==='render').length,2);
+  assert.equal(app.calls.filter(call=>call[0]==='store').length,1);
+  service.dispose();app.cache.dispose();
+});
