@@ -65,6 +65,15 @@ test('Manuals can be inspected outside their cases, share focus with discs and r
       assert.equal(await page.locator('.game-box-disc-tools').getByRole('button',{name:'manual.read',exact:true}).count(),0,'the toolbar does not duplicate the existing manual reader action');
       assert.equal(await page.locator('[data-disc-return]:visible').getAttribute('data-disc-return'),'manual');
       if(platform==='Sony PlayStation 2'||platform==='Sega Dreamcast')await page.screenshot({path:'target/manual-extracted-'+(platform==='Sony PlayStation 2'?'ps2':'dreamcast')+'.png'});
+      const dragPoint=await visiblePoint('manual'),dragRotation=await page.evaluate(()=>debug.discInteraction.manualObject.quaternion.toArray());
+      await page.mouse.move(dragPoint.x,dragPoint.y);await page.mouse.down();await page.mouse.move(dragPoint.x+24,dragPoint.y+12,{steps:12});await page.mouse.up();await ready();
+      assert.equal(await page.evaluate(()=>reads),0,'small consecutive drag movements rotate the booklet without opening it');
+      assert.notDeepEqual(await page.evaluate(()=>debug.discInteraction.manualObject.quaternion.toArray()),dragRotation);
+      const readPoint=await visiblePoint('manual');await page.mouse.click(readPoint.x,readPoint.y);
+      assert.equal(await page.evaluate(()=>reads),1,'one click on an extracted manual opens the reader');
+      assert.equal(await page.evaluate(()=>debug.discInteraction.manualObject.visible),false);
+      await page.evaluate(()=>viewer.returnManual());await ready();
+      assert.equal(await page.evaluate(()=>viewer.isManualRemoved&&debug.discInteraction.manualObject.visible),true,'closing the reader preserves the extracted manual');
       const boxRotation=await page.evaluate(()=>debug.root.quaternion.toArray());
       const before=await page.evaluate(()=>debug.discInteraction.manualObject.quaternion.toArray());
       await page.evaluate(async()=>{viewer.rotate(30,20);viewer.zoom(.2);await settle();});
@@ -77,7 +86,9 @@ test('Manuals can be inspected outside their cases, share focus with discs and r
       assert.equal(await page.locator('[data-disc-return]:visible').count(),0,'case focus hides return buttons');
       assert.equal(await page.evaluate(()=>debug.root.position.z>debug.discInteraction.manualObject.position.z),true);
       const bookletPoint=await visiblePoint('manual');await page.mouse.click(bookletPoint.x,bookletPoint.y);await ready();
-      assert.equal(await page.locator('#stage').getAttribute('data-disc-focus'),'manual','clicking the background booklet brings it forward');
+      assert.equal(await page.evaluate(()=>reads),2,'clicking a visible background booklet also opens its reader');
+      await page.evaluate(()=>viewer.returnManual());await ready();
+      assert.equal(await page.locator('#stage').getAttribute('data-disc-focus'),'manual','closing the reader brings the background booklet forward');
       if(await page.evaluate(()=>viewer.hasDisc)){
         await page.evaluate(()=>viewer.removeDisc());await ready();
         await shadowCoverage(platform+' with disc in foreground');
@@ -95,7 +106,7 @@ test('Manuals can be inspected outside their cases, share focus with discs and r
       assert.equal(await page.locator('#stage').getAttribute('data-disc-focus'),'box','Examine box selects the case from the context menu');
       await page.locator('#stage').click({button:'right',position:{x:50,y:50}});
       await page.getByRole('menuitem',{name:'manual.read',exact:true}).click();
-      assert.equal(await page.evaluate(()=>reads),1,'reading remains a separate action');
+      assert.equal(await page.evaluate(()=>reads),3,'the context menu still offers the reader directly');
       assert.equal(await page.evaluate(()=>debug.discInteraction.manualObject.visible),false);
       await page.evaluate(()=>viewer.returnManual());
       assert.equal(await page.evaluate(()=>viewer.isManualRemoved&&debug.discInteraction.manualObject.visible),true,'closing the reader returns to inspecting the extracted manual');

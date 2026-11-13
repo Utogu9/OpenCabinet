@@ -448,7 +448,8 @@ export async function createViewer(host, options={}) {
     if(!drag || (event&&drag.id!==event.pointerId))return;
     const previous=drag;drag=null;host.classList.remove('dragging');
     if(host.hasPointerCapture?.(previous.id))host.releasePointerCapture(previous.id);
-    if(event?.type==='pointerup'&&!previous.moved&&previous.manual)api.removeManual();
+    if(event?.type==='pointerup'&&!previous.moved&&previous.readManual)api.readManual();
+    else if(event?.type==='pointerup'&&!previous.moved&&previous.manual)api.removeManual();
     else if(event?.type==='pointerup'&&!previous.moved&&previous.poster)api.removePoster();
     else if(event?.type==='pointerup'&&!previous.moved&&previous.disc)api.removeDisc();
   }
@@ -494,13 +495,13 @@ export async function createViewer(host, options={}) {
     event.preventDefault();host.focus({preventScroll:true});
     const wasDiscFocused=discInteraction.focused;
     const media=discInteraction.select(event),rect=discInteraction.interactionRect(host.getBoundingClientRect());
-    drag={id:event.pointerId,rect,point:point(event,rect),x:event.clientX,y:event.clientY,moved:false,media,manual:!media&&!wasDiscFocused&&hitsManual(event),poster:!media&&!wasDiscFocused&&discInteraction.hitPoster(event),disc:!media&&discInteraction.hit(event)};
+    drag={id:event.pointerId,rect,point:point(event,rect),x:event.clientX,y:event.clientY,startX:event.clientX,startY:event.clientY,moved:false,media,readManual:discInteraction.pickedManual,manual:!media&&!wasDiscFocused&&hitsManual(event),poster:!media&&!wasDiscFocused&&discInteraction.hitPoster(event),disc:!media&&discInteraction.hit(event)};
     host.setPointerCapture(event.pointerId);host.classList.add('dragging');
   });
   listen(host,'pointermove',event=>{
     if(!drag||event.pointerId!==drag.id)return;
-    drag.moved ||= Math.hypot(event.clientX-drag.x,event.clientY-drag.y)>6;
-    if(drag.manual&&!drag.moved)return;
+    drag.moved ||= Math.hypot(event.clientX-drag.startX,event.clientY-drag.startY)>6;
+    if((drag.manual||drag.readManual)&&!drag.moved)return;
     const next=point(event,drag.rect);
     if(drag.media){discInteraction.drag(drag.point,next,rotationLock);drag.point=next;return;}
     if(rotationLock==='free')rotation=math.multiply(math.between(drag.point,next),rotation);

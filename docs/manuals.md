@@ -14,7 +14,9 @@ y **Inspeccionar manual** para cambiar el foco sin botones adicionales en el vis
 Disco y manual pueden permanecer fuera a la vez, con giro y zoom independientes.
 El control principal de frente/dorso actúa sobre el objeto seleccionado.
 
-**Leer manual** abre el lector como una acción aparte. Al cerrarlo, un manual
+Un clic sobre el manual ya extraído abre el lector; arrastrarlo sigue girando
+el librito sin abrirlo. **Leer manual** también permite abrirlo directamente.
+Al cerrarlo, un manual
 que estaba extraído vuelve a su vista 3D y conserva su posición y orientación.
 **Volver a guardar manual** lo devuelve a la caja; el disco permanece fuera
 si ya se había extraído. La vista lado a lado también admite los tres objetos.

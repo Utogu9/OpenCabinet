@@ -410,7 +410,8 @@ export async function createModelViewer(host,options={},definition) {
   function stopDrag(event) {
     if(!drag||(event&&drag.id!==event.pointerId))return;
     const previous=drag,id=drag.id;drag=null;host.classList.remove('dragging');if(host.hasPointerCapture?.(id))host.releasePointerCapture(id);
-    if(event?.type==='pointerup'&&previous.manual&&!previous.moved)api.removeManual();
+    if(event?.type==='pointerup'&&previous.readManual&&!previous.moved)api.readManual();
+    else if(event?.type==='pointerup'&&previous.manual&&!previous.moved)api.removeManual();
     else if(event?.type==='pointerup'&&previous.poster&&!previous.moved)api.removePoster();
     else if(event?.type==='pointerup'&&previous.disc&&!previous.moved)api.removeDisc();
   }
@@ -445,13 +446,13 @@ export async function createModelViewer(host,options={},definition) {
   listen(host,'pointerdown',event=>{
     if(event.button!==0||!game||menu?.contains(event.target))return;event.preventDefault();host.focus({preventScroll:true});
     const wasDiscFocused=discInteraction.focused;
-    const media=discInteraction.select(event),rect=discInteraction.interactionRect(host.getBoundingClientRect());drag={id:event.pointerId,rect,point:arcballPoint(event,rect),x:event.clientX,y:event.clientY,startX:event.clientX,startY:event.clientY,moved:false,media,manual:!media&&!wasDiscFocused&&hitsManual(event),poster:!media&&!wasDiscFocused&&discInteraction.hitPoster(event),disc:!media&&discInteraction.hit(event)};
+    const media=discInteraction.select(event),rect=discInteraction.interactionRect(host.getBoundingClientRect());drag={id:event.pointerId,rect,point:arcballPoint(event,rect),x:event.clientX,y:event.clientY,startX:event.clientX,startY:event.clientY,moved:false,media,readManual:discInteraction.pickedManual,manual:!media&&!wasDiscFocused&&hitsManual(event),poster:!media&&!wasDiscFocused&&discInteraction.hitPoster(event),disc:!media&&discInteraction.hit(event)};
     host.setPointerCapture(event.pointerId);host.classList.add('dragging');
   });
   listen(host,'pointermove',event=>{
     if(!drag||drag.id!==event.pointerId)return;const next=arcballPoint(event,drag.rect);
     drag.moved ||= Math.hypot(event.clientX-drag.startX,event.clientY-drag.startY)>6;
-    if(drag.manual&&!drag.moved)return;
+    if((drag.manual||drag.readManual)&&!drag.moved)return;
     if(drag.media){discInteraction.drag(drag.point,next,rotationLock);drag.point=next;return;}
     if(rotationLock==='free')rotation=math.multiply(math.between(drag.point,next),rotation);
     else rotation=math.multiply(math.axisAngle(rotationLock==='x'?[0,1,0]:[1,0,0],rotationLock==='x'?(event.clientX-drag.x)*180/drag.rect.width:(event.clientY-drag.y)*180/drag.rect.height),rotation);

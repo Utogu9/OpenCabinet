@@ -46,7 +46,7 @@ export function createDiscInteraction({host,reference,root,scene,camera,meshes,g
   const disc=make('disc'),manual=make('manual'),poster=make('poster'),entries=[disc,manual,poster];
   const media=discMeshes||meshes.filter(mesh=>opticalMaterials.has(mesh.material?.name));
   const raycaster=new THREE.Raycaster(),pointer=new THREE.Vector2();
-  let focused='box',weights={box:1,disc:0,manual:0,poster:0},focusTransition=null,tools=null,disposed=false,lastBounds=null;
+  let focused='box',picked=null,weights={box:1,disc:0,manual:0,poster:0},focusTransition=null,tools=null,disposed=false,lastBounds=null;
   let extent=1,boxZoom=1,boxFactor=1,clipOverride=null,sideBySide=false,layoutAmount=0,layoutTransition=null;
   const out=()=>entries.filter(entry=>entry.removed);
   const current=()=>entries.find(entry=>entry.removed&&entry.kind===focused&&!entry.reading);
@@ -100,7 +100,7 @@ export function createDiscInteraction({host,reference,root,scene,camera,meshes,g
   }
   function restore(){
     restoreClipping();entries.forEach(restoreEntry);root.position.set(0,0,0);
-    focused='box';weights={box:1,disc:0,manual:0,poster:0};boxZoom=boxFactor=1;focusTransition=layoutTransition=null;layoutAmount=sideBySide?1:0;
+    focused='box';picked=null;weights={box:1,disc:0,manual:0,poster:0};boxZoom=boxFactor=1;focusTransition=layoutTransition=null;layoutAmount=sideBySide?1:0;
     delete host.dataset.discAnimation;refresh();
   }
   function cast(event,objects){
@@ -160,14 +160,16 @@ export function createDiscInteraction({host,reference,root,scene,camera,meshes,g
     get object(){return disc.group;},get manualObject(){return manual.group;},get manualRemoved(){return manual.removed;},
     get posterObject(){return poster.group;},get posterRemoved(){return poster.removed;},get posterAvailable(){return available(poster);},
     get manualAvailable(){return available(manual);},
+    get pickedManual(){return picked==='manual'&&manual.removed&&!manual.reading&&!manual.transition;},
     hit(event){return available(disc)&&!disc.removed&&isOpen()&&!!cast(event,media);},
     hitPoster(event){return available(poster)&&!poster.removed&&isOpen()&&isPosterVisible()&&!!cast(event,getPosterMeshes());},
     select(event){
+      picked=null;
       if(!out().length||tools?.contains(event.target))return false;
       const hits=[];
       for(const entry of out())if(!entry.reading){const hit=cast(event,entry.centered.children);if(hit)hits.push({kind:entry.kind,distance:hit.distance});}
       const box=cast(event,meshes.filter(visible));if(box)hits.push({kind:'box',distance:box.distance});
-      hits.sort((a,b)=>a.distance-b.distance);if(hits.length)focus(hits[0].kind);return api.focused;
+      hits.sort((a,b)=>a.distance-b.distance);if(hits.length){picked=hits[0].kind;focus(picked);}return api.focused;
     },
     interactionRect(fallback){
       const entry=current();if(!entry)return fallback;
