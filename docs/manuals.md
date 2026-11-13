@@ -1,5 +1,10 @@
 # Manuales PDF y CBZ
 
+En el visor 3D, mantener presionado el botón central del mouse (la rueda) y
+arrastrar desplaza la vista horizontal y verticalmente, sin girar los objetos
+ni cambiar el zoom. Funciona también con el póster, manual o disco extraídos.
+La tecla **Inicio / Home** vuelve a centrar la vista.
+
 En los visores Three.js, un clic sobre el manual de una caja abierta lo saca
 como un librito 3D, sin abrir el lector. También se puede usar **Sacar manual**
 en el menú contextual, incluido Couch Mode. El manual pasa a primer plano;

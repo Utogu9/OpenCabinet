@@ -701,6 +701,7 @@ body.resizing-details * {
 }
 
 .game-box-stage.dragging { cursor: grabbing; }
+.game-box-stage.panning { cursor: move; }
 .playtime-with-history { display:flex;align-items:center;gap:7px; }
 .session-history-button { border:0;background:transparent;color:var(--text-muted);opacity:.6;cursor:pointer;padding:0 3px;font-size:1rem; }
 .session-history-button:hover,.session-history-button:focus-visible { opacity:1; }

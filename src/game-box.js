@@ -185,6 +185,7 @@
     let manualResolved = false;
     let rejectedFullCover = false;
     let fullPreviewUrl = null, fullPreviewController = null;
+    const cameraPan=!geometryOnly&&globalThis.OpenCabinetCameraPan?.create({host,enabled:()=>!!game,schedule,onStart:()=>{stopDrag();closeMenu();}});
     function jewelManualCover(data) {
       const front=faces.find(face=>face.element.dataset.face==='front')?.element;
       if(!front)return;
@@ -348,7 +349,8 @@
       }
       const center = movement && movement.center.some(value=>Math.abs(value)>1e-9) ? ` translate3d(${-movement.center[0]*scale}px,0,${-movement.center[1]*scale}px)` : "";
       const ratio = scale / geometryScale;
-      model.style.transform = `matrix3d(${matrix(rotation).join(",")})` + center + (ratio < 1 ? ` scale3d(${ratio},${ratio},${ratio})` : "");
+      const pan=cameraPan?.offset,panTransform=pan&&(pan.x||pan.y)?`translate3d(${pan.x*rect.width}px,${pan.y*rect.height}px,0) `:"";
+      model.style.transform = panTransform + `matrix3d(${matrix(rotation).join(",")})` + center + (ratio < 1 ? ` scale3d(${ratio},${ratio},${ratio})` : "");
       const lidRotation = movement && axisAngle([0,1,0], -movement.angle);
       const spineRotation = movement && axisAngle([0,1,0], -movement.angle/2);
       const matrices = { tray: matrix(rotation), lid: matrix(lidRotation ? multiply(rotation, lidRotation) : rotation),
@@ -1098,7 +1100,7 @@
         for (const face of faces) Object.assign(face.element.style, {width:`${face.width}px`,height:`${face.height}px`});
         return {profile,faces:[...faces],paperLayout};
       },
-      suspend() { suspended = true; stopDrag(); if (frame !== null) { cancelAnimationFrame(frame); frame = null; } },
+      suspend() { suspended = true; cameraPan?.stop(); stopDrag(); if (frame !== null) { cancelAnimationFrame(frame); frame = null; } },
       resume() { if (!disposed) { suspended = false; schedule(); } },
       update(nextGame, nextImages, nextSettings = null) {
         nextSettings = resolveSettings(nextSettings, nextGame.box_3d);
@@ -1108,7 +1110,7 @@
           nextImages.filter((image) => ["box_full", "cover", "back_cover", "inlay", "spine", "disc", "cart_front", "cart_back", "cart_label"].includes(image.kind)), nextSettings]);
         if (nextKey === key || disposed) return;
         closeMenu();
-        if (game?.id !== nextGame.id) { rotation = initialRotation(); viewSide = "front"; zoom = 1; opened = 0; openTarget = false; opening = null; }
+        if (game?.id !== nextGame.id) { cameraPan?.reset(); rotation = initialRotation(); viewSide = "front"; zoom = 1; opened = 0; openTarget = false; opening = null; }
         stopDrag(); key = nextKey; game = nextGame; images = nextImages; settings = nextSettings; rejectedFullCover = false;
         host.setAttribute("aria-label", globalThis.OpenCabinetI18n.t("msg.c8c86a39c7", game.title));
         profile = profileFor(game.platform, null, game.rom_path, settings); rebuild();
@@ -1136,7 +1138,7 @@
         stopDrag(); rotation = next; viewSide = null; schedule();
       },
       refreshManual() { clearManual(); layoutScale = null; ensureManual(); schedule(); },
-      reset() { stopDrag(); setOpen(false, false); rotation = initialRotation(); viewSide = "front"; zoom = 1; schedule(); },
+      reset() { cameraPan?.reset(); stopDrag(); setOpen(false, false); rotation = initialRotation(); viewSide = "front"; zoom = 1; schedule(); },
       showBack() { stopDrag(); setOpen(false, false); rotation = axisAngle([0,1,0], 180); viewSide = "back"; schedule(); },
       toggleSide() {
         const back = viewSide === "front" && !openTarget && opened === 0;
@@ -1146,12 +1148,13 @@
       },
       zoom(delta) { zoom = Math.max(0.65, Math.min(1.7, zoom + delta)); schedule(); },
       clear() {
+        cameraPan?.reset();
         closeMenu();
         stopDrag(); revision++; clearManual(); interior = null; clearTextures(); model.replaceChildren(); game = profile = key = null; faces = []; parts = null;
         images = []; opened = 0; openTarget = false; opening = null; interiorBuilt = false; notifyOpening();
       },
       dispose() {
-        api.clear(); disposed = true; observer.disconnect();
+        api.clear(); cameraPan?.dispose(); disposed = true; observer.disconnect();
         if (frame !== null) cancelAnimationFrame(frame);
         listeners.forEach(([target, name, handler, options]) => target.removeEventListener?.(name, handler, options)); host.replaceChildren();
       },

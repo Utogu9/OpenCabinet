@@ -59,6 +59,19 @@ test('Posters stay folded beneath booklets, unfold with paired artwork and share
       assert.ok(flat.size[0]>folded.size[0]*2.9&&flat.size[1]>=folded.size[1]*.999,'the entire sheet unfolds beyond the original folded footprint '+JSON.stringify({folded,flat}));
       assert.ok(Math.abs(flat.aspect-1.5)<1e-5,'the unfolded poster keeps the original scan aspect ratio '+JSON.stringify(flat));
       assert.equal(flat.front,900);assert.equal(flat.back,256);
+      const viewport=await page.locator('#stage').boundingBox();
+      const panSnapshot=()=>page.evaluate(async()=>{
+        const THREE=await import('/src/vendor/three/three.module.js');
+        return {point:new THREE.Vector3().project(debug.camera).toArray(),box:debug.root.quaternion.toArray(),poster:debug.discInteraction.posterObject.quaternion.toArray(),manual:debug.discInteraction.manualObject.quaternion.toArray(),focus:document.querySelector('#stage').dataset.discFocus};
+      });
+      const beforePan=await panSnapshot(),x=viewport.x+viewport.width*.6,y=viewport.y+viewport.height*.45;
+      await page.mouse.move(x,y);await page.mouse.down({button:'middle'});await page.mouse.move(x+60,y+40,{steps:3});await page.mouse.up({button:'middle'});
+      await page.waitForFunction(previous=>Math.abs(new Float64Array(debug.camera.projectionMatrix.elements)[8]-previous)>1e-5,-beforePan.point[0]);
+      const afterPan=await panSnapshot();
+      assert.ok(Math.abs((afterPan.point[0]-beforePan.point[0])*viewport.width/2-60)<1,'middle drag shifts the camera view horizontally');
+      assert.ok(Math.abs((beforePan.point[1]-afterPan.point[1])*viewport.height/2-40)<1,'middle drag shifts the camera view vertically');
+      for(const key of ['box','poster','manual','focus'])assert.deepEqual(afterPan[key],beforePan[key],'panning never rotates or selects objects');
+      await page.mouse.down({button:'middle'});await page.mouse.move(x,y,{steps:3});await page.mouse.up({button:'middle'});
       const manualRotation=await page.evaluate(()=>debug.discInteraction.manualObject.quaternion.toArray());
       await page.evaluate(async()=>{viewer.rotate(25,15);viewer.zoom(.2);await settle();});
       assert.deepEqual(await page.evaluate(()=>debug.discInteraction.manualObject.quaternion.toArray()),manualRotation);

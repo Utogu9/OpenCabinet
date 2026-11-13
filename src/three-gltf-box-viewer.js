@@ -8,6 +8,7 @@ import { createSwitchShells } from './three-switch-shell.js';
 import { prepareRenderGroup, createRenderLease, releaseSceneGpu, createFrameHold } from './three-box-session.js';
 import { createDiscInteraction, discFinish, applyDiscFinish } from './three-disc-interaction.js';
 import { createBoxPoster } from './three-poster.js';
+import './box-camera-pan.js';
 
 // Cache source bytes; individual viewers own their meshes, textures and animations.
 const sourceTasks=new Map();
@@ -146,6 +147,7 @@ export async function createModelViewer(host,options={},definition) {
   for(let i=0;i<=4;i++){pose(i/4);frames.push(new THREE.Box3().setFromObject(model,true));}
   pose(0);
   let game=null,profile=null,key=null,revision=0,controller=null,disposed=false,renderLease=null;
+  const cameraPan=globalThis.OpenCabinetCameraPan.create({host,enabled:()=>!!game,schedule,onStart:()=>{stopDrag();closeMenu();}});
   const poster=createBoxPoster({getSlot:()=>{
     if(manualLoading||!manualGroup.parent)return null;
     if(!manual&&!procedural?.manualSize){procedural?.fitManual?.({width:profile.width*.8,height:profile.height*.9},{pageCount:1});manualGroup.visible=false;}
@@ -257,7 +259,7 @@ export async function createModelViewer(host,options={},definition) {
     if(camera.near!==near||camera.far!==far){camera.near=near;camera.far=far;camera.updateProjectionMatrix();}
     camera.position.set(0,0,cameraDistance);camera.lookAt(0,0,0);
     poster.frame(time,opened>.05,!!manual&&!manualExtracted&&!discInteraction.manualRemoved);
-    discInteraction.layout(time,bounds);procedural?.beforeRender?.({renderer,root,bounds,opened,discRemoved:discInteraction.removed,detached:discInteraction.removed||discInteraction.manualRemoved||discInteraction.posterRemoved});renderer.render(scene,camera);frameHold.release();
+    discInteraction.layout(time,bounds);cameraPan.apply(camera);procedural?.beforeRender?.({renderer,root,bounds,opened,discRemoved:discInteraction.removed,detached:discInteraction.removed||discInteraction.manualRemoved||discInteraction.posterRemoved});renderer.render(scene,camera);frameHold.release();
     retiredTextures.splice(0).forEach(texture=>texture.dispose());
     host.dataset.triangles=String(renderer.info.render.triangles);host.dataset.drawCalls=String(renderer.info.render.calls);
   }
@@ -469,7 +471,7 @@ export async function createModelViewer(host,options={},definition) {
   });
   const resize=new ResizeObserver(()=>{closeMenu();schedule();});resize.observe(host);
   const api={
-    suspend(release=false){stopDrag();renderLease.suspend(release);if(frame!==null){cancelAnimationFrame(frame);frame=null;}},
+    suspend(release=false){cameraPan.stop();stopDrag();renderLease.suspend(release);if(frame!==null){cancelAnimationFrame(frame);frame=null;}},
     resume(){if(!disposed)renderLease.resume();},
     clearArtwork(){discInteraction.reset();poster.clear();revision++;controller?.abort();key=null;clearManual();composed.clear();
       if(!options.carousel){dynamicTextures.forEach(texture=>texture.dispose());dynamicTextures.clear();}for(const kind of Object.keys(pictures))delete pictures[kind];
@@ -518,7 +520,7 @@ export async function createModelViewer(host,options={},definition) {
       stopDrag();rotation=next;side=null;schedule();
     },
     zoom(delta){if(discInteraction.zoom(delta))return;zoom=Math.max(.65,Math.min(1.7,zoom+delta));schedule();},
-    reset(){if(discInteraction.resetView())return;stopDrag();api.setOpen(false,false);rotation=initialRotation();side='front';zoom=1;schedule();},
+    reset(){cameraPan.reset();if(discInteraction.resetView())return;stopDrag();api.setOpen(false,false);rotation=initialRotation();side='front';zoom=1;schedule();},
     showBack(){if(discInteraction.focused){discInteraction.flip(true);return;}stopDrag();api.setOpen(false,false);rotation=math.axisAngle([0,1,0],180);side='back';schedule();},
     toggleSide(){if(discInteraction.focused){discInteraction.flip();return;}const back=side==='front'&&!openTarget;api.setOpen(false,false);rotation=back?math.axisAngle([0,1,0],180):initialRotation();side=back?'back':'front';schedule();},
     readManual(){if(!manual||(!openTarget&&!discInteraction.manualRemoved)||manualExtracted)return false;
@@ -533,12 +535,12 @@ export async function createModelViewer(host,options={},definition) {
     get hasPoster(){return poster.available;},get isPosterRemoved(){return discInteraction.posterRemoved;},get canRemovePoster(){return poster.visible&&(!manual||manualExtracted||discInteraction.manualRemoved);},
     removePoster:()=>discInteraction.removePoster(),putPosterBack:()=>discInteraction.returnPoster(),examinePoster:()=>discInteraction.examinePoster(),togglePoster:()=>discInteraction.togglePoster(),get isPosterUnfolded(){return poster.unfolded;},
     refreshManual(){if(game)void preloadManual();},
-    clear(){discInteraction.reset();poster.clear();revision++;controller?.abort();controller=null;stopDrag();closeMenu();key=null;game=null;composed.clear();
+    clear(){cameraPan.reset();discInteraction.reset();poster.clear();revision++;controller?.abort();controller=null;stopDrag();closeMenu();key=null;game=null;composed.clear();
       clearManual();
       if(!options.carousel){dynamicTextures.forEach(texture=>texture.dispose());dynamicTextures.clear();}for(const kind of Object.keys(pictures))delete pictures[kind];
       for(const name of ['Cover Outside','Cover Inside','Cartridge Cover','UMD Label']){const material=materials.get(name);if(material){if(options.carousel)assign(name,null);else {material.map=options.useModelArtwork?[...originalMaterials].find(value=>value.name===name)?.map||null:null;material.needsUpdate=true;}}}
       if(frame!==null){cancelAnimationFrame(frame);frame=null;}if(!renderLease?.lost&&!renderLease?.paused)renderer.clear();notify();},
-    dispose(){if(disposed)return;api.clear();discInteraction.dispose();poster.dispose();disposed=true;resize.disconnect();listeners.forEach(([target,name,callback,config])=>target.removeEventListener(name,callback,config));
+    dispose(){if(disposed)return;api.clear();cameraPan.dispose();discInteraction.dispose();poster.dispose();disposed=true;resize.disconnect();listeners.forEach(([target,name,callback,config])=>target.removeEventListener(name,callback,config));
       dynamicTextures.forEach(texture=>texture.dispose());dynamicTextures.clear();
       retiredTextures.splice(0).forEach(texture=>texture.dispose());blankTextures.forEach(texture=>texture.dispose());blankTextures.clear();
       mixer.stopAllAction();mixer.uncacheRoot(model);releaseModel(model);originalMaterials.forEach(value=>value.dispose());
