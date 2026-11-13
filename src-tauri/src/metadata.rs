@@ -27,7 +27,7 @@ mod bulk;
 pub(crate) mod resume;
 // Older catalogs merged distinct categories into "artwork" or "other".
 // Reindex once to recover the original types from the source XML.
-const CATALOG_MEDIA_VERSION: i64 = 2;
+const CATALOG_MEDIA_VERSION: i64 = 3;
 const GAME_IMAGE_TYPES: &[(&str, &str)] = &[
     ("Box - Front", "cover"),
     ("Clear Logo", "logo"),
@@ -46,7 +46,8 @@ const GAME_IMAGE_TYPES: &[(&str, &str)] = &[
     ("Disc", "disc"),
     ("Banner", "banner"),
     ("Icon", "icon"),
-    ("Poster", "poster"),
+    ("Poster - Front", "poster_front"),
+    ("Poster - Back", "poster_back"),
     ("Square", "square"),
     ("Fanart - Background", "fanart_background"),
     ("Fanart - Box - Front", "fanart_cover"),
@@ -69,6 +70,9 @@ const GAME_IMAGE_TYPES: &[(&str, &str)] = &[
 pub(super) fn valid_image_kind(kind: &str) -> bool {
     // Manual cartridge labels remain valid even without a source category.
     kind == "cart_label" || valid_download_image_kind(kind)
+}
+pub(crate) fn canonical_image_kind(kind: &str) -> &str {
+    if kind == "poster" { "poster_front" } else { kind }
 }
 fn valid_download_image_kind(kind: &str) -> bool {
     matches!(kind, "artwork" | "other" | "cart_label") || GAME_IMAGE_TYPES.iter().any(|(_, key)| *key == kind)
@@ -740,6 +744,7 @@ fn nonempty(fields: &HashMap<String, String>, field: &str) -> Option<String> {
 }
 
 fn image_kind(kind: &str) -> &'static str {
+    if kind == "Poster" { return "poster_front"; }
     if let Some((_, key)) = GAME_IMAGE_TYPES.iter().find(|(source, _)| *source == kind) {
         return key;
     }

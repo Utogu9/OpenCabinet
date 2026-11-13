@@ -4,6 +4,8 @@
     "name": "English (United States)"
   },
   "messages": {
+    "image.kind.posterFront": "Poster (front)",
+    "image.kind.posterBack": "Poster (back)",
     "retroarch.progress.preparing": "Preparing RetroArch",
     "retroarch.progress.stable": "Finding the stable version",
     "retroarch.progress.downloading": "Downloading RetroArch",

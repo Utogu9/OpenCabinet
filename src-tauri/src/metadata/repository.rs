@@ -12,7 +12,7 @@ const RAW_URL: &str = "https://raw.githubusercontent.com/Utogu9/OpenCabinet-BDD/
 const CONFIG: &str = "metadata/source.json";
 const MIN_REPOSITORY_ID: i64 = 1_000_000_000_000;
 // Retain release names and canonical title aliases for regional ROM matching.
-const REPOSITORY_GAME_VERSION: i64 = 9;
+const REPOSITORY_GAME_VERSION: i64 = 10;
 
 #[derive(Default, Serialize, Deserialize)]
 struct Settings {
@@ -469,6 +469,7 @@ fn kind(value: &str) -> Option<String> {
         "cover_front" => "cover",
         "cover_back" => "back_cover",
         "cover_full" => "box_full",
+        "poster" => "poster_front",
         "label" | "cart_label" => "cart_label",
         other => other,
     };
@@ -1746,6 +1747,26 @@ mod tests {
         }
         let temporary:i64=conn.query_row("SELECT count(*) FROM sqlite_temp_master",[],|r|r.get(0)).unwrap();
         assert_eq!(temporary,0,"filename fallbacks must use exact indexed lookups before preparing fuzzy search");
+    }
+
+    #[test]
+    fn repository_posters_keep_fronts_backs_and_old_names_distinct() {
+        let files=Sandbox::new();let mut conn=files.catalog();let source="Sony - PlayStation 2";
+        let fixture=files.job.directory.join("posters.json");
+        fs::write(&fixture,serde_json::json!({"schema_version":2,"system":source,"games":{"TEST":{"entries":[{"name":"Example Game"}],"images":{
+            "poster":{"path":"TEST/poster.webp"},
+            "poster_front2":{"path":"TEST/front.webp"},
+            "poster_back":{"path":"TEST/back.webp"}
+        }}}}).to_string()).unwrap();
+        insert_platform(&mut conn,&files.job,source,&fixture,|_|()).unwrap();
+        let available=available_image_types(&conn,&[token(&format!("{source}/TEST"))],&files.job).unwrap();
+        assert_eq!(available.counts["poster_front"],2);
+        assert_eq!(available.counts["poster_back"],1);
+        assert!(!available.counts.contains_key("poster"));
+        assert_eq!(kind("poster_back99").as_deref(),Some("poster_back"));
+        assert_eq!(image_kind("Poster"),"poster_front");
+        assert_eq!(image_kind("Poster - Front"),"poster_front");
+        assert_eq!(image_kind("Poster - Back"),"poster_back");
     }
 
     #[test]

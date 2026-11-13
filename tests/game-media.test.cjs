@@ -1392,6 +1392,27 @@ test("Editing can add, reclassify and remove images before saving", async () => 
   assert.equal(app.get("game-edit-modal").classList.contains("hidden"), true);
 });
 
+test('Poster front and back can be edited, downloaded and displayed as independent image types',async()=>{
+  const app=mediaApp({storage:new Map([['opencabinet.imageTypes',JSON.stringify({poster:true})]]),handlers:{get_metadata_image_types:()=>({counts:{poster_front:1,poster_back:1},skipped_games:0})}});
+  await app.open();
+  assert.ok(app.get('game-image-kind').children.some(option=>option.value==='poster_front'));
+  assert.ok(app.get('game-image-kind').children.some(option=>option.value==='poster_back'));
+  assert.equal(app.get('game-image-kind').children.some(option=>option.value==='poster'),false);
+  for(const kind of ['poster_front','poster_back']){
+    app.get('game-image-kind').value=kind;app.picker(['C:/posters/'+kind+'.webp']);await app.get('btn-add-game-images').trigger('click');
+  }
+  await app.save();
+  const saved=app.calls.find(call=>call.command==='update_game').args.details.images;
+  assert.deepEqual(saved.filter(image=>image.path.startsWith('C:/posters/')).map(image=>image.kind),['poster_front','poster_back']);
+  app.evaluate('renderGameMedia(allGames[0])');
+  await app.get('gallery-thumbnails').children.at(-1).trigger('click');
+  assert.match(app.get('gallery-viewer').children[0].alt,/Póster \(dorso\)/);
+  await app.open();await app.get('btn-download-game-images').trigger('click');
+  assert.equal(app.quantity('poster_front').type,'checkbox');assert.equal(app.quantity('poster_back').type,'checkbox');
+  assert.equal(app.quantity('poster_front').checked,true,'the old poster download preference becomes the front preference');
+  assert.equal(app.quantity('poster_back').checked,false,'the new back type is an independent choice');
+});
+
 test('Cartridge labels can be added manually, saved and shown separately from cartridge photos',async()=>{
   const app=mediaApp({handlers:{get_metadata_image_types:()=>({counts:{cover:1},skipped_games:0})}});
   await app.open();

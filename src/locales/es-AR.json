@@ -4,6 +4,8 @@
     "name": "Español (Argentina)"
   },
   "messages": {
+    "image.kind.posterFront": "Póster (frente)",
+    "image.kind.posterBack": "Póster (dorso)",
     "retroarch.progress.preparing": "Preparando RetroArch",
     "retroarch.progress.stable": "Buscando versión estable",
     "retroarch.progress.downloading": "Descargando RetroArch",

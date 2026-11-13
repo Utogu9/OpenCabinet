@@ -105,7 +105,8 @@ const GAME_IMAGE_TYPES = [
   ["disc", globalThis.OpenCabinetI18n.t("msg.62571160f3")],
   ["banner", globalThis.OpenCabinetI18n.t("msg.b7f4d98f98")],
   ["icon", globalThis.OpenCabinetI18n.t("msg.051fec278e")],
-  ["poster", globalThis.OpenCabinetI18n.t("msg.4044d84f08")],
+  ["poster_front", globalThis.OpenCabinetI18n.t("image.kind.posterFront")],
+  ["poster_back", globalThis.OpenCabinetI18n.t("image.kind.posterBack")],
   ["square", globalThis.OpenCabinetI18n.t("msg.0b2ea54ec6")],
   ["fanart_background", globalThis.OpenCabinetI18n.t("msg.8d1b2e3aa3")],
   ["fanart_cover", globalThis.OpenCabinetI18n.t("msg.64e40930f7")],
@@ -677,6 +678,7 @@ const DEFAULT_IMAGE_TYPES = ["cover", "logo", "screenshot", "title_screen", "bac
 function readImageTypePreferences() {
   try {
     const saved = JSON.parse(window.localStorage.getItem(IMAGE_TYPE_PREFERENCES_KEY));
+    if(saved&&typeof saved.poster_front!=='boolean'&&typeof saved.poster==='boolean')saved.poster_front=saved.poster;
     return new Map(GAME_IMAGE_TYPES.filter(([kind]) => typeof saved?.[kind] === "boolean").map(([kind]) => [kind, saved[kind]]));
   } catch { return new Map(); }
 }

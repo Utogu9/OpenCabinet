@@ -95,9 +95,14 @@ pub struct Game {
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct GameImage {
     path: String,
+    #[serde(deserialize_with = "deserialize_image_kind")]
     kind: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     source: Option<media_provenance::Source>,
+}
+fn deserialize_image_kind<'de, D: serde::Deserializer<'de>>(deserializer: D) -> Result<String, D::Error> {
+    let kind = String::deserialize(deserializer)?;
+    Ok(metadata::canonical_image_kind(&kind).to_owned())
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -361,7 +366,8 @@ fn init_game_images(conn: &Connection) -> rusqlite::Result<()> {
          CREATE TRIGGER IF NOT EXISTS remove_game_images AFTER DELETE ON games
          BEGIN DELETE FROM game_images WHERE game_id = OLD.id; END;
          INSERT OR IGNORE INTO game_images (game_id, path, kind, position)
-         SELECT id, cover_path, 'cover', 0 FROM games WHERE cover_path IS NOT NULL AND cover_path <> '';",
+         SELECT id, cover_path, 'cover', 0 FROM games WHERE cover_path IS NOT NULL AND cover_path <> '';
+         UPDATE game_images SET kind='poster_front' WHERE kind='poster';",
     )?;
     media_provenance::init(conn)
 }
@@ -2469,6 +2475,22 @@ mod game_edit_tests {
         let new_root = directory.0.join("moved-library");
         hydrate_game_images(&mut moved, &new_root);
         assert!(Path::new(&moved.images[0].path).starts_with(new_root));
+    }
+
+    #[test]
+    fn poster_kinds_migrate_without_changing_paths_order_or_portable_identity() {
+        let conn = Connection::open_in_memory().unwrap();
+        conn.execute_batch("CREATE TABLE games(id INTEGER PRIMARY KEY,cover_path TEXT);").unwrap();
+        init_game_images(&conn).unwrap();
+        conn.execute_batch("INSERT INTO game_images VALUES(42,'images/front.webp','poster',3),(42,'images/back.webp','poster_back',4);").unwrap();
+        init_game_images(&conn).unwrap();
+        let images=read_game_images(&conn,42).unwrap();
+        assert_eq!(images.iter().map(|i|(i.path.as_str(),i.kind.as_str())).collect::<Vec<_>>(),vec![("images/front.webp","poster_front"),("images/back.webp","poster_back")]);
+        let legacy:GameImage=serde_json::from_value(serde_json::json!({"path":"poster.webp","kind":"poster"})).unwrap();
+        assert_eq!(legacy.kind,"poster_front");
+        assert_eq!(serde_json::to_value(legacy).unwrap()["kind"],"poster_front");
+        init_game_images(&conn).unwrap();
+        assert_eq!(read_game_images(&conn,42).unwrap().len(),2);
     }
 
     #[test]
