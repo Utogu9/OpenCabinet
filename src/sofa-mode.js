@@ -195,6 +195,14 @@
       const read=button(t('msg.297ba61d09'),()=>{closeBoxMenu();node._viewer?.readManual?.();});
       read.disabled=!node._viewer?.isOpen||node._manualState?.status!=='ready';read.setAttribute('role','menuitem');
       menu.append(open,read);
+      if(node._viewer?.isDiscRemoved||node._viewer?.isManualRemoved){
+        const examine=button(t('box.examine'),()=>{closeBoxMenu();node._viewer?.examineBox?.();});examine.setAttribute('role','menuitem');menu.append(examine);
+      }
+      if(node._viewer?.hasManual&&(node._viewer.isOpen||node._viewer.isManualRemoved)){
+        for(const [key,method] of node._viewer.isManualRemoved?[['manual.examine','examineManual'],['manual.putBack','putManualBack']]:[['manual.remove','removeManual']]){
+          const item=button(t(key),()=>{closeBoxMenu();node._viewer?.[method]?.();});item.setAttribute('role','menuitem');menu.append(item);
+        }
+      }
       if(node._viewer?.hasDisc&&(node._viewer.isOpen||node._viewer.isDiscRemoved)){
         for(const [key,method] of node._viewer.isDiscRemoved?[['disc.examine','examineDisc'],['disc.putBack','returnDisc']]:[['disc.remove','removeDisc'],['disc.examine','examineDisc']]){
           const item=button(t(key),()=>{closeBoxMenu();node._viewer?.[method]?.();});item.setAttribute('role','menuitem');menu.append(item);

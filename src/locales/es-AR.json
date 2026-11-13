@@ -4,6 +4,12 @@
     "name": "Español (Argentina)"
   },
   "messages": {
+    "box.examine": "Inspeccionar caja",
+    "manual.remove": "Sacar manual",
+    "manual.putBack": "Volver a guardar manual",
+    "manual.examine": "Inspeccionar manual",
+    "manual.focus": "Manual",
+    "manual.read": "Leer manual",
     "image.kind.posterFront": "Póster (frente)",
     "image.kind.posterBack": "Póster (dorso)",
     "retroarch.progress.preparing": "Preparando RetroArch",
@@ -1839,7 +1845,7 @@
     "disc.focusBox": "Caja",
     "disc.sideBySide": "Lado a lado",
     "disc.focusDisc": "Disco",
-    "disc.controls": "Seleccioná la caja o el disco para girar y acercar ese objeto.",
+    "disc.controls": "Seleccioná la caja, el disco o el manual para girar y acercar ese objeto.",
     "disc.flip": "Dar vuelta el disco",
     "disc.finish": "Reverso del disco",
     "disc.silver": "Plateado",

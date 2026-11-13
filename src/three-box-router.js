@@ -77,8 +77,11 @@
       setOpen(value,animate=true) {if(backend==='three:cardboard')return false;open=!!value;return viewer?.setOpen(open,animate) ?? !!isThree();},
       toggleOpen() {return api.setOpen(!api.isOpen);},
       readManual(...args) {return viewer?.readManual?.(...args) ?? false;},
+      get hasManual(){return viewer?.hasManual??false;},get isManualRemoved(){return viewer?.isManualRemoved??false;},
+      removeManual(){return viewer?.removeManual?.()??false;},putManualBack(){return viewer?.putManualBack?.()??false;},examineManual(){return viewer?.examineManual?.()??false;},
       get hasDisc(){return viewer?.hasDisc??false;},get isDiscRemoved(){return viewer?.isDiscRemoved??false;},
       removeDisc(){return viewer?.removeDisc?.()??false;},returnDisc(){return viewer?.returnDisc?.()??false;},examineDisc(){return viewer?.examineDisc?.()??false;},
+      examineBox(){return viewer?.examineBox?.()??false;},
       clear() {release();pending=null;open=false;options.onOpenState?.({canOpen:false,open:false});},
       dispose() {api.clear();disposed=true;},
     };

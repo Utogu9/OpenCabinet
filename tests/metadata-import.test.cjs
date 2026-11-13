@@ -344,7 +344,8 @@ test("Every metadata catalog image category is offered independently without ena
   const table = backend.split("const GAME_IMAGE_TYPES:")[1].split("];")[0];
   const keys = [...table.matchAll(/\("[^"]+", "([^"]+)"\)/g)].map((match) => match[1]);
   assert.equal(app.media("cart_label"), undefined);
-  assert.equal(keys.length, 35); // Includes complete covers and inside-cover inlays.
+  assert.equal(keys.length, 36); // Includes complete covers, inlays and separate poster sides.
+  assert.ok(keys.includes('poster_front')&&keys.includes('poster_back'));
   assert.deepEqual(Array.from(types, ([key]) => key).sort(), [...keys, "artwork", "other"].sort());
   for (const [kind] of types) {
     assert.equal(app.media(kind).type, "checkbox");

@@ -4,6 +4,12 @@
     "name": "English (United States)"
   },
   "messages": {
+    "box.examine": "Examine box",
+    "manual.remove": "Take manual out",
+    "manual.putBack": "Put manual back",
+    "manual.examine": "Examine manual",
+    "manual.focus": "Manual",
+    "manual.read": "Read manual",
     "image.kind.posterFront": "Poster (front)",
     "image.kind.posterBack": "Poster (back)",
     "retroarch.progress.preparing": "Preparing RetroArch",
@@ -1839,7 +1845,7 @@
     "disc.focusBox": "Box",
     "disc.sideBySide": "Side by side",
     "disc.focusDisc": "Disc",
-    "disc.controls": "Select the box or disc to rotate and zoom that object.",
+    "disc.controls": "Select the case, disc or manual to rotate and zoom that object.",
     "disc.flip": "Flip disc",
     "disc.finish": "Disc underside",
     "disc.silver": "Silver",

@@ -10,7 +10,10 @@ const canvas=document.createElement('canvas');canvas.width=canvas.height=256;
 const ctx=canvas.getContext('2d');ctx.fillStyle='#b02830';ctx.fillRect(0,0,256,256);ctx.fillStyle='#f5d229';ctx.fillRect(0,0,128,256);
 window.art=[{kind:'disc',path:canvas.toDataURL()},{kind:'cover',path:canvas.toDataURL()},{kind:'inlay',path:canvas.toDataURL()}];
 window.platform=new URLSearchParams(location.search).get('platform')||'Sony PlayStation 2';
-window.viewer=OpenCabinet3D.createViewer(document.getElementById('stage'),{debug:state=>window.debug=state});
+const withManual=new URLSearchParams(location.search).has('manual');window.reads=0;
+const back=document.createElement('canvas');back.width=180;back.height=256;const backContext=back.getContext('2d');backContext.fillStyle='#114499';backContext.fillRect(0,0,180,256);
+window.viewer=OpenCabinet3D.createViewer(document.getElementById('stage'),{debug:state=>window.debug=state,
+  ...(withManual?{loadManual:async()=>({path:'manual.pdf',platform,front:canvas,back,pageCount:20,aspectRatio:1,dispose(){}}),onManualActivate:()=>{window.reads++;return true;}}:{})});
 window.select=(id=1,finish=null)=>viewer.update({id,title:'Disc example',platform,rom_path:'Game (USA).iso',box_3d:finish?{base:{disc_finish:finish}}:null},art);
 window.parts=()=>debug.meshes.filter(mesh=>debug.materials instanceof Map?['UMD Label','Disc Silver','UMD Housing','UMD Window','UMD Disc'].includes(mesh.material?.name):mesh.material===debug.materials.disc||mesh.material===debug.materials.discSilver);
 window.settle=()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));

@@ -145,7 +145,9 @@ export async function createModelViewer(host,options={},definition) {
   for(let i=0;i<=4;i++){pose(i/4);frames.push(new THREE.Box3().setFromObject(model,true));}
   pose(0);
   let game=null,profile=null,key=null,revision=0,controller=null,disposed=false,renderLease=null;
-  const discInteraction=createDiscInteraction({host,reference:contents,root,scene,camera,meshes,getGame:()=>game,getProfile:()=>profile,isOpen:()=>opened>=.98,schedule,getRotationLock:()=>rotationLock});
+  const discInteraction=createDiscInteraction({host,reference:contents,root,scene,camera,meshes,getGame:()=>game,getProfile:()=>profile,isOpen:()=>opened>=.98,schedule,getRotationLock:()=>rotationLock,
+    getManualMeshes:()=>manualMeshes,getManualFront:()=>manualMeshes.find(mesh=>mesh.material===manualFront),hasManual:()=>!!manual&&!manualExtracted,
+    onManualRemoved:()=>{manualGroup.visible=!!manual&&!manualExtracted&&!discInteraction.manualRemoved;if(procedural?.manualCover&&game)compose();schedule();},readManual:()=>api.readManual()});
   const frameHold=createFrameHold(renderer,host,()=>renderer.render(scene,camera));
   let frame=null,opened=0,openTarget=false,animation=null,zoom=1,side='front',rotationLock='free',drag=null,menu=null;
   let rotation=initialRotation(),width=0,height=0,surfaceScale=1;
@@ -155,6 +157,7 @@ export async function createModelViewer(host,options={},definition) {
   let manual=null,manualController=null,manualExtracted=false,manualBackTask=null;
   const manualTextures=new Set(),raycaster=new THREE.Raycaster(),pointer=new THREE.Vector2();
   function clearManual() {
+    discInteraction.resetManual();
     procedural?.clearManual?.();
     manualController?.abort();manualController=null;manualBackTask=null;
     if(manualExtracted)options.onManualDeactivate?.();
@@ -171,7 +174,7 @@ export async function createModelViewer(host,options={},definition) {
       procedural?.fitManual?.(copy,manual);
       if(procedural?.manualCover)compose();
     }
-    manualGroup.visible=!manualExtracted;schedule();
+    manualGroup.visible=!manualExtracted&&!discInteraction.manualRemoved;schedule();
   }
   function ensureManualBack() {
     if(!manual||!openTarget||manualBackTask||manualBack.map)return;
@@ -196,7 +199,7 @@ export async function createModelViewer(host,options={},definition) {
     schedule();
   }
   function hitsManual(event) {
-    if(!manual||manualExtracted||opened<.98)return false;
+    if(!manual||manualExtracted||discInteraction.manualRemoved||opened<.98)return false;
     const rect=canvas.getBoundingClientRect();pointer.set((event.clientX-rect.left)/rect.width*2-1,-(event.clientY-rect.top)/rect.height*2+1);
     raycaster.setFromCamera(pointer,camera);return raycaster.intersectObjects(manualMeshes,false).length>0;
   }
@@ -299,7 +302,7 @@ export async function createModelViewer(host,options={},definition) {
     // A late spine only changes the outside atlas. Do not recreate/upload the
     // inlay, cartridge, disc or fallback label for every arriving image.
     const booklet=procedural?.manualCover?manualFront.map?.image:null;
-    if(changed('outside',[...(pictures.full?[pictures.full,null,null,null]:[null,pictures.cover,pictures.back_cover,pictures.spine]),booklet,!!(booklet&&manualExtracted)])) {
+    if(changed('outside',[...(pictures.full?[pictures.full,null,null,null]:[null,pictures.cover,pictures.back_cover,pictures.spine]),booklet,!!(booklet&&(manualExtracted||discInteraction.manualRemoved))])) {
       if(pictures.full&&!booklet&&!procedural?.separateSpines)assign('Cover Outside',pictures.full);
       else {
         const whitePaper=['wii','wiiu','threeDs'].includes(profile.variant);
@@ -332,7 +335,7 @@ export async function createModelViewer(host,options={},definition) {
         }
         if(booklet){
           ctx.clearRect(face+spine,0,face,atlas.height);
-          if(!manualExtracted)ctx.drawImage(booklet,face+spine,0,face,atlas.height);
+          if(!manualExtracted&&!discInteraction.manualRemoved)ctx.drawImage(booklet,face+spine,0,face,atlas.height);
         }
         assign('Cover Outside',atlas);
       }
@@ -395,7 +398,7 @@ export async function createModelViewer(host,options={},definition) {
   function stopDrag(event) {
     if(!drag||(event&&drag.id!==event.pointerId))return;
     const previous=drag,id=drag.id;drag=null;host.classList.remove('dragging');if(host.hasPointerCapture?.(id))host.releasePointerCapture(id);
-    if(event?.type==='pointerup'&&previous.manual&&!previous.moved)api.readManual();
+    if(event?.type==='pointerup'&&previous.manual&&!previous.moved)api.removeManual();
     else if(event?.type==='pointerup'&&previous.disc&&!previous.moved)api.removeDisc();
   }
   function closeMenu(focus=false){menu?.remove();menu=null;if(focus)host.focus({preventScroll:true});}
@@ -506,12 +509,15 @@ export async function createModelViewer(host,options={},definition) {
     reset(){if(discInteraction.resetView())return;stopDrag();api.setOpen(false,false);rotation=initialRotation();side='front';zoom=1;schedule();},
     showBack(){if(discInteraction.focused){discInteraction.flip(true);return;}stopDrag();api.setOpen(false,false);rotation=math.axisAngle([0,1,0],180);side='back';schedule();},
     toggleSide(){if(discInteraction.focused){discInteraction.flip();return;}const back=side==='front'&&!openTarget;api.setOpen(false,false);rotation=back?math.axisAngle([0,1,0],180):initialRotation();side=back?'back':'front';schedule();},
-    readManual(){if(!manual||!openTarget||manualExtracted)return false;
+    readManual(){if(!manual||(!openTarget&&!discInteraction.manualRemoved)||manualExtracted)return false;
       if(!options.onManualActivate||options.onManualActivate({manual,game,origin:canvas})===false)return false;
-      manualExtracted=true;manualGroup.visible=false;if(procedural?.manualCover)compose();schedule();return true;},
-    returnManual(){manualExtracted=false;manualGroup.visible=!!manual;if(procedural?.manualCover&&game)compose();schedule();},
+      manualExtracted=true;discInteraction.setManualReading(true);manualGroup.visible=false;if(procedural?.manualCover)compose();schedule();return true;},
+    returnManual(){manualExtracted=false;discInteraction.setManualReading(false);manualGroup.visible=!!manual&&!discInteraction.manualRemoved;if(procedural?.manualCover&&game)compose();schedule();},
+    get hasManual(){return !!manual;},get isManualRemoved(){return discInteraction.manualRemoved;},
+    removeManual:()=>discInteraction.removeManual(),putManualBack:()=>discInteraction.returnManual(),examineManual:()=>discInteraction.examineManual(),
     get hasDisc(){return discInteraction.available;},get isDiscRemoved(){return discInteraction.removed;},
     removeDisc:()=>discInteraction.remove(),returnDisc:()=>discInteraction.putBack(),examineDisc:()=>discInteraction.examine(),
+    examineBox:()=>discInteraction.examineBox(),
     refreshManual(){if(game)void preloadManual();},
     clear(){discInteraction.reset();revision++;controller?.abort();controller=null;stopDrag();closeMenu();key=null;game=null;composed.clear();
       clearManual();

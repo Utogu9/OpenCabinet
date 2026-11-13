@@ -64,7 +64,7 @@ test('Optical discs and cases exchange foreground focus, share one renderer and 
   await page.waitForFunction(()=>document.getElementById('stage').dataset.discAnimation==='ready');
   assert.equal(await page.locator('#stage canvas').count(),1,'box and disc share the same drawing surface');
   assert.equal(await page.locator('dialog').count(),0,'no additional dialog is opened');
-  assert.equal(await page.locator('.game-box-disc-tools button').count(),4,'disc toolbar contains focus, layout and return controls without a separate flip button');
+  assert.equal(await page.locator('.game-box-disc-tools button').count(),2,'disc toolbar only contains layout and return controls');
   assert.equal(await page.evaluate(()=>debug.root.position.x<0&&debug.root.position.z<debug.discInteraction.object.position.z&&debug.discInteraction.object.position.x===0),true,'disc in the foreground, case offset behind it');
   const cameraDistance=await page.evaluate(()=>debug.camera.position.z);
   for(const [x,y] of [[70,0],[0,80],[-160,-30],[35,0]]){
@@ -130,7 +130,7 @@ test('Optical discs and cases exchange foreground focus, share one renderer and 
   await page.evaluate(()=>viewer.toggleSide());await page.evaluate(()=>settle());
   assert.equal(await page.evaluate(()=>debug.renderer.getContext().getError()),0,'reverse shaders render without WebGL errors');
   const orientations=await page.evaluate(()=>[debug.root.quaternion.toArray(),debug.discInteraction.object.quaternion.toArray()]);
-  const layoutButton=page.locator('.game-box-disc-tools button').nth(2);
+  const layoutButton=page.locator('.game-box-disc-tools').getByRole('button',{name:'disc.sideBySide',exact:true});
   await layoutButton.click();await page.waitForFunction(()=>document.getElementById('stage').dataset.discAnimation==='ready');
   assert.equal(await layoutButton.getAttribute('aria-pressed'),'true');
   assert.equal(await page.evaluate(()=>debug.root.position.x<0&&debug.discInteraction.object.position.x>0&&debug.root.position.z===0&&debug.discInteraction.object.position.z===0),true,'the button restores side-by-side placement');
