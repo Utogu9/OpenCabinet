@@ -151,7 +151,8 @@ export async function createViewer(host, options={}) {
     }
     camera.position.set(0,0,distance/zoom);camera.lookAt(0,0,0);
     discInteraction.layout(time,framingBounds);
-    relief.update(opened,`${rotation.join(',')};${opened};${root.scale.toArray().join(',')};${root.position.toArray()};${discInteraction.removed}`,manualExtracted||discInteraction.manualRemoved);
+    relief.update(opened,`${rotation.join(',')};${opened};${root.scale.toArray().join(',')};${root.position.toArray()};${discInteraction.removed}`,manualExtracted||discInteraction.manualRemoved,
+      {root,bounds:framingBounds,detached:discInteraction.removed||discInteraction.manualRemoved});
     renderer.render(scene,camera);
     frameHold.release();
     retiredTextures.splice(0).forEach(texture=>texture.dispose());

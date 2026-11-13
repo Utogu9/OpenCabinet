@@ -1,7 +1,7 @@
 import * as THREE from './vendor/three/three.module.js';
 import { mergeGeometries } from './vendor/three/BufferGeometryUtils.js';
 import { clearCasePlastic } from './three-case-plastic.js';
-import { wallShadowGeometry, configureAcrylicOptics, maskClearPanels } from './three-box-relief.js';
+import { wallShadowGeometry, configureAcrylicOptics, maskClearPanels, createCaseShadowFraming } from './three-box-relief.js';
 import { createDiscMaterial, prepareDiscReverse } from './three-disc-material.js';
 
 // CSS faces use X right, Y down, Z out of the cover. Convert both the local
@@ -436,7 +436,7 @@ export function convertLegacyCase(sourceFactory,templateKey) {
   const brandObserver=new MutationObserver(refreshBrand);
   brandObserver.observe(document.documentElement,{attributes:true,attributeFilter:['style']});
   pose(0);
-  let lightingKey=null,shadowLight=null;
+  let lightingKey=null,shadowLight=null,shadowFraming=null;
   function configureLighting({renderer,keyLight}) {
     if(acrylicRibs)acrylicRibs.anisotropy=Math.min(8,renderer.capabilities.getMaxAnisotropy());
     shadowLight=keyLight;
@@ -444,11 +444,13 @@ export function convertLegacyCase(sourceFactory,templateKey) {
     keyLight.castShadow=true;keyLight.shadow.mapSize.set(2048,2048);
     Object.assign(keyLight.shadow.camera,{left:-240,right:240,top:240,bottom:-240,near:1,far:850});
     keyLight.shadow.camera.updateProjectionMatrix();keyLight.shadow.bias=-.00015;keyLight.shadow.normalBias=.18;
+    shadowFraming=createCaseShadowFraming(keyLight);
   }
-  function beforeRender({renderer,root,opened}) {
+  function beforeRender({renderer,root,bounds,opened,detached=false}) {
+    if(shadowFraming?.update(root,bounds,detached))renderer.shadowMap.needsUpdate=true;
     shadowReceivers.forEach(mesh=>mesh.visible=opened>0);
     shadowCasters.forEach(mesh=>mesh.visible=opened>0);
-    const key=[...root.quaternion.toArray(),...root.scale.toArray(),opened,!!booklet?.group.visible,clipLift].join(',');
+    const key=[...root.quaternion.toArray(),...root.scale.toArray(),...root.position.toArray(),opened,!!booklet?.group.visible,clipLift].join(',');
     if(key!==lightingKey){lightingKey=key;renderer.shadowMap.needsUpdate=true;}
   }
   function releaseLighting() {

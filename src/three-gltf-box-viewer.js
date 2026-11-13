@@ -247,7 +247,7 @@ export async function createModelViewer(host,options={},definition) {
     const far=preciseDepth?Math.max(near+10,cameraDistance-minDepth+25):3000;
     if(camera.near!==near||camera.far!==far){camera.near=near;camera.far=far;camera.updateProjectionMatrix();}
     camera.position.set(0,0,cameraDistance);camera.lookAt(0,0,0);
-    discInteraction.layout(time,bounds);procedural?.beforeRender?.({renderer,root,opened,discRemoved:discInteraction.removed});renderer.render(scene,camera);frameHold.release();
+    discInteraction.layout(time,bounds);procedural?.beforeRender?.({renderer,root,bounds,opened,discRemoved:discInteraction.removed,detached:discInteraction.removed||discInteraction.manualRemoved});renderer.render(scene,camera);frameHold.release();
     retiredTextures.splice(0).forEach(texture=>texture.dispose());
     host.dataset.triangles=String(renderer.info.render.triangles);host.dataset.drawCalls=String(renderer.info.render.calls);
   }

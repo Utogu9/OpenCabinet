@@ -143,7 +143,11 @@ test('PS2 converts the legacy pieces to batched GPU geometry with artwork, openi
     const point=debug.manualMeshes[1].getWorldPosition(debug.root.position.clone()).project(debug.camera),rect=document.querySelector('#stage canvas').getBoundingClientRect();
     return {x:rect.left+(point.x+1)*rect.width/2,y:rect.top+(1-point.y)*rect.height/2};
   });
-  await page.mouse.click(hit.x,hit.y);assert.equal(await page.evaluate(()=>reading),true,'clicking the physical booklet opens the reader');
+  await page.mouse.click(hit.x,hit.y);
+  await page.waitForFunction(()=>viewer.isManualRemoved);
+  assert.equal(await page.evaluate(()=>typeof reading==='undefined'||!reading),true,'clicking the physical booklet extracts it without opening the reader');
+  await page.evaluate(()=>viewer.readManual());
+  assert.equal(await page.evaluate(()=>reading),true,'reading is an explicit action');
   assert.equal(await page.evaluate(()=>debug.manualGroup.visible),false);
   await page.evaluate(()=>viewer.returnManual());
   const same=await page.evaluate(()=>{window.savedModel=debug.model;select(2,'Game (Europe).iso');return savedModel===debug.model;});

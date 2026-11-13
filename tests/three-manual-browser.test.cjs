@@ -13,6 +13,21 @@ test('Manuals can be inspected outside their cases, share focus with discs and r
   const browser=await chromium.launch({executablePath:executable,headless:true});t.after(()=>browser.close());
   const page=await browser.newPage({viewport:{width:1100,height:850}}),errors=[];page.on('pageerror',error=>errors.push(error.message));
   const ready=()=>page.waitForFunction(()=>document.getElementById('stage').dataset.discAnimation==='ready');
+  async function shadowCoverage(label){
+    const coverage=await page.evaluate(async()=>{
+      const THREE=await import('/src/vendor/three/three.module.js'),light=debug.scene.children.find(node=>node.isDirectionalLight&&node.castShadow);
+      if(!light)return null;debug.scene.updateMatrixWorld(true);const point=new THREE.Vector3();let count=0,outside=0;
+      for(const mesh of debug.meshes){
+        if(!mesh.visible)continue;
+        for(let i=0;i<mesh.geometry.attributes.position.count;i+=37){
+          mesh.getVertexPosition(i,point);point.applyMatrix4(mesh.matrixWorld).project(light.shadow.camera);count++;
+          if(Math.max(Math.abs(point.x),Math.abs(point.y),Math.abs(point.z))>1.001)outside++;
+        }
+      }
+      return {count,outside};
+    });
+    if(coverage)assert.equal(coverage.outside,0,label+': all case surfaces retain shadow coverage '+JSON.stringify(coverage));
+  }
   const visiblePoint=kind=>page.evaluate(async kind=>{
     const THREE=await import('/src/vendor/three/three.module.js'),ray=new THREE.Raycaster();debug.scene.updateMatrixWorld(true);
     const visible=mesh=>{for(let node=mesh;node;node=node.parent)if(!node.visible)return false;return true;};
@@ -40,6 +55,7 @@ test('Manuals can be inspected outside their cases, share focus with discs and r
       await page.mouse.click(manualPoint.x,manualPoint.y);
       await page.waitForFunction(()=>viewer.isManualRemoved);
       await ready();
+      await shadowCoverage(platform+' with manual in foreground');
       assert.equal(await page.evaluate(()=>viewer.isManualRemoved&&debug.discInteraction.manualObject.visible),true);
       assert.equal(await page.evaluate(()=>reads),0,'extraction does not request the reader');
       assert.equal(await page.locator('dialog').count(),0);
@@ -64,6 +80,7 @@ test('Manuals can be inspected outside their cases, share focus with discs and r
       assert.equal(await page.locator('#stage').getAttribute('data-disc-focus'),'manual','clicking the background booklet brings it forward');
       if(await page.evaluate(()=>viewer.hasDisc)){
         await page.evaluate(()=>viewer.removeDisc());await ready();
+        await shadowCoverage(platform+' with disc in foreground');
         assert.equal(await page.evaluate(()=>viewer.isDiscRemoved&&viewer.isManualRemoved),true,'disc and manual can be outside together');
         assert.equal(await page.locator('[data-disc-return]:visible').getAttribute('data-disc-return'),'disc');
         const discRotation=await page.evaluate(()=>debug.discInteraction.object.quaternion.toArray());

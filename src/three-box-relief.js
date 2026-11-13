@@ -1,5 +1,37 @@
 import * as THREE from './vendor/three/three.module.js';
 
+// Extraction moves the case behind the selected object. A fixed shadow volume
+// can then clip half the case even though the viewing camera still sees it.
+// Track its eight framing corners, without scanning model vertices or changing
+// the light direction, intensity, or the normal view's shadow resolution.
+export function createCaseShadowFraming(light) {
+  const camera=light.shadow.camera,keys=['left','right','top','bottom','near','far'];
+  const original=Object.fromEntries(keys.map(key=>[key,camera[key]]));
+  const point=new THREE.Vector3(),center=new THREE.Vector3(),target=new THREE.Vector3(),volume=new THREE.Box3();
+  let active=false;
+  function apply(values){
+    let changed=false;
+    for(const key of keys)if(Math.abs(camera[key]-values[key])>1e-6){camera[key]=values[key];changed=true;}
+    if(changed)camera.updateProjectionMatrix();return changed;
+  }
+  return {
+    update(root,bounds,detached=false){
+      if(!detached||!bounds){if(!active)return false;active=false;return apply(original);}
+      active=true;root.updateWorldMatrix(true,false);light.updateWorldMatrix(true,false);light.target.updateWorldMatrix(true,false);
+      camera.position.setFromMatrixPosition(light.matrixWorld);target.setFromMatrixPosition(light.target.matrixWorld);
+      camera.lookAt(target);camera.updateMatrixWorld();bounds.getCenter(center);volume.makeEmpty();
+      for(const x of [bounds.min.x,bounds.max.x])for(const y of [bounds.min.y,bounds.max.y])for(const z of [bounds.min.z,bounds.max.z]){
+        point.set(x,y,z).sub(center).applyMatrix4(root.matrixWorld).applyMatrix4(camera.matrixWorldInverse);volume.expandByPoint(point);
+      }
+      const margin=4,width=Math.max(original.right-original.left,volume.max.x-volume.min.x+margin*2),height=Math.max(original.top-original.bottom,volume.max.y-volume.min.y+margin*2);
+      const x=(volume.min.x+volume.max.x)/2,y=(volume.min.y+volume.max.y)/2;
+      return apply({left:x-width/2,right:x+width/2,bottom:y-height/2,top:y+height/2,
+        near:Math.max(.1,Math.min(original.near,-volume.max.z-margin)),far:Math.max(original.far,-volume.min.z+margin)});
+    },
+    reset(){active=false;return apply(original);},
+  };
+}
+
 // Shadow only the raised walls. Treating a clear plastic sheet as an opaque
 // shadow caster would darken the entire artwork underneath it.
 export function wallShadowGeometry(geometry,planeZ,inside=false) {
@@ -25,6 +57,7 @@ export function createContactShadows(renderer,light,{rear,lidShell,paper,manualB
   light.castShadow=true;light.shadow.mapSize.set(2048,2048);
   Object.assign(light.shadow.camera,{left:-220,right:220,top:220,bottom:-220,near:10,far:1000});
   light.shadow.camera.updateProjectionMatrix();light.shadow.bias=-.00006;light.shadow.normalBias=.04;
+  const framing=createCaseShadowFraming(light);
   const shadowMaterial=new THREE.ShadowMaterial({color:0x0c1420,opacity:.18,depthWrite:false,side:THREE.DoubleSide,toneMapped:false});
   const casterMaterial=new THREE.MeshBasicMaterial({colorWrite:false,depthWrite:false,side:THREE.DoubleSide});
   const casters=[],receivers=[];
@@ -46,12 +79,14 @@ export function createContactShadows(renderer,light,{rear,lidShell,paper,manualB
   }
   let previous=null;
   return {casters,receivers,shadowMaterial,
-    update(amount,pose,manualExtracted=false) {
+    update(amount,pose,manualExtracted=false,frame=null) {
+      if(frame&&framing.update(frame.root,frame.bounds,frame.detached))renderer.shadowMap.needsUpdate=true;
       casters.forEach(mesh=>mesh.visible=amount>0);
       receivers[0].visible=amount>0;receivers[1].visible=amount>0&&!manualExtracted;
       if(amount>0&&pose!==previous){renderer.shadowMap.needsUpdate=true;previous=pose;}
     },
     reset(){
+      framing.reset();
       previous=null;
       // Allocate a valid depth map even when the first frame is closed. With
       // deferred updates, Three.js otherwise binds a non-comparison fallback
