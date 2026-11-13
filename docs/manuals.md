@@ -16,6 +16,29 @@ si ya se había extraído. La vista lado a lado también admite los tres objetos
 Se reutilizan las texturas de portada, contraportada y cantos de páginas del
 manual existente; inspeccionarlo no carga sus páginas interiores.
 
+Los tipos **Póster (frente)** y **Póster (dorso)** forman las dos caras de una
+misma hoja plegada en el compartimento del manual. Al extraer el manual se
+revela el póster, que se puede sacar con un clic o desde el menú contextual.
+Fuera de la caja, **Desplegar póster** y **Plegar póster** animan sus pliegues;
+el control principal de frente/dorso permite ver la otra cara. El foco, giro
+y zoom son independientes de caja, disco y manual, también en Couch Mode.
+Al guardarlo se pliega automáticamente; una cara sin imagen queda blanca.
+
+En **Editar juego → Pósteres**, **Partes a lo ancho** y **Partes a lo alto**
+definen una cuadrícula orientativa de 1 a 8 partes por dirección (2 × 2 por defecto).
+Los ajustes son exclusivos de cada juego y no se heredan de la consola. La sección
+muestra las imágenes del frente y del dorso, permite agregarlas o seleccionar otra
+entre las disponibles, elegir la cara que queda afuera, girar la imagen y cambiar
+la esquina y el orden de despliegue. Los pliegues antiguos guardados en el juego
+se conservan al pasar a esta sección.
+El tamaño plegado sigue la proporción del manual de esa caja. La última solapa
+de cada dirección puede ser más corta y se ajusta la cantidad de dobleces si
+hace falta para encajar. Al desplegarlo se conserva la proporción del escaneo,
+sin estirarlo ni recortarlo; no supone conocer las medidas reales del póster.
+La geometría está limitada a 8 × 8 partes: un escaneo de proporciones extremas
+puede ocupar menos que el manual en una dirección. Las imágenes
+se cargan únicamente al abrir la caja, y los escaneos originales no se modifican.
+
 Cada manual guardado tiene un botón de papelera en **Editar juego → Manuales**.
 Tras confirmar, borra la copia administrada y actualiza el manifiesto de la
 colección; conserva el archivo de origen situado fuera de esa carpeta. Si era

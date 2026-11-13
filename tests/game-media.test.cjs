@@ -49,6 +49,7 @@ function mediaApp(options = {}) {
     setAttribute(name, value) { this.attributes[name] = value; }
     getAttribute(name) { return this.attributes[name] ?? null; }
     addEventListener(name, handler) { this.handlers[name] = handler; }
+    click(){return this.trigger('click');}
     focus(options) { document.activeElement = this; this.focusOptions = options; }
     showModal() { this.open = true; }
     close() { this.open = false; this.handlers.close?.(); }
@@ -177,6 +178,8 @@ function mediaApp(options = {}) {
     console, URL,
   });
   vm.runInContext(fs.readFileSync(path.join(__dirname, "../src/game-box.js"), "utf8"), context);
+  vm.runInContext(fs.readFileSync(path.join(__dirname, "../src/poster-settings.js"), "utf8"), context);
+  context.window.OpenCabinetPosters=context.OpenCabinetPosters;
   if (options.box3D) context.window.OpenCabinet3D.jewelFamily = context.OpenCabinet3D.jewelFamily;
   vm.runInContext(fs.readFileSync(path.join(__dirname, "../src/window-fullscreen.js"), "utf8"), context);
   if (options.variables) vm.runInContext(fs.readFileSync(path.join(__dirname, "../src/entity-variables.js"), "utf8"), context);
@@ -307,6 +310,35 @@ test("Manual search can change matches, retry failures and switch back to image 
   assert.equal(app.calls.at(-1).command,'end_metadata_import');
 });
 
+test("Poster editing preserves game-only folds, shares image choices and saves independently of console box inheritance",async()=>{
+  const app=mediaApp();app.evaluate(`allGames[0].box_3d={base:{poster_columns:3,poster_rows:4}};allGames[0].images.push({kind:'poster_front',path:'C:/map.jpg'},{kind:'poster_back',path:'C:/reverse.jpg'},{kind:'poster_front',path:'C:/another.jpg'});`);
+  await app.open();await app.get('game-edit-tab-posters').trigger('click');
+  assert.equal(app.get('game-box-use-platform').checked,true,'old poster-only settings do not override the console box');
+  assert.equal(app.get('game-poster-columns').value,'3');assert.equal(app.get('game-poster-rows').value,'4');
+  assert.equal(app.get('game-poster-image-front').children[0].src,'asset://'+encodeURIComponent('C:/map.jpg'));
+  assert.equal(app.get('game-poster-image-back').children[0].src,'asset://'+encodeURIComponent('C:/reverse.jpg'));
+  app.get('game-poster-image-select-front').value='C:/another.jpg';app.get('game-poster-image-select-front').onchange();
+  assert.equal(app.get('game-poster-image-front').children[0].src,'asset://'+encodeURIComponent('C:/another.jpg'));
+  app.get('game-poster-rotation').value='90';app.get('game-poster-corner').value='bottom_right';app.get('game-poster-first_side').value='back';app.get('game-poster-fold_order').value='columns_first';
+  await app.save();const data=app.calls.find(call=>call.command==='update_game').args.details;
+  assert.deepEqual(data.box3d.poster,{columns:3,rows:4,rotation:90,corner:'bottom_right',first_side:'back',fold_order:'columns_first'});
+  assert.deepEqual(data.box3d.base,{});assert.equal(data.images.find(image=>image.kind==='poster_front').path,'C:/another.jpg');
+});
+
+test("Poster drafts cancel, reject invalid settings and add scans without disabling the next action",async()=>{
+  const app=mediaApp();await app.open();await app.get('game-edit-tab-posters').trigger('click');
+  app.get('game-poster-rotation').value='90';await app.get('btn-cancel-game-edit').trigger('click');
+  assert.ok(!app.calls.some(call=>call.command==='update_game'));await app.open();assert.equal(app.get('game-poster-rotation').value,'0');
+  app.get('game-poster-columns').value='9';await app.save();assert.ok(!app.calls.some(call=>call.command==='update_game'));
+  assert.equal(app.get('game-edit-tab-posters').attributes['aria-selected'],'true');app.get('game-poster-columns').value='2';
+  app.picker(['C:/new-map.avif']);await app.get('game-poster-add-front').trigger('click');
+  // The shared file-picker listener runs asynchronously after the click.
+  await new Promise(resolve=>setImmediate(resolve));
+  assert.equal(app.get('game-poster-add-front').disabled,false);
+  await app.save();const data=app.calls.find(call=>call.command==='update_game').args.details;
+  assert.equal(data.box3d,null);assert.equal(data.images.find(image=>image.path==='C:/new-map.avif').kind,'poster_front');
+});
+
 test("Editor categories show one panel, preserve drafts and reset to Details on reopening", async () => {
   const app = mediaApp(); await app.open();
   const panel = name => app.get(name === "discs" ? "game-discs-section" : `game-edit-panel-${name}`);
@@ -367,6 +399,8 @@ test("Direct PC games allow arguments without emulators; stores retain client la
     assert.equal(app.get("game-edit-tab-discs").disabled, true);
     assert.equal(app.get("game-edit-custom-arguments").disabled, store);
     await app.get("game-edit-tab-manuals").trigger("keydown", { key: "ArrowDown" });
+    assert.equal(app.document.activeElement, app.get("game-edit-tab-posters"));
+    await app.get("game-edit-tab-posters").trigger("keydown", { key: "ArrowDown" });
     assert.equal(app.document.activeElement, app.get("game-edit-tab-box"));
     await app.get("game-edit-tab-box").trigger("keydown", { key: "ArrowDown" });
     assert.equal(app.document.activeElement, app.get("game-edit-tab-variables"));

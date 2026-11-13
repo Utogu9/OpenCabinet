@@ -420,6 +420,7 @@
               <button type="button" id="game-edit-tab-history" role="tab" aria-controls="game-edit-panel-history" aria-selected="false" tabindex="-1" data-i18n="sessions.open"></button>
               <button type="button" id="game-edit-tab-images" role="tab" aria-controls="game-edit-panel-images" aria-selected="false" tabindex="-1"><span data-i18n="msg.a7f0af4e37"></span></button>
               <button type="button" id="game-edit-tab-manuals" role="tab" aria-controls="game-edit-panel-manuals" aria-selected="false" tabindex="-1"><span data-i18n="msg.58cb5b9cf5"></span></button>
+              <button type="button" id="game-edit-tab-posters" role="tab" aria-controls="game-edit-panel-posters" aria-selected="false" tabindex="-1" data-i18n="poster.title"></button>
               <button type="button" id="game-edit-tab-discs" role="tab" aria-controls="game-discs-section" aria-selected="false" tabindex="-1"><span data-i18n="msg.2d2dca072e"></span></button>
               <button type="button" id="game-edit-tab-regions" role="tab" aria-controls="game-edit-panel-regions" aria-selected="false" tabindex="-1"><span data-i18n="msg.d4a0db1956"></span></button>
               <button type="button" id="game-edit-tab-box" role="tab" aria-controls="game-edit-panel-box" aria-selected="false" tabindex="-1"><span data-i18n="msg.72af42e083"></span></button>
@@ -576,6 +577,23 @@
             </div>
             <p class="help-text"><span data-i18n="msg.3ee7f9cfd6"></span></p>
             <div class="game-manual-list" id="game-manual-list" aria-live="polite"></div>
+          </section>
+          <section class="hidden" id="game-edit-panel-posters" role="tabpanel" aria-labelledby="game-edit-tab-posters">
+            <h3 data-i18n="poster.title"></h3>
+            <div class="poster-artwork-grid">
+              <div class="poster-artwork-card"><h4 data-i18n="image.kind.posterFront"></h4><div class="poster-artwork-preview" id="game-poster-image-front"></div><select id="game-poster-image-select-front" data-i18n-aria-label="image.kind.posterFront"></select><button type="button" class="secondary-btn" id="game-poster-add-front" data-i18n="poster.addFront"></button></div>
+              <div class="poster-artwork-card"><h4 data-i18n="image.kind.posterBack"></h4><div class="poster-artwork-preview" id="game-poster-image-back"></div><select id="game-poster-image-select-back" data-i18n-aria-label="image.kind.posterBack"></select><button type="button" class="secondary-btn" id="game-poster-add-back" data-i18n="poster.addBack"></button></div>
+            </div>
+            <div class="form-grid">
+              <div class="form-group"><label for="game-poster-columns" data-i18n="poster.columns"></label><input id="game-poster-columns" type="number" min="1" max="8" step="1" value="2" required></div>
+              <div class="form-group"><label for="game-poster-rows" data-i18n="poster.rows"></label><input id="game-poster-rows" type="number" min="1" max="8" step="1" value="2" required></div>
+              <div class="form-group"><label for="game-poster-rotation" data-i18n="poster.rotation"></label><select id="game-poster-rotation"><option value="0" data-i18n="poster.rotation0"></option><option value="90" data-i18n="poster.rotation90"></option><option value="180" data-i18n="poster.rotation180"></option><option value="270" data-i18n="poster.rotation270"></option></select></div>
+              <div class="form-group"><label for="game-poster-corner" data-i18n="poster.corner"></label><select id="game-poster-corner"><option value="top_left" data-i18n="poster.topLeft"></option><option value="top_right" data-i18n="poster.topRight"></option><option value="bottom_left" data-i18n="poster.bottomLeft"></option><option value="bottom_right" data-i18n="poster.bottomRight"></option></select></div>
+              <div class="form-group"><label for="game-poster-first_side" data-i18n="poster.firstSide"></label><select id="game-poster-first_side"><option value="front" data-i18n="image.kind.posterFront"></option><option value="back" data-i18n="image.kind.posterBack"></option></select></div>
+              <div class="form-group"><label for="game-poster-fold_order" data-i18n="poster.foldOrder"></label><select id="game-poster-fold_order"><option value="rows_first" data-i18n="poster.rowsFirst"></option><option value="columns_first" data-i18n="poster.columnsFirst"></option></select></div>
+            </div>
+            <p class="help-text" data-i18n="poster.foldsHelp"></p>
+            <p class="help-text" data-i18n="poster.orientationHelp"></p>
           </section>
           <section class="hidden" id="game-edit-panel-regions" role="tabpanel" aria-labelledby="game-edit-tab-regions">
             <h3 id="game-edit-regions-title"><span data-i18n="msg.d4a0db1956"></span></h3>
@@ -1544,6 +1562,7 @@
     <script src="game-box.js"></script>
     <script src="carousel-boxes.js"></script>
     <script src="box-settings.js"></script>
+    <script src="poster-settings.js"></script>
     <script src="platform-stats.js"></script>
     <script src="retroarch.js"></script>
     <script src="emulator-defaults.js"></script>

@@ -3032,6 +3032,8 @@ function setupGameEditor() {
   }
   const variablesEditor = window.OpenCabinetVariables?.createEditor(document.getElementById("game-variables-editor"), document, { getNames: libraryVariableNames });
   const gameBoxEditor = window.OpenCabinetBoxSettings?.createEditor({ imageSource, prefix: "game" });
+  const posterEditor=window.OpenCabinetPosters.createEditor({getImages:()=>draftImages,setImages:images=>{draftImages=images;renderImageEditor();},imageSource,
+    addImages:kind=>{imageKind.value=kind;addImages.click();},isBusy:()=>saving||networkBusy||choosingImages||closing});
   const inheritBox = document.getElementById("game-box-use-platform");
   function updateBoxInheritance() {
     document.getElementById("game-box-custom-options").classList.toggle("hidden", inheritBox.checked);
@@ -3047,12 +3049,13 @@ function setupGameEditor() {
   function editorState() {
     return JSON.stringify([[...form.querySelectorAll("input,select,textarea")].filter(input=>input.id!=='game-edit-source-select').map(input => [input.id, input.value, input.checked]), draftImages, draftManuals, draftPreferredManual, personalEditor?.value(), discEditor?.value(), regionEditor?.value()]);
   }
-  const editorTabs = ["details", "order", "execution", "actions", "history", "images", "manuals", "discs", "regions", "box", "variables", "personal"].map(name => ({
+  const editorTabs = ["details", "order", "execution", "actions", "history", "images", "manuals", "posters", "discs", "regions", "box", "variables", "personal"].map(name => ({
     name, tab: document.getElementById(`game-edit-tab-${name}`),
     panel: document.getElementById(name === "discs" ? "game-discs-section" : `game-edit-panel-${name}`),
   }));
   function showEditorTab(name, focus = false) {
     activeEditorTab = name;
+    if(name==='posters')posterEditor.render();
     updateEditorActions();
     document.getElementById("game-editor-panels").scrollTop = 0;
     sessionHistoryView?.dispose();sessionHistoryView=null;
@@ -3203,6 +3206,7 @@ function setupGameEditor() {
   function metadataControls() {
     updateEditorActions();
     const disabled = saving || choosingImages || closing || networkBusy;
+    posterEditor.setBusy(disabled);
     document.getElementById("btn-add-game-manuals").disabled = disabled;
     document.getElementById("btn-download-game-manuals").disabled = disabled;
     document.getElementById("btn-open-game-manuals").disabled = disabled;
@@ -3324,6 +3328,7 @@ function setupGameEditor() {
   });
 
   function renderImageEditor() {
+    posterEditor.render();
     const list = document.getElementById("game-image-list");
     const panels = document.getElementById("game-editor-panels");
     const scrollTop = panels.scrollTop;
@@ -3595,6 +3600,7 @@ function setupGameEditor() {
         }
       }).catch(error => console.error("Could not read metadata source:", error));
       draftImages = gameImages(game);
+      posterEditor.open(game.box_3d);
       savedManuals = []; draftManuals = []; manualSources.clear(); renderManuals();
       renderImageEditor();
       document.getElementById("game-edit-name").value = game.title;
@@ -3622,13 +3628,13 @@ function setupGameEditor() {
       )?.name || "";
       platformSelect.disabled = Boolean(group.regions?.length);
       fillExecutionEmulators(game.execution?.emulator_id ?? null);
-      inheritBox.checked = !game.box_3d;
+      inheritBox.checked = !window.OpenCabinetPosters.hasBoxStyle(game.box_3d);
       if (gameBoxEditor) {
         const platform = allPlatforms.find(item => item.name === game.platform);
         let defaults = null;
         try { if (platform) defaults = (await getPlatformDetails(platform)).box_3d || null; }
         catch (error) { console.error("No se pudo cargar la caja de la consola:", error); }
-        gameBoxEditor.open(game.box_3d || null, game.platform, [{ ...game, images: gameImages(game) }], defaults);
+        gameBoxEditor.open(window.OpenCabinetPosters.withoutPoster(game.box_3d), game.platform, [{ ...game, images: gameImages(game) }], defaults);
       }
       updateBoxInheritance();
       saveButton.disabled = allPlatforms.length === 0;
@@ -3667,6 +3673,8 @@ function setupGameEditor() {
     let gameBox;
     try { if (gameBoxEditor) gameBox = inheritBox.checked ? null : gameBoxEditor.getValue(); }
     catch(error) { showEditorTab("box"); showToast(String(error),true); return; }
+    try { gameBox=window.OpenCabinetPosters.withPoster(gameBox,posterEditor.value()); }
+    catch(error) { showEditorTab("posters"); showToast(String(error),true); return; }
     let orderPatch;
     try { orderPatch = orderEditor?.value(); }
     catch(error) { showEditorTab("order"); showToast(String(error),true); return; }

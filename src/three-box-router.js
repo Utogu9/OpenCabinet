@@ -82,6 +82,8 @@
       get hasDisc(){return viewer?.hasDisc??false;},get isDiscRemoved(){return viewer?.isDiscRemoved??false;},
       removeDisc(){return viewer?.removeDisc?.()??false;},returnDisc(){return viewer?.returnDisc?.()??false;},examineDisc(){return viewer?.examineDisc?.()??false;},
       examineBox(){return viewer?.examineBox?.()??false;},
+      get hasPoster(){return viewer?.hasPoster??false;},get isPosterRemoved(){return viewer?.isPosterRemoved??false;},get canRemovePoster(){return viewer?.canRemovePoster??false;},get isPosterUnfolded(){return viewer?.isPosterUnfolded??false;},
+      removePoster(){return viewer?.removePoster?.()??false;},putPosterBack(){return viewer?.putPosterBack?.()??false;},examinePoster(){return viewer?.examinePoster?.()??false;},togglePoster(){return viewer?.togglePoster?.()??false;},
       clear() {release();pending=null;open=false;options.onOpenState?.({canOpen:false,open:false});},
       dispose() {api.clear();disposed=true;},
     };

@@ -23,6 +23,12 @@ function editor(prefix = 'platform') {
   return {ui,field,get,change,previews,api:context.OpenCabinet3D,cleared:()=>cleared};
 }
 
+test('Console box defaults no longer determine poster fold divisions',()=>{
+ const app=editor('game');app.ui.open(null,'PS2',[],{base:{poster_columns:4,poster_rows:3}});
+ assert.equal(app.api.profileFor('PS2',null,'Game.iso',app.previews.at(-1).settings).posterColumns,undefined);
+ app.change('model','dvd');assert.equal(app.ui.getValue().base.poster_columns,undefined);
+});
+
 test('Disc reverse choices stay in the game draft, inherit console defaults and keep regional overrides separate',()=>{
  const app=editor('game');app.ui.open(null,'PS2',[],{base:{disc_finish:'silver'}});
  app.change('disc-finish','blue');assert.equal(app.ui.getValue().base.disc_finish,'blue');

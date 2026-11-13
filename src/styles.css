@@ -3105,3 +3105,11 @@ html[data-i18n-pending] body { visibility: hidden; }
 .game-box-disc-tools [data-disc-return][hidden] { display: none; }
 @media (max-width: 700px) { .play-columns,.play-filter-grid { grid-template-columns: 1fr; } }
 #btn-reset-preferences { margin-right: auto; }
+/* The paired scans stay readable without adding another scrolling panel. */
+.poster-artwork-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:16px; margin:16px 0 24px; }
+.poster-artwork-card { display:flex; flex-direction:column; gap:10px; min-width:0; }
+.poster-artwork-card h4 { margin:0; }
+.poster-artwork-card select { width:100%; min-width:0; }
+.poster-artwork-preview { height:190px; display:flex; align-items:center; justify-content:center; overflow:hidden; border-radius:8px; background:var(--card-bg); color:var(--text-muted); }
+.poster-artwork-preview img { width:100%; height:100%; object-fit:contain; }
+#game-edit-panel-posters > .help-text { margin:12px 0 0; line-height:1.45; }

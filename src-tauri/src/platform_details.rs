@@ -18,6 +18,8 @@ struct BoxStyle {
     depth: Option<f64>,
     spine_face: Option<String>,
     disc_finish: Option<String>,
+    poster_columns: Option<u8>,
+    poster_rows: Option<u8>,
 }
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
@@ -25,10 +27,37 @@ struct BoxStyle {
 pub struct BoxSettings {
     base: BoxStyle,
     regions: BTreeMap<String, BoxStyle>,
+    #[serde(skip_serializing_if="Option::is_none")]
+    poster: Option<PosterSettings>,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+struct PosterSettings {
+    columns: u8,
+    rows: u8,
+    rotation: u16,
+    corner: String,
+    first_side: String,
+    fold_order: String,
+}
+impl Default for PosterSettings {
+    fn default() -> Self { Self { columns:2,rows:2,rotation:0,corner:"top_left".into(),first_side:"front".into(),fold_order:"rows_first".into() } }
 }
 
 impl BoxSettings {
     pub(crate) fn validate(&self) -> Result<(), String> {
+        if let Some(poster)=&self.poster {
+            if !(1..=8).contains(&poster.columns)||!(1..=8).contains(&poster.rows) {
+                return Err(crate::i18n::text("poster.invalidFolds").into());
+            }
+            if ![0,90,180,270].contains(&poster.rotation)
+                || !["top_left","top_right","bottom_left","bottom_right"].contains(&poster.corner.as_str())
+                || !["front","back"].contains(&poster.first_side.as_str())
+                || !["rows_first","columns_first"].contains(&poster.fold_order.as_str()) {
+                return Err(crate::i18n::text("poster.invalidSettings").into());
+            }
+        }
         if self
             .regions
             .keys()
@@ -37,6 +66,9 @@ impl BoxSettings {
             return Err(crate::i18n::text("msg.7fdb51f762").into());
         }
         for style in std::iter::once(&self.base).chain(self.regions.values()) {
+            if [style.poster_columns,style.poster_rows].into_iter().flatten().any(|value|!(1..=8).contains(&value)) {
+                return Err(crate::i18n::text("poster.invalidFolds").into());
+            }
             if style.disc_finish.as_deref().is_some_and(|finish|!["silver","black","blue","gold"].contains(&finish)) {
                 return Err(crate::i18n::text("disc.invalidFinish").into());
             }

@@ -42,6 +42,27 @@ pub fn read(conn: &Connection, id: i32) -> Result<Option<BoxSettings>, String> {
 mod tests {
     use super::*;
     #[test]
+    fn game_poster_options_validate_and_persist_independently_of_box_style() {
+        let conn=Connection::open_in_memory().unwrap();conn.execute_batch("CREATE TABLE games(id INTEGER PRIMARY KEY);INSERT INTO games VALUES(1);").unwrap();init(&conn).unwrap();
+        let data=serde_json::json!({"poster":{"columns":3,"rows":2,"rotation":90,"corner":"bottom_right","first_side":"back","fold_order":"columns_first"}});
+        let settings:BoxSettings=serde_json::from_value(data.clone()).unwrap();save(&conn,1,Some(&settings)).unwrap();
+        let saved=serde_json::to_value(read(&conn,1).unwrap()).unwrap();assert_eq!(saved["poster"],data["poster"]);assert!(saved["base"]["model"].is_null());
+        for (field,value) in [("columns",serde_json::json!(9)),("rotation",serde_json::json!(45)),("corner",serde_json::json!("middle")),("first_side",serde_json::json!("invalid")),("fold_order",serde_json::json!("invalid"))] {
+            let mut invalid=data.clone();invalid["poster"][field]=value;let invalid:BoxSettings=serde_json::from_value(invalid).unwrap();assert!(save(&conn,1,Some(&invalid)).is_err());
+        }
+        assert_eq!(serde_json::to_value(read(&conn,1).unwrap()).unwrap()["poster"],data["poster"]);
+    }
+    #[test]
+    fn poster_folds_validate_persist_and_keep_existing_box_settings_compatible() {
+        let conn=Connection::open_in_memory().unwrap();conn.execute_batch("CREATE TABLE games(id INTEGER PRIMARY KEY);INSERT INTO games VALUES(1);").unwrap();init(&conn).unwrap();
+        let old:BoxSettings=serde_json::from_str(r#"{"base":{"model":"dvd"}}"#).unwrap();old.validate().unwrap();
+        let settings:BoxSettings=serde_json::from_value(serde_json::json!({"base":{"poster_columns":3,"poster_rows":2},"regions":{"japan":{"poster_columns":2,"poster_rows":4}}})).unwrap();
+        save(&conn,1,Some(&settings)).unwrap();
+        let saved=serde_json::to_value(read(&conn,1).unwrap()).unwrap();assert_eq!(saved["base"]["poster_columns"],3);assert_eq!(saved["regions"]["japan"]["poster_rows"],4);
+        for value in [0,9]{let invalid:BoxSettings=serde_json::from_value(serde_json::json!({"base":{"poster_columns":value}})).unwrap();assert!(save(&conn,1,Some(&invalid)).is_err());}
+        assert!(serde_json::from_value::<BoxSettings>(serde_json::json!({"base":{"poster_rows":1.5}})).is_err());
+    }
+    #[test]
     fn disc_reverse_finishes_validate_persist_and_keep_older_settings_compatible() {
         let conn=Connection::open_in_memory().unwrap();
         conn.execute_batch("CREATE TABLE games(id INTEGER PRIMARY KEY);INSERT INTO games VALUES(1);").unwrap();init(&conn).unwrap();

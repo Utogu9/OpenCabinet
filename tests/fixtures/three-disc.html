@@ -4,6 +4,7 @@
 <div id="stage" class="game-box-stage" tabindex="0"></div>
 <script>globalThis.OpenCabinetI18n={t:(key,...args)=>key};globalThis.OpenCabinetLocalModels={switch:true};</script>
 <script src="/src/image-fallbacks.js"></script><script src="/src/dvd-case.js"></script>
+<script src="/src/pdf-manual.js"></script>
 <script src="/src/three-box-router.js"></script><script src="/src/game-box.js"></script>
 <script type="module">
 const canvas=document.createElement('canvas');canvas.width=canvas.height=256;
@@ -11,10 +12,18 @@ const ctx=canvas.getContext('2d');ctx.fillStyle='#b02830';ctx.fillRect(0,0,256,2
 window.art=[{kind:'disc',path:canvas.toDataURL()},{kind:'cover',path:canvas.toDataURL()},{kind:'inlay',path:canvas.toDataURL()}];
 window.platform=new URLSearchParams(location.search).get('platform')||'Sony PlayStation 2';
 const withManual=new URLSearchParams(location.search).has('manual');window.reads=0;
+const withPoster=new URLSearchParams(location.search).has('poster');
+if(withPoster){
+ const p=document.createElement('canvas');p.width=900;p.height=600;const c=p.getContext('2d');c.fillStyle='#168140';c.fillRect(0,0,900,600);c.fillStyle='#dd9911';c.fillRect(450,0,450,600);c.fillStyle='#883399';c.fillRect(0,300,900,300);
+ art.push({kind:'poster_front',path:p.toDataURL()});if(new URLSearchParams(location.search).get('poster')!=='front')art.push({kind:'poster_back',path:canvas.toDataURL()});
+}
 const back=document.createElement('canvas');back.width=180;back.height=256;const backContext=back.getContext('2d');backContext.fillStyle='#114499';backContext.fillRect(0,0,180,256);
+const manualRatio=Number(new URLSearchParams(location.search).get('manual-ratio'))||1;
+let booklet=canvas;
+if(manualRatio!==1){booklet=document.createElement('canvas');booklet.width=Math.max(1,Math.round(1620*manualRatio));booklet.height=1620;booklet.getContext('2d').drawImage(canvas,0,0,booklet.width,booklet.height);}
 window.viewer=OpenCabinet3D.createViewer(document.getElementById('stage'),{debug:state=>window.debug=state,
-  ...(withManual?{loadManual:async()=>({path:'manual.pdf',platform,front:canvas,back,pageCount:20,aspectRatio:1,dispose(){}}),onManualActivate:()=>{window.reads++;return true;}}:{})});
-window.select=(id=1,finish=null)=>viewer.update({id,title:'Disc example',platform,rom_path:'Game (USA).iso',box_3d:finish?{base:{disc_finish:finish}}:null},art);
+  ...(withManual?{loadManual:async()=>({path:'manual.pdf',platform,front:booklet,back,pageCount:20,aspectRatio:manualRatio,dispose(){}}),onManualActivate:()=>{window.reads++;return true;}}:{})});
+window.select=(id=1,finish=null)=>viewer.update({id,title:'Disc example',platform,rom_path:'Game (USA).iso',box_3d:finish||withPoster?{base:{...(finish?{disc_finish:finish}:{})},...(withPoster?{poster:{columns:Number(new URLSearchParams(location.search).get('columns'))||2,rows:Number(new URLSearchParams(location.search).get('rows'))||2,...window.posterOptions}}:{})}:null},art);
 window.parts=()=>debug.meshes.filter(mesh=>debug.materials instanceof Map?['UMD Label','Disc Silver','UMD Housing','UMD Window','UMD Disc'].includes(mesh.material?.name):mesh.material===debug.materials.disc||mesh.material===debug.materials.discSilver);
 window.settle=()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));
 select();
