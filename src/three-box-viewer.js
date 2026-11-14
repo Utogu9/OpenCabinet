@@ -84,7 +84,7 @@ export async function createViewer(host, options={}) {
     getManualMeshes:()=>manualMeshes,getManualFront:()=>coverMesh,hasManual:()=>!!manual&&!manualExtracted,
     onManualRemoved:()=>schedule(),readManual:()=>api.readManual(),getPosterMeshes:()=>poster.meshes,getPosterFront:()=>poster.front,getPosterRoot:()=>poster.root,hasPoster:()=>poster.available,
     isPosterVisible:()=>poster.visible&&(!manual||manualExtracted||discInteraction.manualRemoved),onPosterRemoved:value=>poster.setRemoved(value),getPosterRevision:()=>poster.revision,
-    isPosterUnfolded:()=>poster.unfolded,togglePoster:()=>poster.setUnfolded(!poster.unfolded),foldPoster:()=>poster.setUnfolded(false)});
+    isPosterUnfolded:()=>poster.unfolded,togglePoster:()=>poster.setUnfolded(!poster.unfolded),foldPoster:()=>poster.setUnfolded(false),getPosters:()=>poster.entries,selectPoster:id=>poster.select(id)});
   const frameHold=createFrameHold(renderer,host,()=>renderer.render(scene,camera));
   let frame=null,opened=0,openTarget=false,animation=null,zoom=1,side='front',rotationLock='free',rotation=initialRotation(),drag=null;
   let distance=400,viewportWidth=0,viewportHeight=0,surfaceScale=1,layoutDirty=true,menu=null,framingBounds=null;
@@ -544,7 +544,7 @@ export async function createViewer(host, options={}) {
     },
     update(nextGame,images,settings=null) {
       const nextProfile=globalThis.OpenCabinet3D.profileFor(nextGame.platform,null,nextGame.rom_path,globalThis.OpenCabinet3D.resolveSettings(settings,nextGame.box_3d));
-      const nextKey=JSON.stringify([nextGame.id,nextGame.title,images,nextProfile,globalThis.OpenCabinetPosters.settings(nextGame.box_3d)]);if(disposed||nextKey===key)return;
+      const nextKey=JSON.stringify([nextGame.id,nextGame.title,images,nextProfile,globalThis.OpenCabinetPosters.settings(nextGame.box_3d),nextGame.box_3d?.posters]);if(disposed||nextKey===key)return;
       const changed=game?.id!==nextGame.id;api.clear();key=nextKey;game=nextGame;profile=nextProfile;
       applyDiscFinish(materials.discSilver,discFinish(profile,game));
       selectInsert();
@@ -590,8 +590,8 @@ export async function createViewer(host, options={}) {
     get hasDisc(){return discInteraction.available;},get isDiscRemoved(){return discInteraction.removed;},
     removeDisc:()=>discInteraction.remove(),returnDisc:()=>discInteraction.putBack(),examineDisc:()=>discInteraction.examine(),
     examineBox:()=>discInteraction.examineBox(),
-    get hasPoster(){return poster.available;},get isPosterRemoved(){return discInteraction.posterRemoved;},get canRemovePoster(){return poster.visible&&(!manual||manualExtracted||discInteraction.manualRemoved);},
-    removePoster:()=>discInteraction.removePoster(),putPosterBack:()=>discInteraction.returnPoster(),examinePoster:()=>discInteraction.examinePoster(),togglePoster:()=>discInteraction.togglePoster(),get isPosterUnfolded(){return poster.unfolded;},
+    get hasPoster(){return poster.available;},get posters(){return discInteraction.posters;},get isPosterRemoved(){return discInteraction.posterRemoved;},get canRemovePoster(){return discInteraction.canRemovePoster&&(!manual||manualExtracted||discInteraction.manualRemoved);},
+    removePoster:id=>discInteraction.removePoster(id),putPosterBack:id=>discInteraction.returnPoster(id),examinePoster:id=>discInteraction.examinePoster(id),togglePoster:id=>discInteraction.togglePoster(id),get isPosterUnfolded(){return discInteraction.posterUnfolded;},
     refreshManual(){if(!game)return;revision++;artController?.abort();artController=new AbortController();clearManual();loadGameArtwork(JSON.parse(key)[2]);},
     clear(){cameraPan.reset();discInteraction.reset();poster.clear();revision++;stopDrag();closeMenu();artController?.abort();artController=null;clearManual();
       for(const kind of ['cover','back_cover','spine_left','spine_right','disc','paper','paper_spine_left','paper_spine_right'])assign(kind,null);

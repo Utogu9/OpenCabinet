@@ -612,6 +612,15 @@
           </section>
           <section class="hidden" id="game-edit-panel-posters" role="tabpanel" aria-labelledby="game-edit-tab-posters">
             <h3 data-i18n="poster.title"></h3>
+            <div class="poster-pair-toolbar">
+              <select id="game-poster-select" data-i18n-aria-label="poster.choose"></select>
+              <button type="button" class="secondary-btn" id="game-poster-new" data-i18n="poster.new"></button>
+              <button type="button" class="secondary-btn" id="game-poster-up" data-i18n="poster.up"></button>
+              <button type="button" class="secondary-btn" id="game-poster-down" data-i18n="poster.down"></button>
+              <button type="button" class="secondary-btn" id="game-poster-remove" data-i18n="poster.removePair"></button>
+            </div>
+            <p class="help-text" data-i18n="poster.pairsHelp"></p>
+            <div class="form-group"><label for="game-poster-name" data-i18n="poster.name"></label><input id="game-poster-name" type="text" maxlength="128"></div>
             <div class="poster-artwork-grid">
               <div class="poster-artwork-card"><h4 data-i18n="image.kind.posterFront"></h4><div class="poster-artwork-preview" id="game-poster-image-front"></div><select id="game-poster-image-select-front" data-i18n-aria-label="image.kind.posterFront"></select><button type="button" class="secondary-btn" id="game-poster-add-front" data-i18n="poster.addFront"></button></div>
               <div class="poster-artwork-card"><h4 data-i18n="image.kind.posterBack"></h4><div class="poster-artwork-preview" id="game-poster-image-back"></div><select id="game-poster-image-select-back" data-i18n-aria-label="image.kind.posterBack"></select><button type="button" class="secondary-btn" id="game-poster-add-back" data-i18n="poster.addBack"></button></div>

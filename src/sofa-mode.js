@@ -209,8 +209,14 @@
         }
       }
       if(node._viewer?.hasPoster&&(node._viewer.isPosterRemoved||node._viewer.canRemovePoster)){
+        const posters=node._viewer.posters||[];
+        if(posters.length){for(const poster of posters){
+          const actions=poster.removed?[['poster.examine','examinePoster'],[poster.unfolded?'poster.fold':'poster.unfold','togglePoster'],['poster.putBack','putPosterBack']]:poster.visible&&node._viewer.canRemovePoster?[['poster.remove','removePoster']]:[];
+          for(const [key,method]of actions){const item=button(posters.length>1?t('poster.namedAction',t(key),poster.label):t(key),()=>{closeBoxMenu();node._viewer?.[method]?.(poster.id);});item.setAttribute('role','menuitem');menu.append(item);}
+        }}else{
         for(const [key,method] of node._viewer.isPosterRemoved?[['poster.examine','examinePoster'],[node._viewer.isPosterUnfolded?'poster.fold':'poster.unfold','togglePoster'],['poster.putBack','putPosterBack']]:[['poster.remove','removePoster']]){
           const item=button(t(key),()=>{closeBoxMenu();node._viewer?.[method]?.();});item.setAttribute('role','menuitem');menu.append(item);
+        }
         }
       }
       dialog.append(menu);

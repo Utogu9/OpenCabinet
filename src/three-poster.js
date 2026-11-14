@@ -95,7 +95,7 @@ export function createPosterSheet(width,height,columns,rows,front,back,layout=nu
     dispose(){geometries.forEach(g=>g.dispose());edge.dispose();group.removeFromParent();}};
 }
 
-export function createBoxPoster({getSlot,getSettings,imageSource=value=>value,schedule,allMeshes}) {
+function createSinglePoster({getSlot,getSettings,getLayerOffset=()=>0,imageSource=value=>value,schedule,allMeshes}) {
   let paths=null,controller=null,loading=null,sheet=null,mount=null,removed=false,opened=false,covered=true;
   let amount=0,unfolded=false,animation=null,revision=0,disposed=false;
   const textures=[],materials=[];
@@ -142,7 +142,7 @@ export function createBoxPoster({getSlot,getSettings,imageSource=value=>value,sc
       const layout=posterLayout(aspect,width,height,requested.columns,requested.rows,requested.fold_order);
       const columns=layout.widths.length,rows=layout.heights.length;
       sheet=createPosterSheet(width,height,columns,rows,front,back,layout,requested);mount=new THREE.Group();mount.name='Folded Poster';
-      mount.position.copy(center).addScaledVector(new THREE.Vector3(0,0,1).applyQuaternion(quaternion),-.06);mount.quaternion.copy(quaternion);
+      mount.position.copy(center).addScaledVector(new THREE.Vector3(0,0,1).applyQuaternion(quaternion),-.06-getLayerOffset());mount.quaternion.copy(quaternion);
       sheet.group.position.set((requested.corner.endsWith('right')?1:-1)*layout.widths[0]/2,(requested.corner.startsWith('bottom')?-1:1)*layout.heights[0]/2,0);mount.add(sheet.group);slot.parent.add(mount);allMeshes.push(...sheet.meshes);
       for(let i=0;i<pictures.length;i++)if(pictures[i]){
         // A very soft crease remains visible after the sheet lies flat. This
@@ -173,7 +173,8 @@ export function createBoxPoster({getSlot,getSettings,imageSource=value=>value,sc
       const a=first('poster_front')||first('poster'),b=first('poster_back');if(a||b){paths={front:a,back:b};controller=new AbortController();}},
     ensure,
     foldForBounds(){if(!sheet||!removed)return ()=>{};sheet.pose(0);return ()=>sheet.pose(amount);},
-    get available(){return !!sheet;},get visible(){return !!mount?.visible;},get meshes(){return sheet?.meshes||[];},get front(){return sheet?.frontMesh;},get root(){return mount;},
+    get available(){return !!sheet;},get visible(){return !!mount?.visible;},get meshes(){return sheet?.meshes||[];},get front(){return sheet?.frontMesh;},get root(){return mount;},get removed(){return removed;},
+    get depth(){const value=globalThis.OpenCabinetPosters.settings(getSettings());return sheet?.depth??value.columns*value.rows*.06+.05;},
     get revision(){return revision;},get unfolded(){return unfolded;},
     get animating(){return !!animation;},
     setRemoved(value){removed=value;if(mount)mount.visible=opened&&!covered&&!removed;schedule();},
@@ -186,5 +187,32 @@ export function createBoxPoster({getSlot,getSettings,imageSource=value=>value,sc
         sheet.pose(amount);revision++;if(t===1)animation=null;else schedule();}
     },
     clear,dispose(){disposed=true;clear();materials.forEach(material=>material.dispose());},
+  };
+}
+
+// Each packet owns its print, folds and extraction state; only the common case
+// slot and render loop are shared. Closed cases never decode poster scans.
+export function createBoxPoster(options){
+  let items=[],selected=null;
+  const active=()=>items.find(item=>item.id===selected)?.view||items[0]?.view;
+  function clear(){items.forEach(item=>item.view.dispose());items=[];selected=null;}
+  return {
+    update(images){clear();
+      const pairs=globalThis.OpenCabinetPosters.collection(options.getSettings(),images);
+      pairs.forEach((pair,index)=>{
+        const view=createSinglePoster({...options,getSettings:()=>({poster:pair.settings}),getLayerOffset:()=>items.slice(0,index).reduce((sum,item)=>sum+item.view.depth+.12,0)});
+        view.update(['front','back'].filter(side=>pair[side]).map(side=>({kind:'poster_'+side,path:pair[side]})));
+        items.push({id:pair.id,label:pair.name||globalThis.OpenCabinetI18n.t('poster.numbered',index+1),view});
+      });selected=items[0]?.id||null;
+    },
+    get entries(){return items;},select(id){if(items.some(item=>item.id===id))selected=id;},
+    ensure(){return Promise.all(items.map(item=>item.view.ensure()));},
+    frame(...args){items.forEach(item=>item.view.frame(...args));},
+    foldForBounds(){const restore=items.map(item=>item.view.foldForBounds());return ()=>restore.forEach(fn=>fn());},
+    get available(){return items.some(item=>item.view.available);},get visible(){return items.some(item=>item.view.visible);},
+    get meshes(){return active()?.meshes||[];},get front(){return active()?.front;},get root(){return active()?.root;},
+    get revision(){return active()?.revision||0;},get unfolded(){return !!active()?.unfolded;},get animating(){return items.some(item=>item.view.animating);},
+    setRemoved(value){active()?.setRemoved(value);},setUnfolded(value){return active()?.setUnfolded(value)??false;},
+    clear,dispose:clear,
   };
 }

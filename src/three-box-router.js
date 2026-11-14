@@ -83,7 +83,8 @@
       removeDisc(){return viewer?.removeDisc?.()??false;},returnDisc(){return viewer?.returnDisc?.()??false;},examineDisc(){return viewer?.examineDisc?.()??false;},
       examineBox(){return viewer?.examineBox?.()??false;},
       get hasPoster(){return viewer?.hasPoster??false;},get isPosterRemoved(){return viewer?.isPosterRemoved??false;},get canRemovePoster(){return viewer?.canRemovePoster??false;},get isPosterUnfolded(){return viewer?.isPosterUnfolded??false;},
-      removePoster(){return viewer?.removePoster?.()??false;},putPosterBack(){return viewer?.putPosterBack?.()??false;},examinePoster(){return viewer?.examinePoster?.()??false;},togglePoster(){return viewer?.togglePoster?.()??false;},
+      get posters(){return viewer?.posters||[];},
+      removePoster(...args){return viewer?.removePoster?.(...args)??false;},putPosterBack(...args){return viewer?.putPosterBack?.(...args)??false;},examinePoster(...args){return viewer?.examinePoster?.(...args)??false;},togglePoster(...args){return viewer?.togglePoster?.(...args)??false;},
       clear() {release();pending=null;open=false;options.onOpenState?.({canOpen:false,open:false});},
       dispose() {api.clear();disposed=true;},
     };

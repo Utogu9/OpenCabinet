@@ -321,8 +321,9 @@ test("Poster editing preserves game-only folds, shares image choices and saves i
   assert.equal(app.get('game-poster-image-front').children[0].src,'asset://'+encodeURIComponent('C:/another.jpg'));
   app.get('game-poster-rotation').value='90';app.get('game-poster-corner').value='bottom_right';app.get('game-poster-first_side').value='back';app.get('game-poster-fold_order').value='columns_first';
   await app.save();const data=app.calls.find(call=>call.command==='update_game').args.details;
-  assert.deepEqual(data.box3d.poster,{columns:3,rows:4,rotation:90,corner:'bottom_right',first_side:'back',fold_order:'columns_first'});
-  assert.deepEqual(data.box3d.base,{});assert.equal(data.images.find(image=>image.kind==='poster_front').path,'C:/another.jpg');
+  assert.deepEqual(data.box3d.posters[0].settings,{columns:3,rows:4,rotation:90,corner:'bottom_right',first_side:'back',fold_order:'columns_first'});
+  assert.deepEqual(data.box3d.base,{});assert.equal(data.box3d.posters[0].front,'C:/another.jpg');
+  assert.equal(data.images.find(image=>image.kind==='poster_front').path,'C:/map.jpg','pairing does not reorder the image collection');
 });
 
 test("Poster drafts cancel, reject invalid settings and add scans without disabling the next action",async()=>{
@@ -336,7 +337,7 @@ test("Poster drafts cancel, reject invalid settings and add scans without disabl
   await new Promise(resolve=>setImmediate(resolve));
   assert.equal(app.get('game-poster-add-front').disabled,false);
   await app.save();const data=app.calls.find(call=>call.command==='update_game').args.details;
-  assert.equal(data.box3d,null);assert.equal(data.images.find(image=>image.path==='C:/new-map.avif').kind,'poster_front');
+  assert.equal(data.box3d.posters[0].front,'C:/new-map.avif');assert.deepEqual(data.box3d.base,{});assert.equal(data.images.find(image=>image.path==='C:/new-map.avif').kind,'poster_front');
 });
 
 test("Editor categories show one panel, preserve drafts and reset to Details on reopening", async () => {

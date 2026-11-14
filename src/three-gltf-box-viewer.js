@@ -158,7 +158,7 @@ export async function createModelViewer(host,options={},definition) {
     getManualMeshes:()=>manualMeshes,getManualFront:()=>manualMeshes.find(mesh=>mesh.material===manualFront),hasManual:()=>!!manual&&!manualExtracted,
     onManualRemoved:()=>{manualGroup.visible=!!manual&&!manualExtracted&&!discInteraction.manualRemoved;if(procedural?.manualCover&&game)compose();schedule();},readManual:()=>api.readManual(),
     getPosterMeshes:()=>poster.meshes,getPosterFront:()=>poster.front,getPosterRoot:()=>poster.root,hasPoster:()=>poster.available,isPosterVisible:()=>poster.visible&&(!manual||manualExtracted||discInteraction.manualRemoved),onPosterRemoved:value=>poster.setRemoved(value),
-    getPosterRevision:()=>poster.revision,isPosterUnfolded:()=>poster.unfolded,togglePoster:()=>poster.setUnfolded(!poster.unfolded),foldPoster:()=>poster.setUnfolded(false)});
+    getPosterRevision:()=>poster.revision,isPosterUnfolded:()=>poster.unfolded,togglePoster:()=>poster.setUnfolded(!poster.unfolded),foldPoster:()=>poster.setUnfolded(false),getPosters:()=>poster.entries,selectPoster:id=>poster.select(id)});
   const frameHold=createFrameHold(renderer,host,()=>renderer.render(scene,camera));
   let frame=null,opened=0,openTarget=false,animation=null,zoom=1,side='front',rotationLock='free',drag=null,menu=null;
   let rotation=initialRotation(),width=0,height=0,surfaceScale=1;
@@ -486,7 +486,7 @@ export async function createModelViewer(host,options={},definition) {
       schedule();},
     update(next,images,settings=null) {
       const nextProfile=globalThis.OpenCabinet3D.profileFor(next.platform,null,next.rom_path,globalThis.OpenCabinet3D.resolveSettings(settings,next.box_3d));
-      const nextKey=JSON.stringify([next.id,next.title,images,nextProfile,globalThis.OpenCabinetPosters.settings(next.box_3d)]);if(disposed||key===nextKey)return;
+      const nextKey=JSON.stringify([next.id,next.title,images,nextProfile,globalThis.OpenCabinetPosters.settings(next.box_3d),next.box_3d?.posters]);if(disposed||key===nextKey)return;
       const changed=next.id!==game?.id;api.clear();game=next;profile=nextProfile;key=nextKey;
       applyDiscFinish(materials.get('Disc Silver'),discFinish(profile,game));
       poster.update(images);
@@ -539,8 +539,8 @@ export async function createModelViewer(host,options={},definition) {
     get hasDisc(){return discInteraction.available;},get isDiscRemoved(){return discInteraction.removed;},
     removeDisc:()=>discInteraction.remove(),returnDisc:()=>discInteraction.putBack(),examineDisc:()=>discInteraction.examine(),
     examineBox:()=>discInteraction.examineBox(),
-    get hasPoster(){return poster.available;},get isPosterRemoved(){return discInteraction.posterRemoved;},get canRemovePoster(){return poster.visible&&(!manual||manualExtracted||discInteraction.manualRemoved);},
-    removePoster:()=>discInteraction.removePoster(),putPosterBack:()=>discInteraction.returnPoster(),examinePoster:()=>discInteraction.examinePoster(),togglePoster:()=>discInteraction.togglePoster(),get isPosterUnfolded(){return poster.unfolded;},
+    get hasPoster(){return poster.available;},get posters(){return discInteraction.posters;},get isPosterRemoved(){return discInteraction.posterRemoved;},get canRemovePoster(){return discInteraction.canRemovePoster&&(!manual||manualExtracted||discInteraction.manualRemoved);},
+    removePoster:id=>discInteraction.removePoster(id),putPosterBack:id=>discInteraction.returnPoster(id),examinePoster:id=>discInteraction.examinePoster(id),togglePoster:id=>discInteraction.togglePoster(id),get isPosterUnfolded(){return discInteraction.posterUnfolded;},
     refreshManual(){if(game)void preloadManual();},
     clear(){cameraPan.reset();discInteraction.reset();poster.clear();revision++;controller?.abort();controller=null;stopDrag();closeMenu();key=null;game=null;composed.clear();
       clearManual();

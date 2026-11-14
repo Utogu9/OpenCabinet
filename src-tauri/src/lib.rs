@@ -2485,6 +2485,20 @@ mod game_edit_tests {
     }
 
     #[test]
+    fn multiple_posters_follow_copied_images_and_keep_portable_references_on_reediting() {
+        let directory=MediaDirectory::new();let root=directory.0.join("library");let mut conn=database();
+        let front=directory.image("poster_front.png");let back=directory.image("poster_back.png");let second=directory.image("poster_front2.png");
+        let mut edit=details();edit.images=Some(vec![GameImage{source:None,path:front.clone(),kind:"poster_front".into()},GameImage{source:None,path:back.clone(),kind:"poster_back".into()},GameImage{source:None,path:second.clone(),kind:"poster_front".into()}]);
+        edit.box_3d=Some(Some(serde_json::from_value(serde_json::json!({"posters":[{"id":"second","front":second},{"id":"first","front":front,"back":back}]})).unwrap()));
+        let saved=save_game_with_media(&mut conn,edit,&root).unwrap();let images=read_game_images(&conn,1).unwrap();
+        let settings=game_box_settings::read(&conn,1).unwrap().unwrap();let json=serde_json::to_value(&settings).unwrap();
+        assert_eq!(json["posters"][0]["front"],images[2].path);assert_eq!(json["posters"][1]["back"],images[1].path);
+        assert!(!Path::new(json["posters"][0]["front"].as_str().unwrap()).is_absolute());
+        let mut edit=details();edit.images=Some(saved.images);edit.box_3d=Some(Some(settings));save_game_with_media(&mut conn,edit,&root).unwrap();
+        assert_eq!(serde_json::to_value(game_box_settings::read(&conn,1).unwrap()).unwrap(),json);
+    }
+
+    #[test]
     fn poster_kinds_migrate_without_changing_paths_order_or_portable_identity() {
         let conn = Connection::open_in_memory().unwrap();
         conn.execute_batch("CREATE TABLE games(id INTEGER PRIMARY KEY,cover_path TEXT);").unwrap();

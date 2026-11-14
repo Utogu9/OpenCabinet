@@ -36,22 +36,40 @@ export function discFocusLayout(extent,discDiameter,blend) {
 export function createDiscInteraction({host,reference,root,scene,camera,meshes,getGame,isOpen,schedule,discMeshes,
   getRotationLock=()=> 'free',getManualMeshes=()=>[],getManualFront=()=>null,hasManual=()=>false,
   onManualRemoved=()=>{},readManual=()=>false,getPosterMeshes=()=>[],getPosterFront=()=>null,getPosterRoot=()=>null,hasPoster=()=>false,isPosterVisible=()=>false,
-  onPosterRemoved=()=>{},getPosterRevision=()=>0,isPosterUnfolded=()=>false,togglePoster=()=>false,foldPoster=()=>{}}) {
-  const make=kind=>{
+  onPosterRemoved=()=>{},getPosterRevision=()=>0,isPosterUnfolded=()=>false,togglePoster=()=>false,foldPoster=()=>{},getPosters=null,selectPoster=()=>{}}) {
+  const make=(kind,type=kind)=>{
     const group=new THREE.Group(),centered=new THREE.Group();group.name='Detached '+kind;
     group.visible=false;group.add(centered);scene.add(group);
-    return {kind,group,centered,original:new Map(),removed:false,reading:false,amount:0,radius:0,zoom:1,
+    return {kind,type,group,centered,original:new Map(),removed:false,reading:false,amount:0,radius:0,zoom:1,
       bounds:null,transition:null,side:'front',front:new THREE.Quaternion()};
   };
   const disc=make('disc'),manual=make('manual'),poster=make('poster'),entries=[disc,manual,poster];
   const media=discMeshes||meshes.filter(mesh=>opticalMaterials.has(mesh.material?.name));
   const raycaster=new THREE.Raycaster(),pointer=new THREE.Vector2();
-  let focused='box',picked=null,weights={box:1,disc:0,manual:0,poster:0},focusTransition=null,tools=null,disposed=false,lastBounds=null;
+  let focused='box',picked=null,hitPosterId=null,posterSource=null,weights={box:1,disc:0,manual:0,poster:0},focusTransition=null,tools=null,disposed=false,lastBounds=null;
   let extent=1,boxZoom=1,boxFactor=1,clipOverride=null,sideBySide=false,layoutAmount=0,layoutTransition=null;
   const out=()=>entries.filter(entry=>entry.removed);
   const current=()=>entries.find(entry=>entry.removed&&entry.kind===focused&&!entry.reading);
-  const available=entry=>!!getGame()&&(entry===disc?media.length>0:entry===manual?hasManual()&&getManualMeshes().length>0:hasPoster()&&getPosterMeshes().length>0);
-  const sourcesFor=entry=>entry===disc?media:entry===manual?getManualMeshes():getPosterMeshes();
+  const legacyPoster={get available(){return hasPoster();},get meshes(){return getPosterMeshes();},get front(){return getPosterFront();},get root(){return getPosterRoot();},get revision(){return getPosterRevision();},get visible(){return isPosterVisible();},get unfolded(){return isPosterUnfolded();},setRemoved:onPosterRemoved,setUnfolded(value){if(!value)foldPoster();else togglePoster();return true;}};
+  const print=entry=>entry?.print||legacyPoster;
+  function syncPosters(){
+    if(!getPosters)return;
+    const descriptions=getPosters();if(descriptions===posterSource)return;posterSource=descriptions;
+    const old=entries.filter(entry=>entry.type==='poster'),keep=new Set(),ordered=[];
+    descriptions.forEach((item,index)=>{
+      const kind=descriptions.length===1?'poster':'poster:'+item.id;
+      let entry=old.find(entry=>entry.posterId===item.id);
+      if(!entry){entry=old.find(entry=>!entry.posterId&&!keep.has(entry))||make(kind,'poster');if(!entries.includes(entry))entries.push(entry);}
+      if(entry.kind!==kind){weights[kind]=weights[entry.kind]||0;delete weights[entry.kind];if(focused===entry.kind)focused=kind;entry.kind=kind;entry.group.name='Detached '+kind;}
+      entry.posterId=item.id;entry.label=item.label;entry.print=item.view;keep.add(entry);ordered.push(entry);weights[entry.kind]??=0;
+    });
+    for(const entry of old)if(!keep.has(entry)){restoreEntry(entry);entry.group.removeFromParent();entries.splice(entries.indexOf(entry),1);delete weights[entry.kind];}
+    entries.splice(0,entries.length,...entries.filter(entry=>entry.type!=='poster'),...ordered);
+  }
+  function posters(){syncPosters();return entries.filter(entry=>entry.type==='poster');}
+  const available=entry=>!!entry&&!!getGame()&&(entry===disc?media.length>0:entry===manual?hasManual()&&getManualMeshes().length>0:print(entry).available&&print(entry).meshes.length>0);
+  const sourcesFor=entry=>entry===disc?media:entry===manual?getManualMeshes():print(entry).meshes;
+  function chosenPoster(id,removed=false){const list=posters();return id!=null?list.find(entry=>entry.posterId===id||entry.kind===id):list.find(entry=>entry.kind===focused&&entry.removed===removed)||list.find(entry=>removed?entry.removed:print(entry).visible&&!entry.removed);}
   const visible=mesh=>{for(let node=mesh;node;node=node.parent)if(!node.visible)return false;return true;};
   function button(key,action){
     const node=document.createElement('button');node.type='button';node.className='secondary-btn';node.textContent=t(key);
@@ -59,13 +77,14 @@ export function createDiscInteraction({host,reference,root,scene,camera,meshes,g
   }
   function focus(value,immediate=false){
     if(focused!==value||immediate){
-      const to={box:0,disc:0,manual:0,poster:0};to[value]=1;
+      const to=Object.fromEntries(['box',...entries.map(entry=>entry.kind)].map(key=>[key,0]));to[value]=1;
       if(immediate){weights=to;focusTransition=null;}
       else {focusTransition={from:{...weights},to,start:null};host.dataset.discAnimation='moving';}
     }
     focused=value;host.dataset.discFocus=value;
+    const selected=entries.find(entry=>entry.kind===value&&entry.type==='poster');if(selected)selectPoster(selected.posterId);
     tools?.querySelectorAll('[data-disc-return]').forEach(node=>{node.hidden=node.dataset.discReturn!==value;});
-    tools?.querySelectorAll('[data-poster-unfold]').forEach(node=>{node.hidden=value!=='poster';});
+    tools?.querySelectorAll('[data-poster-unfold]').forEach(node=>{node.hidden=node.dataset.posterUnfold!==value;});
     schedule();
   }
   function refresh(){
@@ -74,7 +93,7 @@ export function createDiscInteraction({host,reference,root,scene,camera,meshes,g
       tools=document.createElement('div');tools.className='game-box-disc-tools';tools.setAttribute('role','toolbar');tools.setAttribute('aria-label',t('disc.controls'));
       tools.addEventListener('pointerdown',event=>event.stopPropagation());tools.addEventListener('keydown',event=>event.stopPropagation());
       const layout=button('disc.sideBySide',()=>api.toggleLayout());layout.setAttribute('aria-pressed',String(sideBySide));tools.append(layout);
-      if(poster.removed){const node=button(isPosterUnfolded()?'poster.fold':'poster.unfold',()=>api.togglePoster());node.dataset.posterUnfold='true';node.hidden=focused!=='poster';tools.append(node);}
+      for(const entry of posters().filter(entry=>entry.removed)){const node=button(print(entry).unfolded?'poster.fold':'poster.unfold',()=>api.togglePoster(entry.posterId));node.dataset.posterUnfold=entry.kind;node.hidden=focused!==entry.kind;tools.append(node);}
       for(const entry of out()){
         const node=button(entry===disc?'disc.putBack':entry===manual?'manual.putBack':'poster.putBack',()=>putBack(entry));
         node.dataset.discReturn=entry.kind;node.hidden=focused!==entry.kind;tools.append(node);
@@ -83,7 +102,7 @@ export function createDiscInteraction({host,reference,root,scene,camera,meshes,g
     }
     if(disc.removed)host.dataset.discRemoved='true';else delete host.dataset.discRemoved;
     if(manual.removed)host.dataset.manualRemoved='true';else delete host.dataset.manualRemoved;
-    if(poster.removed)host.dataset.posterRemoved='true';else delete host.dataset.posterRemoved;
+    if(posters().some(entry=>entry.removed))host.dataset.posterRemoved='true';else delete host.dataset.posterRemoved;
     if(!out().length){delete host.dataset.discFocus;delete host.dataset.discLayout;delete host.dataset.discAnimation;}
     schedule();
   }
@@ -96,11 +115,11 @@ export function createDiscInteraction({host,reference,root,scene,camera,meshes,g
     entry.original.clear();entry.centered.clear();entry.group.visible=false;entry.group.position.set(0,0,0);entry.group.quaternion.identity();entry.group.scale.setScalar(1);
     entry.removed=false;entry.reading=false;entry.amount=0;entry.transition=null;entry.zoom=1;entry.posterMount=null;
     if(entry===manual)onManualRemoved(false);
-    if(entry===poster)onPosterRemoved(false);
+    if(entry.type==='poster')print(entry).setRemoved(false);
   }
   function restore(){
     restoreClipping();entries.forEach(restoreEntry);root.position.set(0,0,0);
-    focused='box';picked=null;weights={box:1,disc:0,manual:0,poster:0};boxZoom=boxFactor=1;focusTransition=layoutTransition=null;layoutAmount=sideBySide?1:0;
+    focused='box';picked=hitPosterId=null;weights=Object.fromEntries(['box',...entries.map(entry=>entry.kind)].map(key=>[key,key==='box'?1:0]));boxZoom=boxFactor=1;focusTransition=layoutTransition=null;layoutAmount=sideBySide?1:0;
     delete host.dataset.discAnimation;refresh();
   }
   function cast(event,objects){
@@ -111,13 +130,13 @@ export function createDiscInteraction({host,reference,root,scene,camera,meshes,g
   }
   function anchor(entry){
     reference.updateWorldMatrix(true,true);
-    if(entry===poster&&entry.posterMount&&getPosterRoot())return entry.bounds.getCenter(new THREE.Vector3()).applyMatrix4(entry.posterMount.clone().invert()).applyMatrix4(getPosterRoot().matrixWorld);
+    if(entry.type==='poster'&&entry.posterMount&&print(entry).root)return entry.bounds.getCenter(new THREE.Vector3()).applyMatrix4(entry.posterMount.clone().invert()).applyMatrix4(print(entry).root.matrixWorld);
     return entry.bounds.getCenter(new THREE.Vector3()).applyMatrix4(reference.matrixWorld);
   }
   function remove(entry){
     if(!available(entry)||!isOpen()||entry.removed)return false;
     const alreadyOut=out().length;reference.updateWorldMatrix(true,true);
-    const inverse=reference.matrixWorld.clone().invert(),sources=sourcesFor(entry),front=entry===poster?getPosterFront():getManualFront();
+    const inverse=reference.matrixWorld.clone().invert(),sources=sourcesFor(entry),front=entry.type==='poster'?print(entry).front:getManualFront();
     for(const source of sources){
       const copy=new THREE.Mesh(source.geometry,source.material);copy.matrix.copy(inverse).multiply(source.matrixWorld);copy.matrixAutoUpdate=false;copy.frustumCulled=false;
       entry.centered.add(copy);entry.original.set(source,source.visible);source.visible=false;
@@ -139,12 +158,12 @@ export function createDiscInteraction({host,reference,root,scene,camera,meshes,g
     entry.group.visible=true;entry.removed=true;entry.amount=0;entry.zoom=1;entry.side='front';entry.reading=false;
     entry.transition={from:0,to:1,start:null};focus(entry.kind,!alreadyOut);
     if(entry===manual)onManualRemoved(true);
-    if(entry===poster){entry.posterRevision=getPosterRevision();entry.posterMount=getPosterRoot()?inverse.clone().multiply(getPosterRoot().matrixWorld):null;onPosterRemoved(true);}
+    if(entry.type==='poster'){entry.posterRevision=print(entry).revision;entry.posterMount=print(entry).root?inverse.clone().multiply(print(entry).root.matrixWorld):null;print(entry).setRemoved(true);}
     refresh();return true;
   }
   function putBack(entry){
-    if(!entry.removed||entry.transition?.to===0)return false;
-    if(entry===poster)foldPoster();
+    if(!entry?.removed||entry.transition?.to===0)return false;
+    if(entry.type==='poster')print(entry).setUnfolded(false);
     entry.returnTarget=entry.group.position.clone();entry.returnRotation=entry.group.quaternion.clone();entry.returnScale=entry.group.scale.clone();
     entry.transition={from:entry.amount,to:0,start:null};focus('box');refresh();return true;
   }
@@ -158,11 +177,17 @@ export function createDiscInteraction({host,reference,root,scene,camera,meshes,g
   const api={
     get available(){return available(disc);},get removed(){return disc.removed;},get focused(){return !!current();},
     get object(){return disc.group;},get manualObject(){return manual.group;},get manualRemoved(){return manual.removed;},
-    get posterObject(){return poster.group;},get posterRemoved(){return poster.removed;},get posterAvailable(){return available(poster);},
+    get posterObject(){return (chosenPoster(null,true)||posters()[0]||poster).group;},get posterRemoved(){return posters().some(entry=>entry.removed);},get posterAvailable(){return posters().some(available);},
+    get posters(){return posters().map(entry=>({id:entry.posterId||entry.kind,label:entry.label,removed:entry.removed,available:available(entry),visible:print(entry).visible,unfolded:print(entry).unfolded,object:entry.group}));},
+    get canRemovePoster(){return isOpen()&&posters().some(entry=>available(entry)&&!entry.removed&&print(entry).visible);},
+    get posterUnfolded(){return !!print(chosenPoster(null,true)).unfolded;},
     get manualAvailable(){return available(manual);},
     get pickedManual(){return picked==='manual'&&manual.removed&&!manual.reading&&!manual.transition;},
     hit(event){return available(disc)&&!disc.removed&&isOpen()&&!!cast(event,media);},
-    hitPoster(event){return available(poster)&&!poster.removed&&isOpen()&&isPosterVisible()&&!!cast(event,getPosterMeshes());},
+    hitPoster(event){hitPosterId=null;if(!isOpen())return false;
+      const hits=posters().filter(entry=>available(entry)&&!entry.removed&&print(entry).visible).map(entry=>({entry,hit:cast(event,print(entry).meshes)})).filter(item=>item.hit).sort((a,b)=>a.hit.distance-b.hit.distance);
+      if(hits.length)hitPosterId=hits[0].entry.posterId||hits[0].entry.kind;return hits.length>0;
+    },
     select(event){
       picked=null;
       if(!out().length||tools?.contains(event.target))return false;
@@ -184,9 +209,9 @@ export function createDiscInteraction({host,reference,root,scene,camera,meshes,g
     examineBox(){if(!out().length)return false;focus('box');return true;},
     removeManual:()=>remove(manual),returnManual:()=>putBack(manual),
     examineManual(){if(!available(manual)||!manual.removed&&!remove(manual))return false;focus('manual');return true;},
-    removePoster(){return isPosterVisible()&&remove(poster);},returnPoster:()=>putBack(poster),
-    examinePoster(){if(!available(poster)||!poster.removed&&!api.removePoster())return false;focus('poster');return true;},
-    togglePoster(){if(!poster.removed||poster.transition)return false;const changed=togglePoster();refresh();return changed;},
+    removePoster(id){const entry=chosenPoster(id??hitPosterId);hitPosterId=null;return !!entry&&print(entry).visible&&remove(entry);},returnPoster:id=>putBack(chosenPoster(id,true)),
+    examinePoster(id){const entry=chosenPoster(id,true)||chosenPoster(id);if(!available(entry)||!entry.removed&&!api.removePoster(entry.posterId))return false;focus(entry.kind);return true;},
+    togglePoster(id){const entry=chosenPoster(id,true);if(!entry?.removed||entry.transition)return false;const changed=print(entry).setUnfolded(!print(entry).unfolded);refresh();return changed;},
     setManualReading(value){const returning=manual.reading&&!value;manual.reading=!!value;if(manual.removed){manual.group.visible=!value;if(returning)focus('manual');}schedule();},
     resetManual(){if(manual.removed){restoreEntry(manual);focus(disc.removed?'disc':'box');refresh();}},
     toggleLayout(){if(!out().length||out().some(entry=>entry.transition))return false;sideBySide=!sideBySide;
@@ -204,17 +229,20 @@ export function createDiscInteraction({host,reference,root,scene,camera,meshes,g
       if(out().length)actions.push(['box.examine',api.examineBox]);
       if(available(disc)&&(disc.removed||isOpen()))actions.push(...(disc.removed?[['disc.examine',api.examine],['disc.putBack',api.putBack]]:[['disc.remove',api.remove],['disc.examine',api.examine]]));
       if(available(manual)&&(manual.removed||isOpen()))actions.push(...(manual.removed?[['manual.examine',api.examineManual],['manual.putBack',api.returnManual]]:[['manual.remove',api.removeManual]]),['manual.read',readManual]);
-      if(poster.removed)actions.push(['poster.examine',api.examinePoster],[isPosterUnfolded()?'poster.fold':'poster.unfold',api.togglePoster],['poster.putBack',api.returnPoster]);
-      else if(available(poster)&&isOpen()&&isPosterVisible())actions.push(['poster.remove',api.removePoster]);
+      const sheets=posters();
+      for(const entry of sheets){const label=sheets.length>1?entry.label:null;
+        if(entry.removed)actions.push(['poster.examine',()=>api.examinePoster(entry.posterId),label],[print(entry).unfolded?'poster.fold':'poster.unfold',()=>api.togglePoster(entry.posterId),label],['poster.putBack',()=>api.returnPoster(entry.posterId),label]);
+        else if(available(entry)&&isOpen()&&print(entry).visible)actions.push(['poster.remove',()=>api.removePoster(entry.posterId),label]);
+      }
       if(!actions.length)return;menu.appendChild(document.createElement('hr'));
-      for(const [key,action] of actions){const node=button(key,()=>{closeMenu();action();});node.className='dropdown-item';node.setAttribute('role','menuitem');menu.appendChild(node);items.push(node);}
+      for(const [key,action,label] of actions){const node=button(key,()=>{closeMenu();action();});if(label)node.textContent=t('poster.namedAction',t(key),label);node.className='dropdown-item';node.setAttribute('role','menuitem');menu.appendChild(node);items.push(node);}
     },
-    beforeFrame(){restoreClipping();root.position.set(0,0,0);},
+    beforeFrame(){syncPosters();restoreClipping();root.position.set(0,0,0);},
     layout(time,bounds){
       lastBounds=bounds;if(!out().length||!bounds)return;
       if(focusTransition){
         focusTransition.start??=time;const t=Math.min(1,(time-focusTransition.start)/320),ease=t*t*(3-2*t);
-        for(const key of Object.keys(weights))weights[key]=THREE.MathUtils.lerp(focusTransition.from[key],focusTransition.to[key],ease);
+        for(const key of Object.keys(weights))weights[key]=THREE.MathUtils.lerp(focusTransition.from[key]||0,focusTransition.to[key]||0,ease);
         if(t===1)focusTransition=null;else schedule();
       }
       if(layoutTransition){layoutTransition.start??=time;const t=Math.min(1,(time-layoutTransition.start)/320);
@@ -224,14 +252,14 @@ export function createDiscInteraction({host,reference,root,scene,camera,meshes,g
         if(t===1&&entry.transition.to===0){restoreEntry(entry);refresh();}
         else if(t===1){if(entry!==disc)entry.group.quaternion.copy(entry.front);entry.transition=null;}else schedule();
       }
-      if(poster.removed&&poster.posterRevision!==getPosterRevision()){
-        reference.updateWorldMatrix(true,true);const mount=getPosterRoot();mount?.updateWorldMatrix(true,true);
-        const inverse=poster.posterMount&&mount?poster.posterMount.clone().multiply(mount.matrixWorld.clone().invert()):reference.matrixWorld.clone().invert(),sources=getPosterMeshes(),bounds=new THREE.Box3(),point=new THREE.Vector3();
+      for(const poster of posters())if(poster.removed&&poster.posterRevision!==print(poster).revision){
+        reference.updateWorldMatrix(true,true);const mount=print(poster).root;mount?.updateWorldMatrix(true,true);
+        const inverse=poster.posterMount&&mount?poster.posterMount.clone().multiply(mount.matrixWorld.clone().invert()):reference.matrixWorld.clone().invert(),sources=print(poster).meshes,bounds=new THREE.Box3(),point=new THREE.Vector3();
         for(let i=0;i<sources.length;i++){const source=sources[i],copy=poster.centered.children[i];if(!copy)continue;
           source.updateWorldMatrix(true,false);copy.matrix.copy(inverse).multiply(source.matrixWorld);copy.geometry.computeBoundingBox();bounds.union(copy.geometry.boundingBox.clone().applyMatrix4(copy.matrix));}
         poster.bounds=bounds;const center=bounds.getCenter(new THREE.Vector3());poster.radius=0;
         for(const copy of poster.centered.children){const p=copy.geometry.attributes.position;for(let i=0;i<p.count;i++)poster.radius=Math.max(poster.radius,point.fromBufferAttribute(p,i).applyMatrix4(copy.matrix).distanceTo(center));}
-        poster.centered.position.copy(center.negate());poster.posterRevision=getPosterRevision();
+        poster.centered.position.copy(center.negate());poster.posterRevision=print(poster).revision;
       }
       const detached=out();if(!detached.length){boxFactor=1;return;}
       const amount=Math.max(...detached.map(entry=>entry.amount)),ease=amount*amount*(3-2*amount),baseScale=root.scale.clone(),baseSize=bounds.getSize(new THREE.Vector3()).multiply(baseScale);
@@ -244,9 +272,10 @@ export function createDiscInteraction({host,reference,root,scene,camera,meshes,g
       root.position.copy(boxPlacement).multiplyScalar(ease);root.scale.copy(baseScale).multiplyScalar(boxFactor);reference.updateWorldMatrix(true,true);
       let sideCursor=-sideWidth/2+baseSize.x+gap;
       const frames=[{radius:bounds.getSize(new THREE.Vector3()).multiply(baseScale).length()/2*boxFactor,position:root.position}];
+      let posterIndex=0;
       for(const entry of detached){
-        const blend=weights[entry.kind],radius=entry.radius*scale,direction=entry===manual?-1:1;
-        const target=new THREE.Vector3(direction*extent*.62*(1-blend),extent*(entry===disc?.18:entry===manual?-.15:-.30)*(1-blend),-extent*.5*(1-blend));
+        const offset=entry.type==='poster'?posterIndex++:0,blend=weights[entry.kind]||0,radius=entry.radius*scale,direction=entry===manual?-1:1;
+        const target=new THREE.Vector3(direction*extent*(.62+offset*.15)*(1-blend),extent*(entry===disc?.18:entry===manual?-.15:-.30-offset*.12)*(1-blend),-extent*(.5+offset*.12)*(1-blend));
         target.lerp(new THREE.Vector3(sideCursor+radius,0,0),layoutAmount);sideCursor+=radius*2+gap;
         const factor=THREE.MathUtils.lerp(extent*.86/Math.max(radius*2,.001)*THREE.MathUtils.lerp(.56,1,blend),1,layoutAmount)*entry.zoom;
         const e=entry.amount*entry.amount*(3-2*entry.amount),returning=entry.transition?.to===0;

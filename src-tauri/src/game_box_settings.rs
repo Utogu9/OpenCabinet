@@ -42,6 +42,19 @@ pub fn read(conn: &Connection, id: i32) -> Result<Option<BoxSettings>, String> {
 mod tests {
     use super::*;
     #[test]
+    fn multiple_posters_keep_pairing_order_folds_and_portable_image_references() {
+        let conn=Connection::open_in_memory().unwrap();conn.execute_batch("CREATE TABLE games(id INTEGER PRIMARY KEY);INSERT INTO games VALUES(1);").unwrap();init(&conn).unwrap();
+        let data=serde_json::json!({"posters":[{"id":"second","name":"Map","front":"new-front.png","back":"images/one/back2.webp","settings":{"columns":3,"rows":4,"rotation":90}},{"id":"first","front":"images/one/front.webp"}]});
+        let mut settings:BoxSettings=serde_json::from_value(data).unwrap();
+        settings.remap_poster_image("new-front.png","images/one/copied.png");save(&conn,1,Some(&settings)).unwrap();
+        let saved=serde_json::to_value(read(&conn,1).unwrap()).unwrap();
+        assert_eq!(saved["posters"][0]["front"],"images/one/copied.png");assert_eq!(saved["posters"][0]["settings"]["rows"],4);assert_eq!(saved["posters"][1]["id"],"first");
+        for invalid in [serde_json::json!({"posters":[{"id":"a","settings":{"rows":9}}]}),serde_json::json!({"posters":[{"id":"a"},{"id":"a"}]}),serde_json::json!({"posters":[{"id":""}]})] {
+            let invalid:BoxSettings=serde_json::from_value(invalid).unwrap();assert!(save(&conn,1,Some(&invalid)).is_err());
+        }
+        assert_eq!(serde_json::to_value(read(&conn,1).unwrap()).unwrap(),saved);
+    }
+    #[test]
     fn game_poster_options_validate_and_persist_independently_of_box_style() {
         let conn=Connection::open_in_memory().unwrap();conn.execute_batch("CREATE TABLE games(id INTEGER PRIMARY KEY);INSERT INTO games VALUES(1);").unwrap();init(&conn).unwrap();
         let data=serde_json::json!({"poster":{"columns":3,"rows":2,"rotation":90,"corner":"bottom_right","first_side":"back","fold_order":"columns_first"}});
