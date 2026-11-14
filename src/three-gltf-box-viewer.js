@@ -9,6 +9,7 @@ import { prepareRenderGroup, createRenderLease, releaseSceneGpu, createFrameHold
 import { createDiscInteraction, discFinish, applyDiscFinish } from './three-disc-interaction.js';
 import { createBoxPoster } from './three-poster.js';
 import './box-camera-pan.js';
+import './spine-template.js';
 
 // Cache source bytes; individual viewers own their meshes, textures and animations.
 const sourceTasks=new Map();
@@ -380,6 +381,10 @@ export async function createModelViewer(host,options={},definition) {
     const art=chooseArtwork(images);
     const paths={cover:art.full||art.cover,back_cover:art.back_cover,spine:art.spine,inlay:art.inlay,cartridge:art.cartridge,...(materials.has('UMD Label')?{disc:art.disc}:{})};
     const signal=controller.signal,current=()=>!disposed&&revision===token&&!signal.aborted;
+    const templateTask=!art.full&&!art.spine&&profile.spineTemplate?(async()=>{try{
+      const image=await globalThis.OpenCabinetSpines.render(profile.spineTemplate,game.title,{imageSource,signal,profile});
+      if(current()){pictures.spine=image;compose();}
+    }catch{/* An unavailable console template leaves the original blank spine. */}})():null;
     const front=art.full?'full':'cover';
     let originalReady=false;
     function preview(image,full=!!art.full){if(image&&current()&&!originalReady){
@@ -406,6 +411,7 @@ export async function createModelViewer(host,options={},definition) {
         ? globalThis.OpenCabinetCarouselBoxes.loadSpine(path,signal,imageSource,options.carousel?650:0) : imageAt(path,signal));
         if(current()){pictures[kind]=image;compose();}}catch{/* Missing art does not block the model. */}
     }));
+    await templateTask;
   }
   function stopDrag(event) {
     if(!drag||(event&&drag.id!==event.pointerId))return;

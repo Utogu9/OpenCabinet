@@ -60,7 +60,7 @@
     for (const region of new Set([...Object.keys(platform.regions || {}), ...Object.keys(game.regions || {})])) {
       regions[region] = { ...clean(platform.regions?.[region] || platform.base), ...clean(game.base), ...clean(game.regions?.[region]) };
     }
-    return { base, regions };
+    return { base, regions,...(platform.spine_template?{spine_template:platform.spine_template}:{}) };
   }
   function profileFor(platform, coverRatio = null, romPath = "", settings = null) {
     const name = String(platform || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]/g, "");
@@ -97,7 +97,7 @@
     else id = "generic";
     const [width, height, depth, label, material, spineFace = "left"] = formats[id]
       || [Math.max(80, Math.min(220, 170 * (coverRatio || 0.71))), 170, 16, globalThis.OpenCabinetI18n.t("msg.be9c16b897"), "#353b46"];
-    let profile = { id, width, height, depth, label, color: color || material, spineFace };
+    let profile = { id, width, height, depth, label, color: color || material, spineFace,...(settings?.spine_template?{spineTemplate:settings.spine_template}:{}) };
     // A regional override replaces the general style; absence inherits it.
     const style = settings?.regions?.[region] || settings?.base;
     if (!style) return describeCase(profile, name);
@@ -114,6 +114,7 @@
     if (/^#[\da-f]{6}$/i.test(style.color || "")) profile.color = style.color;
     if (["left", "top"].includes(style.spine_face)) profile.spineFace = style.spine_face;
     if (["silver", "black", "blue", "gold"].includes(style.disc_finish)) profile.discFinish = style.disc_finish;
+    if(settings?.spine_template)profile.spineTemplate=settings.spine_template;
     return describeCase(profile, name);
   }
 
@@ -613,7 +614,8 @@
         face.appendChild(fallback);
         const individual = kind && images.find((image) => image.kind === kind);
         const wrapped = fullCover && ["cover","back_cover","spine"].includes(kind);
-        const artwork = wrapped ? fullCover : individual;
+        const consoleSpine=kind==='spine'&&!wrapped&&!individual&&profile.spineTemplate;
+        const artwork = wrapped ? fullCover : individual || (consoleSpine?{path:'console-spine',consoleSpine:true}:null);
         if (artwork) {
           const image = document.createElement("img");
           image.alt = ""; image.draggable = false; image.decoding = "async"; image.loading = "eager";
@@ -756,6 +758,10 @@
           if (preview) face.appendChild(preview);
           const start = () => {
             if (deferArtwork || disposed || token !== revision) return;
+            if(artwork.consoleSpine){
+              const controller=new AbortController();spineLoads.push(controller);
+              void globalThis.OpenCabinetSpines.render(profile.spineTemplate,game.title,{imageSource,signal:controller.signal,profile}).then(canvas=>{if(!disposed&&token===revision&&!controller.signal.aborted)image.src=canvas.toDataURL('image/png');}).catch(failed);return;
+            }
             if (kind !== 'spine' || wrapped || !globalThis.OpenCabinetCarouselBoxes?.loadSpine) { image.src = imageSource(artwork.path); return; }
             const controller = new AbortController(); spineLoads.push(controller);
             void globalThis.OpenCabinetCarouselBoxes.loadSpine(artwork.path, controller.signal, imageSource).then(prepared => {

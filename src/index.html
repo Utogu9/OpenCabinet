@@ -306,6 +306,7 @@
             <button type="button" id="platform-edit-tab-details" role="tab" aria-controls="platform-edit-panel-details" aria-selected="true"><span data-i18n="msg.c8a74ca68d"></span></button>
             <button type="button" id="platform-edit-tab-boxes" role="tab" aria-controls="platform-edit-panel-boxes" aria-selected="false" tabindex="-1"><span data-i18n="msg.1f9d0c92c3"></span></button>
             <button type="button" id="platform-edit-tab-images" role="tab" aria-controls="platform-edit-panel-images" aria-selected="false" tabindex="-1"><span data-i18n="msg.98f60447c3"></span></button>
+            <button type="button" id="platform-edit-tab-spine" role="tab" aria-controls="platform-edit-panel-spine" aria-selected="false" tabindex="-1" data-i18n="spine.title"></button>
             <button type="button" id="platform-edit-tab-variables" role="tab" aria-controls="platform-edit-panel-variables" aria-selected="false" tabindex="-1"><span data-i18n="msg.02db55bac5"></span></button>
             <button type="button" id="platform-edit-tab-folders" role="tab" aria-controls="platform-edit-panel-folders" aria-selected="false" tabindex="-1" data-i18n="library.folders"></button>
           </nav>
@@ -380,6 +381,21 @@
           </section>
           <p class="help-text" data-i18n="platform.images.help"></p>
           <div class="game-image-list" id="platform-image-list"></div>
+        </section>
+        <section class="hidden" id="platform-edit-panel-spine" role="tabpanel" aria-labelledby="platform-edit-tab-spine">
+          <h3 data-i18n="spine.title"></h3><p class="help-text" data-i18n="spine.help"></p>
+          <div class="platform-spine-layout"><div>
+            <div class="form-group"><label for="platform-spine-image" data-i18n="spine.image"></label><select id="platform-spine-image"></select><button type="button" id="platform-spine-add" class="secondary-btn" data-i18n="spine.add"></button></div>
+            <div class="form-group"><label for="platform-spine-sample" data-i18n="spine.sample"></label><input id="platform-spine-sample" type="text"></div>
+            <div class="form-grid">
+              <div class="form-group"><label for="platform-spine-font_size" data-i18n="spine.fontSize"></label><input id="platform-spine-font_size" type="number" min="8" max="400" step="1" required></div>
+              <div class="form-group"><label for="platform-spine-color" data-i18n="spine.color"></label><input id="platform-spine-color" type="color" value="#000000"></div>
+              <div class="form-group"><label for="platform-spine-x" data-i18n="spine.x"></label><input id="platform-spine-x" type="number" min="0" max="100" step="1" required></div>
+              <div class="form-group"><label for="platform-spine-y" data-i18n="spine.y"></label><input id="platform-spine-y" type="number" min="0" max="100" step="1" required></div>
+              <div class="form-group full-width"><label for="platform-spine-rotation" data-i18n="spine.orientation"></label><select id="platform-spine-rotation"><option value="0" data-i18n="spine.horizontal"></option><option value="90" data-i18n="spine.down"></option><option value="180" data-i18n="spine.inverted"></option><option value="270" data-i18n="spine.up"></option></select></div>
+            </div>
+            <p class="help-text" data-i18n="spine.positionHelp"></p><button class="secondary-btn" id="platform-spine-reset" type="button" data-i18n="msg.95b39f2816"></button>
+          </div><div id="platform-spine-preview" class="platform-spine-preview" role="img" data-i18n-aria-label="spine.preview"></div></div>
         </section>
         <section class="hidden" id="platform-edit-panel-variables" role="tabpanel" aria-labelledby="platform-edit-tab-variables">
           <h3><span data-i18n="msg.4573839d82"></span></h3>
@@ -1576,6 +1592,7 @@
     <script src="local-models.js"></script>
     <script src="three-box-router.js"></script>
     <script src="box-camera-pan.js"></script>
+    <script src="spine-template.js"></script>
     <script src="game-box.js"></script>
     <script src="carousel-boxes.js"></script>
     <script src="box-settings.js"></script>

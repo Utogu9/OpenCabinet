@@ -895,9 +895,12 @@ fn save_game_with_media(conn: &mut Connection, mut details: GameDetails, root: &
         let existing = read_game_images(&tx, details.id)?;
         let (_, collection_dir) = media_library::ensure_game(&tx, root, details.id as i64)?;
         let unique = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_err(|e| e.to_string())?.as_nanos();
+        let mut poster_paths=Vec::new();
         for (index, image) in images.iter_mut().enumerate() {
+            let original=image.path.clone();
             if let Some(saved) = existing.iter().find(|saved| resolve_image_path(root, &saved.path) == image.path) {
                 image.path = saved.path.clone();
+                poster_paths.push((original,image.path.clone()));
                 continue;
             }
             let source = Path::new(&image.path);
@@ -911,6 +914,10 @@ fn save_game_with_media(conn: &mut Connection, mut details: GameDetails, root: &
             let mut input = fs::File::open(source).map_err(|e| e.to_string())?;
             std::io::copy(&mut input, &mut output).map_err(|e| e.to_string())?;
             image.path = relative;
+            poster_paths.push((original,image.path.clone()));
+        }
+        if let Some(Some(settings))=&mut details.box_3d {
+            for (original,saved) in poster_paths { settings.remap_poster_image(&original,&saved); }
         }
     }
     if let Some(preferred) = &details.manual_preference { manuals::set_preferred(&tx,root,details.id,preferred)?; }

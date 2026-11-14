@@ -8,6 +8,22 @@ La preferencia se guarda en la base de datos, en `platform_details.default_emula
 
 La misma elección se usa al jugar desde el listado, el menú contextual y los botones del lateral, incluidos Último jugado, Más jugado y Aleatorio. Para RetroArch se utilizan el ejecutable, los argumentos y el núcleo de la misma configuración elegida. El lateral muestra el emulador efectivo y el importador lo preselecciona en su lista.
 
+## Lomo de respaldo
+
+En **Editar consola → Lomo de respaldo** se elige una imagen de tipo **Lomo**
+de esa consola y se configura el título que se imprime sobre ella: tamaño,
+color, posición horizontal y vertical en porcentajes, y orientación en giros
+de 90 grados. El texto es negro por defecto y la posición marca su inicio,
+alineado a la izquierda en su orientación de lectura, para que títulos de
+distintas longitudes comiencen en el mismo lugar. La vista previa permite
+probar un título antes de guardar.
+
+La caja 3D utiliza esta imagen únicamente cuando el juego no tiene cubierta
+completa ni lomo propio. Los lomos incluidos en una contraportada de CD también
+tienen prioridad. Funciona en el lateral, pantalla completa y modo sofá, sin
+modificar los archivos ni agregar imágenes a la colección de cada juego.
+Si hay varios lomos de consola, el elegido queda primero en su lista de imágenes.
+
 ## Plataformas predeterminadas
 
 Los nombres de consolas comienzan por la marca. PC y Arcade se conservan como

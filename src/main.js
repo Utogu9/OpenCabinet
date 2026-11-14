@@ -1228,7 +1228,7 @@ function createDetailsGameBox() {
       const platform = allPlatforms.find(item => item.name.toLowerCase() === game.platform.toLowerCase());
       if (platform) getPlatformDetails(platform).then(details => {
         if (token !== request || gameId !== game.id) return;
-        boxSettings = details.box_3d || null;
+        boxSettings = platformBoxSettings(details);
         updateViewer();
       }).catch(error => console.error("No se pudo cargar la configuración de la caja 3D:", error));
     },
@@ -2242,6 +2242,8 @@ function resetGameDetails() {
   }
 }
 
+function platformBoxSettings(details){return globalThis.OpenCabinetSpines?.fromDetails(details)||details.box_3d||null;}
+
 function getPlatformDetails(platform) {
   if (platform.id == null) return Promise.resolve({ images: [] });
   if (!platformDetailsCache.has(platform.id)) {
@@ -2351,8 +2353,12 @@ function createPlatformDetailsEditor() {
   const kind = document.getElementById("platform-image-kind");
   const defaultEmulator = document.getElementById("platform-default-emulator-select");
   const boxSettings = window.OpenCabinetBoxSettings?.createEditor({ imageSource });
+  const spineEditor=window.OpenCabinetSpines?.createEditor({imageSource,getImages:()=>images,setImages:value=>{images=value;render();},
+    getTitle:()=>allGames.find(game=>game.platform?.toLowerCase()===current?.name.toLowerCase())?.title||current?.name||'',
+    getProfile:()=>window.OpenCabinet3D?.profileFor(current?.name||'',null,'',savedBoxSettings),
+    addImage:()=>{kind.value='spine';add.click();}});
   const variablesEditor = window.OpenCabinetVariables?.createEditor(document.getElementById("platform-variables-editor"), document, { getNames: libraryVariableNames });
-  const platformTabs = ["details","boxes","images","variables","folders"].map(name => ({ name,
+  const platformTabs = ["details","boxes","images","spine","variables","folders"].map(name => ({ name,
     tab: document.getElementById(`platform-edit-tab-${name}`), panel: document.getElementById(`platform-edit-panel-${name}`) }));
   let activeTab='details';
   function showPlatformTab(name, focus = false) {
@@ -2363,6 +2369,7 @@ function createPlatformDetailsEditor() {
       item.panel.classList.toggle("hidden",!active); if(active && focus)item.tab.focus();
     });
     document.getElementById("platform-box-settings").open = name === "boxes";
+    spineEditor?.show(name==='spine');
     updateActions();
   }
   platformTabs.forEach((item,index) => {
@@ -2377,6 +2384,7 @@ function createPlatformDetailsEditor() {
   });
   form.addEventListener("invalid",event=>{const tab=platformTabs.find(item=>item.panel.contains?.(event.target));if(tab)showPlatformTab(tab.name);},true);
   let savedBoxSettings = null;
+  let savedSpineTitle=null;
   let availableEmulators = [];
   const lbSearch = document.getElementById("btn-platform-lb-search");
   const lbUpdate = document.getElementById("btn-platform-lb-update");
@@ -2474,6 +2482,7 @@ function createPlatformDetailsEditor() {
       row.append(thumbnail, fields, remove,preferred); list.appendChild(row);
     });
     panels.scrollTop=scroll;
+    spineEditor?.refreshImages();
   }
   function endSession() {
     if (ending) return ending;
@@ -2495,7 +2504,7 @@ function createPlatformDetailsEditor() {
   document.getElementById("btn-close-platform-details").onclick = close;
   document.getElementById("btn-cancel-platform-details").onclick = close;
   dialog.addEventListener("cancel", (event) => { event.preventDefault(); close(); });
-  dialog.addEventListener("close", () => { current = null; images = [];metadataPreview=null; list.replaceChildren(); });
+  dialog.addEventListener("close", () => { spineEditor?.close();current = null; images = [];metadataPreview=null; list.replaceChildren(); });
   lbSource.onchange = async () => {
     if (busy || !jobId) return;
     const token = ++operation; typesReady = false; downloading = true; controls(true);
@@ -2626,11 +2635,13 @@ function createPlatformDetailsEditor() {
         developer: document.getElementById("platform-developer").value.trim() || null,
         manufacturer: document.getElementById("platform-manufacturer").value.trim() || null, images,
         metadata_source:metadataSource,
+        spine_title:spineEditor?.value()??savedSpineTitle,
         default_emulator_id: defaultEmulator.value ? Number(defaultEmulator.value) : null,
         box_3d: boxSettings?.getValue() ?? savedBoxSettings,
         variables: variablesEditor?.value() ?? null,
       } });
       platformDetailsCache.set(current.id, Promise.resolve(details));
+      window.OpenCabinetSpines?.clear();
       void refreshBoxBrandImages();
       libraryManufacturers[current.name] = details.manufacturer || "";
       libraryPlatformVariables[current.id] = details.variables || {};
@@ -2641,7 +2652,7 @@ function createPlatformDetailsEditor() {
       const selected = allGames.find(game => game.id === selectedGameId && game.platform.toLowerCase() === current.name.toLowerCase());
       if (selected) detailsGameBox?.update({ ...regionalGame(selected), title:selected.title }, displayGameImages(selected));
       await endSession(); controls(false); boxSettings?.close(); dialog.close(); showToast(globalThis.OpenCabinetI18n.t("msg.0c51f7f056"));
-    } catch (reason) { error.textContent = String(reason); if(String(reason).toLowerCase().includes("variable"))showPlatformTab("variables"); }
+    } catch (reason) { error.textContent = String(reason); if(String(reason).toLowerCase().includes("variable"))showPlatformTab("variables");if(String(reason).includes(globalThis.OpenCabinetI18n.t('spine.invalid')))showPlatformTab('spine'); }
     finally { controls(false); }
   };
   return { async open(platform) {
@@ -2664,6 +2675,7 @@ function createPlatformDetailsEditor() {
       });
       defaultEmulator.value = availableEmulators.some(emulator => emulator.id === details.default_emulator_id) ? String(details.default_emulator_id) : "";
       current = platform; catalog = null; images = (details.images || []).map((image) => ({ ...image }));
+      savedSpineTitle=details.spine_title||null;spineEditor?.open(savedSpineTitle);
       metadataSource=details.metadata_source||null;metadataPreview=null;showMetadataSource();
       document.getElementById('platform-editor-name').value=platform.name;metadataQuery.value=platform.name;metadataResult.replaceChildren();metadataPanel.classList.add('hidden');artworkPanel.classList.add('hidden');metadataMessage.textContent='';document.getElementById('platform-metadata-preview').textContent='';document.getElementById('platform-metadata-progress').classList.add('hidden');
       void getLibraryTools()?.renderFolders(document.getElementById('platform-folders-list'),platform,async(platform,folder)=>{if(busy)return;await close();await startSavedFolderScan(platform,folder);});
@@ -2671,7 +2683,7 @@ function createPlatformDetailsEditor() {
       variablesEditor?.set(window.OpenCabinetVariables.platformDefaults(platform.name, variableOverrides), variableOverrides);
       showPlatformTab("details");
       savedBoxSettings = details.box_3d || null;
-      boxSettings?.open(savedBoxSettings, platform.name, allGames.filter(game => game.platform.toLowerCase() === platform.name.toLowerCase()).map(game => ({ ...game, images: gameImages(game) })));
+      boxSettings?.open(savedBoxSettings, platform.name, allGames.filter(game => game.platform.toLowerCase() === platform.name.toLowerCase()).map(game => ({ ...game, images: gameImages(game) })),platformBoxSettings(details));
       document.getElementById("platform-editor-title").textContent = globalThis.OpenCabinetI18n.t("msg.d9ca0d5f93", platform.name);
       document.getElementById("platform-release-date").value = details.release_date || "";
       document.getElementById("platform-developer").value = details.developer || "";
@@ -3696,7 +3708,7 @@ function setupGameEditor() {
       if (gameBoxEditor) {
         const platform = allPlatforms.find(item => item.name === game.platform);
         let defaults = null;
-        try { if (platform) defaults = (await getPlatformDetails(platform)).box_3d || null; }
+        try { if (platform) defaults = platformBoxSettings(await getPlatformDetails(platform)); }
         catch (error) { console.error("No se pudo cargar la caja de la consola:", error); }
         gameBoxEditor.open(window.OpenCabinetPosters.withoutPoster(game.box_3d), game.platform, [{ ...game, images: gameImages(game) }], defaults);
       }
@@ -6221,7 +6233,7 @@ function setupSofaMode() {
     },
     boxSettings: async game => {
       const platform = allPlatforms.find(item => item.name === game.platform);
-      return platform ? (await getPlatformDetails(platform)).box_3d || null : null;
+      return platform ? platformBoxSettings(await getPlatformDetails(platform)) : null;
     },
     createViewer: (stage, session) => window.OpenCabinet3D.createViewer(stage, {
       ...session,

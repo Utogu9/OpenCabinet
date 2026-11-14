@@ -33,7 +33,7 @@ test('Console editor separates metadata review from artwork downloads and keeps 
       throw Error(command);
     }}};
   },Object.fromEntries(['en-US','es-AR'].map(locale=>[locale,JSON.parse(fs.readFileSync(path.join(root,'src/locales/'+locale+'.json'),'utf8'))])));
-  for(const file of ['ui-icons.js','i18n.js','platform-stats.js'])await page.addScriptTag({url:origin+'/src/'+file});
+  for(const file of ['ui-icons.js','i18n.js','platform-stats.js','game-box.js','spine-template.js'])await page.addScriptTag({url:origin+'/src/'+file});
   await page.addScriptTag({content:fs.readFileSync(path.join(root,'src/main.js'),'utf8')+`
     allPlatforms=[{id:1,name:'Sony PlayStation 2'}];allGames=[];selectedPlatform=null;
     imageSource=()=>fixtureImage;loadEmulators=async()=>{};refreshBoxBrandImages=()=>{};showToast=()=>{};
@@ -55,8 +55,19 @@ test('Console editor separates metadata review from artwork downloads and keeps 
   assert.ok(Math.abs(await page.locator('#platform-editor-panels').evaluate(node=>node.scrollTop)-scroll)<2,'changing classification keeps the viewport in place');
   assert.equal(await row.locator('.media-uploader-badge').textContent(),'Console archivist');
   await page.screenshot({path:'target/console-editor-images.png'});
+  await page.locator('#platform-edit-tab-spine').click();
+  await page.waitForSelector('#platform-spine-preview canvas');
+  await page.locator('#platform-spine-font_size').fill('95');
+  await page.locator('#platform-spine-x').fill('40');
+  await page.locator('#platform-spine-y').fill('35');
+  await page.locator('#platform-spine-rotation').selectOption('270');
+  await page.screenshot({path:'target/console-editor-spine.png'});
   await page.locator('#btn-save-platform-details').click();await page.waitForFunction(()=>!document.querySelector('#platform-details-dialog').open);
   const saved=await page.evaluate(()=>commands.find(row=>row.command==='save_platform_details').args.details);
   assert.equal(saved.metadata_source.url,'https://www.wikidata.org/wiki/Q10680');assert.equal(saved.images.filter(image=>image.kind==='spine').length,1);
+  assert.deepEqual(saved.spine_title,{font_size:95,x:40,y:35,rotation:270,color:'#000000'});
+  await page.evaluate(()=>openConsole());await page.locator('#platform-edit-tab-spine').click();
+  assert.equal(await page.locator('#platform-spine-font_size').inputValue(),'95');
+  assert.equal(await page.locator('#platform-spine-rotation').inputValue(),'270');
   assert.deepEqual(errors,[]);
 });

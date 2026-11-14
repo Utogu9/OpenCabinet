@@ -29,6 +29,22 @@ pub struct BoxSettings {
     regions: BTreeMap<String, BoxStyle>,
     #[serde(skip_serializing_if="Option::is_none")]
     poster: Option<PosterSettings>,
+    #[serde(skip_serializing_if="Option::is_none")]
+    posters: Option<Vec<PosterEntry>>,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct PosterEntry {
+    id: String,
+    #[serde(default)]
+    name: String,
+    #[serde(default)]
+    front: Option<String>,
+    #[serde(default)]
+    back: Option<String>,
+    #[serde(default)]
+    settings: PosterSettings,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -46,8 +62,23 @@ impl Default for PosterSettings {
 }
 
 impl BoxSettings {
+    pub(crate) fn remap_poster_image(&mut self, original: &str, saved: &str) {
+        for entry in self.posters.iter_mut().flatten() {
+            for side in [&mut entry.front,&mut entry.back] {
+                if side.as_deref()==Some(original) { *side=Some(saved.into()); }
+            }
+        }
+    }
+
     pub(crate) fn validate(&self) -> Result<(), String> {
-        if let Some(poster)=&self.poster {
+        let mut ids=std::collections::HashSet::new();
+        for entry in self.posters.iter().flatten() {
+            if entry.id.is_empty() || !ids.insert(&entry.id) || entry.id.len()>128 || entry.name.len()>512
+                || [&entry.front,&entry.back].into_iter().flatten().any(|path|path.is_empty()||path.len()>4096||path.contains('\0')) {
+                return Err(crate::i18n::text("poster.invalidSettings").into());
+            }
+        }
+        for poster in self.poster.iter().chain(self.posters.iter().flatten().map(|entry|&entry.settings)) {
             if !(1..=8).contains(&poster.columns)||!(1..=8).contains(&poster.rows) {
                 return Err(crate::i18n::text("poster.invalidFolds").into());
             }
@@ -137,6 +168,8 @@ impl BoxSettings {
 #[derive(Debug, Serialize, Deserialize)]
 pub struct PlatformDetails {
     #[serde(default)]
+    spine_title: Option<SpineTitle>,
+    #[serde(default)]
     metadata_source: Option<crate::media_provenance::Source>,
     #[serde(default)]
     variables: Option<crate::entity_variables::Variables>,
@@ -150,6 +183,23 @@ pub struct PlatformDetails {
     box_3d: Option<BoxSettings>,
     #[serde(default)]
     pub(super) images: Vec<GameImage>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(default,deny_unknown_fields)]
+struct SpineTitle { font_size:f64, x:f64, y:f64, rotation:u16, color:String }
+impl Default for SpineTitle {
+    fn default()->Self { Self{font_size:72.,x:50.,y:5.,rotation:90,color:"#000000".into()} }
+}
+impl SpineTitle {
+    fn validate(&self)->Result<(),String>{
+        if !self.font_size.is_finite()||!(8.0..=400.0).contains(&self.font_size)
+            ||[self.x,self.y].iter().any(|value|!value.is_finite()||!(0.0..=100.0).contains(value))
+            ||![0,90,180,270].contains(&self.rotation)
+            ||self.color.len()!=7||!self.color.starts_with('#')||!self.color.as_bytes()[1..].iter().all(u8::is_ascii_hexdigit) {
+            return Err(crate::i18n::text("spine.invalid").into());
+        }Ok(())
+    }
 }
 
 pub(super) fn init_schema(conn: &Connection) -> rusqlite::Result<()> {
@@ -185,6 +235,7 @@ pub(super) fn init_schema(conn: &Connection) -> rusqlite::Result<()> {
     if !columns.iter().any(|column| column == "metadata_source") {
         conn.execute("ALTER TABLE platform_details ADD COLUMN metadata_source TEXT", [])?;
     }
+    if !columns.iter().any(|column|column=="spine_title") { conn.execute("ALTER TABLE platform_details ADD COLUMN spine_title TEXT",[])?; }
     let emulators_exist: bool = conn.query_row(
         "SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE type='table' AND name='emulators')",
         [],
@@ -235,10 +286,11 @@ pub(super) fn read(conn: &Connection, id: i32, root: &Path) -> Result<PlatformDe
     }
     let mut details = conn
         .query_row(
-            "SELECT release_date,developer,manufacturer,default_emulator_id,box_3d,metadata_source FROM platform_details WHERE platform_id=?1",
+            "SELECT release_date,developer,manufacturer,default_emulator_id,box_3d,metadata_source,spine_title FROM platform_details WHERE platform_id=?1",
             [id],
             |row| {
                 Ok(PlatformDetails {
+                    spine_title:row.get::<_,Option<String>>(6)?.map(|json|serde_json::from_str(&json)).transpose().map_err(|error|rusqlite::Error::FromSqlConversionFailure(6,rusqlite::types::Type::Text,Box::new(error)))?,
                     metadata_source: crate::media_provenance::decode(row.get(5)?),
                     variables: None,
                     platform_id: id,
@@ -255,6 +307,7 @@ pub(super) fn read(conn: &Connection, id: i32, root: &Path) -> Result<PlatformDe
         .optional()
         .map_err(|e| e.to_string())?
         .unwrap_or(PlatformDetails {
+            spine_title:None,
             metadata_source: None,
             variables: None,
             platform_id: id,
@@ -289,6 +342,8 @@ fn save(
     mut details: PlatformDetails,
     root: &Path,
 ) -> Result<PlatformDetails, String> {
+    if let Some(ref spine)=details.spine_title {spine.validate()?;}
+    let spine_title=details.spine_title.as_ref().map(serde_json::to_string).transpose().map_err(|e|e.to_string())?;
     let optional_text = |value: Option<String>| {
         value
             .map(|text| text.trim().to_owned())
@@ -378,9 +433,9 @@ fn save(
     }
     let metadata_source=details.metadata_source.as_ref().and_then(crate::media_provenance::Source::clean)
         .map(|source|serde_json::to_string(&source)).transpose().map_err(|e|e.to_string())?;
-    tx.execute("INSERT INTO platform_details(platform_id,release_date,developer,manufacturer,default_emulator_id,box_3d,metadata_source) VALUES (?1,?2,?3,?4,?5,?6,?7)
-        ON CONFLICT(platform_id) DO UPDATE SET release_date=excluded.release_date,developer=excluded.developer,manufacturer=excluded.manufacturer,default_emulator_id=excluded.default_emulator_id,box_3d=excluded.box_3d,metadata_source=CASE WHEN ?8 THEN excluded.metadata_source ELSE platform_details.metadata_source END",
-        params![details.platform_id, details.release_date, details.developer, details.manufacturer, details.default_emulator_id, box_3d, metadata_source,details.metadata_source.is_some()]).map_err(|e| e.to_string())?;
+    tx.execute("INSERT INTO platform_details(platform_id,release_date,developer,manufacturer,default_emulator_id,box_3d,metadata_source,spine_title) VALUES (?1,?2,?3,?4,?5,?6,?7,?9)
+        ON CONFLICT(platform_id) DO UPDATE SET release_date=excluded.release_date,developer=excluded.developer,manufacturer=excluded.manufacturer,default_emulator_id=excluded.default_emulator_id,box_3d=excluded.box_3d,metadata_source=CASE WHEN ?8 THEN excluded.metadata_source ELSE platform_details.metadata_source END,spine_title=COALESCE(excluded.spine_title,platform_details.spine_title)",
+        params![details.platform_id, details.release_date, details.developer, details.manufacturer, details.default_emulator_id, box_3d, metadata_source,details.metadata_source.is_some(),spine_title]).map_err(|e| e.to_string())?;
     tx.execute(
         "DELETE FROM platform_images WHERE platform_id=?1",
         [details.platform_id],
@@ -460,6 +515,7 @@ mod tests {
         }
         fn details(&self) -> PlatformDetails {
             PlatformDetails {
+                spine_title:None,
                 metadata_source: None,
                 variables: None,
                 platform_id: 1,
@@ -522,6 +578,28 @@ mod tests {
         assert!(details.box_3d.is_none());
         assert!(read(&library.conn, 999, &library.root).is_err());
     }
+    #[test]
+    fn fallback_spine_title_survives_restart_and_rejects_invalid_values_before_saving() {
+        let mut library=Library::new();
+        let mut details=library.details();
+        details.spine_title=Some(SpineTitle{font_size:95.,x:40.,y:35.,rotation:270,color:"#aaccee".into()});
+        save(&mut library.conn,details,&library.root).unwrap();
+        let reopened=Connection::open(library.root.join("library.sqlite")).unwrap();
+        init_schema(&reopened).unwrap();
+        let saved=read(&reopened,1,&library.root).unwrap().spine_title.unwrap();
+        assert_eq!((saved.font_size,saved.x,saved.y,saved.rotation,saved.color.as_str()),(95.,40.,35.,270,"#aaccee"));
+        drop(reopened);
+        // Omitting the field in an older client must preserve the console setting.
+        let details=library.details();save(&mut library.conn,details,&library.root).unwrap();
+        assert_eq!(read(&library.conn,1,&library.root).unwrap().spine_title.unwrap().rotation,270);
+        for invalid in [serde_json::json!({"font_size":0}),serde_json::json!({"x":101}),serde_json::json!({"y":-1}),serde_json::json!({"rotation":45}),serde_json::json!({"color":"red"})] {
+            let mut details=library.details();details.spine_title=Some(serde_json::from_value(invalid).unwrap());details.images.push(library.image("spine"));
+            assert!(save(&mut library.conn,details,&library.root).is_err());
+            assert!(read(&library.conn,1,&library.root).unwrap().images.is_empty());
+            assert_eq!(read(&library.conn,1,&library.root).unwrap().spine_title.unwrap().font_size,95.);
+        }
+    }
+
     #[test]
     fn downloaded_console_marks_keep_their_catalog_identity_after_saving_and_reopening() {
         let mut library=Library::new();

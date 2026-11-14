@@ -9,6 +9,7 @@ import { loadPreparedModel } from './three-prepared-model.js';
 import { createDiscInteraction, discFinish, applyDiscFinish } from './three-disc-interaction.js';
 import { createBoxPoster } from './three-poster.js';
 import './box-camera-pan.js';
+import './spine-template.js';
 
 export async function createViewer(host, options={}) {
   const {manifest,scene:preparedScene}=await loadPreparedModel('dreamcast');
@@ -347,7 +348,11 @@ export async function createViewer(host, options={}) {
           }
         }catch{if(!current())return;}
       }
-      await applySpines(individual.spine);
+      if(individual.spine)await applySpines(individual.spine);
+      else if(!art.full&&profile.spineTemplate)try{
+        const image=await globalThis.OpenCabinetSpines.render(profile.spineTemplate,game.title,{imageSource,signal,profile});
+        if(current()){put('spine_left',image,'spine');put('spine_right',image,'spine');}
+      }catch{/* Keep the existing paper when the console template is unavailable. */}
     }
     async function applyInlay() {
       if(!art.inlay)return;
