@@ -186,7 +186,7 @@
     let manualResolved = false;
     let rejectedFullCover = false;
     let fullPreviewUrl = null, fullPreviewController = null;
-    const cameraPan=!geometryOnly&&globalThis.OpenCabinetCameraPan?.create({host,enabled:()=>!!game,schedule,onStart:()=>{stopDrag();closeMenu();}});
+    const cameraPan=geometryOnly?null:globalThis.OpenCabinetCameraPan?.create({host,enabled:()=>!!game,schedule,onStart:()=>{stopDrag();closeMenu();}});
     function jewelManualCover(data) {
       const front=faces.find(face=>face.element.dataset.face==='front')?.element;
       if(!front)return;

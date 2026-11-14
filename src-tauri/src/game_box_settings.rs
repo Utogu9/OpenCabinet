@@ -38,9 +38,26 @@ pub fn read(conn: &Connection, id: i32) -> Result<Option<BoxSettings>, String> {
     json.map(|json|serde_json::from_str(&json).map_err(|e|e.to_string())).transpose()
 }
 
+pub fn reverse_cover(conn: &Connection, id: i32, reversed: bool) -> Result<BoxSettings, String> {
+    let exists:bool=conn.query_row("SELECT EXISTS(SELECT 1 FROM games WHERE id=?1)",[id],|row|row.get(0)).map_err(|e|e.to_string())?;
+    if !exists {return Err(crate::i18n::text("msg.ca011b02e6").into());}
+    let mut settings=read(conn,id)?.unwrap_or_default();settings.cover_reversed=Some(reversed);
+    save(conn,id,Some(&settings))?;Ok(settings)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn reversible_covers_persist_without_changing_other_box_options_or_games() {
+        let conn=Connection::open_in_memory().unwrap();conn.execute_batch("CREATE TABLE games(id INTEGER PRIMARY KEY);INSERT INTO games VALUES(1),(2);").unwrap();init(&conn).unwrap();
+        let original:BoxSettings=serde_json::from_str(r##"{"base":{"color":"#123456","disc_finish":"gold"},"posters":[{"id":"map","front":"images/front.webp"}]}"##).unwrap();
+        save(&conn,1,Some(&original)).unwrap();let reversed=reverse_cover(&conn,1,true).unwrap();
+        let saved=serde_json::to_value(reversed).unwrap();assert_eq!(saved["cover_reversed"],true);assert_eq!(saved["base"]["disc_finish"],"gold");assert_eq!(saved["posters"][0]["id"],"map");
+        assert!(read(&conn,2).unwrap().is_none());assert!(reverse_cover(&conn,3,true).is_err());
+        reverse_cover(&conn,1,false).unwrap();assert_eq!(read(&conn,1).unwrap().unwrap().cover_reversed,Some(false));
+        assert!(original.cover_reversed.is_none());assert!(serde_json::from_str::<BoxSettings>(r#"{"cover_reversed":"yes"}"#).is_err());
+    }
     #[test]
     fn multiple_posters_keep_pairing_order_folds_and_portable_image_references() {
         let conn=Connection::open_in_memory().unwrap();conn.execute_batch("CREATE TABLE games(id INTEGER PRIMARY KEY);INSERT INTO games VALUES(1);").unwrap();init(&conn).unwrap();

@@ -153,10 +153,14 @@ test('Optical discs and cases exchange foreground focus, share one renderer and 
         if(Math.abs(optical[i]-flat[i])+Math.abs(optical[i+1]-flat[i+1])+Math.abs(optical[i+2]-flat[i+2])>18)textured++;
         if(Math.abs(optical[i]-moved[i])+Math.abs(optical[i+1]-moved[i+1])+Math.abs(optical[i+2]-moved[i+2])>18)responsive++;
       }
-      plain.dispose();debug.renderer.render(debug.scene,debug.camera);
-      return {textured,responsive,error:debug.renderer.getContext().getError()};
+      const {applyDiscFinish}=await import('/src/three-disc-interaction.js');mesh.material=material;applyDiscFinish(material,'black');const black=capture();
+      let samples=0,blackBrightness=0,silverBrightness=0,blackChroma=0;
+      for(let i=0;i<black.length;i+=4)if(black[i+3]>128&&optical[i+3]>128){samples++;blackBrightness+=(black[i]+black[i+1]+black[i+2])/3;silverBrightness+=(optical[i]+optical[i+1]+optical[i+2])/3;blackChroma+=Math.max(black[i],black[i+1],black[i+2])-Math.min(black[i],black[i+1],black[i+2]);}
+      applyDiscFinish(material,'silver');plain.dispose();debug.renderer.render(debug.scene,debug.camera);
+      return {textured,responsive,samples,blackBrightness:blackBrightness/samples,silverBrightness:silverBrightness/samples,blackChroma:blackChroma/samples,error:debug.renderer.getContext().getError()};
     });
     assert.ok(diffraction.textured>1000,JSON.stringify(diffraction));assert.ok(diffraction.responsive>1000,JSON.stringify(diffraction));assert.equal(diffraction.error,0);
+    assert.ok(diffraction.samples>1000,JSON.stringify(diffraction));assert.ok(diffraction.blackBrightness<diffraction.silverBrightness*.4,JSON.stringify(diffraction));assert.ok(diffraction.blackChroma<8,JSON.stringify(diffraction));
   }
   assert.equal(await page.evaluate(()=>viewer.isDiscRemoved&&!textureDisposed),true,'the original artwork remains alive');
   await page.locator('.game-box-disc-tools button').last().click();await page.waitForFunction(()=>!viewer.isDiscRemoved);

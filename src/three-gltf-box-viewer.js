@@ -9,6 +9,7 @@ import { prepareRenderGroup, createRenderLease, releaseSceneGpu, createFrameHold
 import { createDiscInteraction, discFinish, applyDiscFinish } from './three-disc-interaction.js';
 import { createBoxPoster } from './three-poster.js';
 import { createCoverFinish } from './three-cover-material.js';
+import { createReversibleCover } from './three-reversible-cover.js';
 import './box-camera-pan.js';
 import './spine-template.js';
 
@@ -164,10 +165,14 @@ export async function createModelViewer(host,options={},definition) {
   let frame=null,opened=0,openTarget=false,animation=null,zoom=1,side='front',rotationLock='free',drag=null,menu=null;
   let rotation=initialRotation(),width=0,height=0,surfaceScale=1;
   const listeners=[],dynamicTextures=new Set(),pictures={};
+  if(!materials.has('Cover Inside'))materials.set('Cover Reverse',new THREE.MeshBasicMaterial({color:0xffffff,toneMapped:false}));
+  const reversible=createReversibleCover({host,getGame:()=>game,schedule,
+    available:()=>!!pictures.inlay&&!!materials.get('Cover Outside')?.map,
+    getPairs:()=>[[materials.get('Cover Outside'),materials.get('Cover Inside')||materials.get('Cover Reverse'),!procedural]]});
   const coverFinish=createCoverFinish({meshes,imageSource,schedule,environment:()=>scene.environment,
     filmMeshes:()=>meshes.filter(mesh=>['Sleeve Film','Plastic Film','Cardboard Finish'].includes(mesh.material?.name)),
     surfaces:()=>{const fraction=manifest.spine_fraction||.046,separate=!!procedural?.separateSpines,booklet=!!(procedural?.manualCover&&manualFront.map);
-      return [{material:materials.get('Cover Outside'),enabled:!!pictures.full,separateSpines:separate?fraction:0,
+      return [{material:materials.get('Cover Outside'),enabled:!!pictures.full&&!reversible.reversed&&!reversible.turning,separateSpines:separate?fraction:0,
         frontMask:booklet?(separate?[.5,1/(1+fraction)]:[(1+fraction)/2,1]):null}];}});
   const composed=new Map();
   const retiredTextures=[],blankTextures=new Map();
@@ -227,6 +232,7 @@ export async function createModelViewer(host,options={},definition) {
   function notify(){onOpenState({canOpen:!!game&&definition.canOpen!==false,open:openTarget});}
   function render(time) {
     frame=null;if(disposed||renderLease?.paused||renderLease?.lost||!game||!host.clientWidth||!host.clientHeight)return;
+    if(reversible.turning){reversible.frame(time);coverFinish.refresh();}
     discInteraction.beforeFrame();
     const nextWidth=host.clientWidth,nextHeight=host.clientHeight,surface=canvasViewport(nextWidth,nextHeight,zoom,options.carousel);
     if(width!==nextWidth||height!==nextHeight||surface.scale!==surfaceScale) {
@@ -311,6 +317,7 @@ export async function createModelViewer(host,options={},definition) {
     if(line)lines.push(line);lines.slice(0,10).forEach((value,i)=>context.fillText(value,x+w/2,y+h/2+(i-lines.length/2)*h*.045,w*.85));
   }
   function compose() {
+    reversible.restore();
     const artworkProfile=procedural?.prepareArtwork?.(pictures);
     if(artworkProfile){profile=artworkProfile;host.dataset.format=profile.id;onProfile(profile);}
     const changed=(name,values)=>{
@@ -362,6 +369,20 @@ export async function createModelViewer(host,options={},definition) {
     }
     if(changed('inside',[pictures.inlay,...(procedural?.paperReverse?[!!pictures.full,!!pictures.spine]:[])]))
       assign('Cover Inside',pictures.inlay||procedural?.paperReverse?.(pictures)||null);
+    if(materials.has('Cover Reverse')&&changed('reverse',[pictures.inlay,materials.get('Cover Outside')?.map?.image])) {
+      let image=pictures.inlay;
+      if(image&&procedural?.separateSpines){
+        // Jewel-style tall cases reverse only the rear insert, not the booklet.
+        const outside=materials.get('Cover Outside').map.image,atlas=document.createElement('canvas');atlas.width=outside.width;atlas.height=outside.height;
+        const ctx=atlas.getContext('2d');ctx.drawImage(outside,0,0);
+        const fraction=manifest.spine_fraction||.046,spine=atlas.width*fraction/(1+fraction),face=(atlas.width-2*spine)/2;
+        const w=image.naturalWidth||image.width,h=image.naturalHeight||image.height,windows=longboxInsertWindows(w,h);
+        const draw=(window,x,width)=>ctx.drawImage(image,window.offset[0]*w,0,window.repeat[0]*w,h,x,0,width,atlas.height);
+        draw(windows.center,0,face);if(windows.folded){draw(windows.right,face,spine);draw(windows.left,2*face+spine,spine);}
+        image=atlas;
+      }
+      assign('Cover Reverse',image||null);
+    }
     if(materials.has('UMD Label')&&changed('disc',[pictures.disc])) {
       if(pictures.disc)assign('UMD Label',pictures.disc);
       else {const disc=document.createElement('canvas');disc.width=512;disc.height=512;label(disc.getContext('2d'),game.title,0,0,512,512);assign('UMD Label',disc);}
@@ -372,7 +393,7 @@ export async function createModelViewer(host,options={},definition) {
         const card=document.createElement('canvas');card.width=256;card.height=352;label(card.getContext('2d'),game.title,0,0,256,352,modelId==='genesis'?'#202020':undefined);assign('Cartridge Cover',card);
       }
     }
-    coverFinish.refresh();
+    reversible.refresh();coverFinish.refresh();
   }
   function imageAt(path,signal,priority='low') {
     if(options.carousel && globalThis.OpenCabinetCarouselBoxes)return globalThis.OpenCabinetCarouselBoxes.loadOriginal(path,signal,imageSource);
@@ -440,6 +461,7 @@ export async function createModelViewer(host,options={},definition) {
       button.addEventListener('click',()=>{api.setRotationLock(mode);closeMenu(true);});menu.appendChild(button);items.push(button);
     }
     discInteraction.appendMenu(menu,items,()=>closeMenu(true));
+    reversible.appendMenu(menu,items,()=>closeMenu(true));
     if(manual&&options.onManualCoverChange) {
       const heading=document.createElement('p');heading.className='game-box-menu-heading';heading.textContent=globalThis.OpenCabinetI18n.t('msg.26b484bdcb');menu.appendChild(heading);
       for(const [mode,key] of [['auto','msg.b803f24d52'],['full','msg.b6616b1d67'],['right','msg.dc5f5de445'],['left','msg.bd88b698c2']]) {
@@ -489,14 +511,15 @@ export async function createModelViewer(host,options={},definition) {
   const api={
     suspend(release=false){cameraPan.stop();stopDrag();renderLease.suspend(release);if(frame!==null){cancelAnimationFrame(frame);frame=null;}},
     resume(){if(!disposed)renderLease.resume();},
-    clearArtwork(){discInteraction.reset();coverFinish.clear();poster.clear();revision++;controller?.abort();key=null;clearManual();composed.clear();
+    clearArtwork(){reversible.reset();discInteraction.reset();coverFinish.clear();poster.clear();revision++;controller?.abort();key=null;clearManual();composed.clear();
       if(!options.carousel){dynamicTextures.forEach(texture=>texture.dispose());dynamicTextures.clear();}for(const kind of Object.keys(pictures))delete pictures[kind];
-      for(const name of ['Cover Outside','Cover Inside','Cartridge Cover','UMD Label'])assign(name,null);
+      for(const name of ['Cover Outside','Cover Inside','Cover Reverse','Cartridge Cover','UMD Label'])assign(name,null);
       schedule();},
     update(next,images,settings=null) {
       const nextProfile=globalThis.OpenCabinet3D.profileFor(next.platform,null,next.rom_path,globalThis.OpenCabinet3D.resolveSettings(settings,next.box_3d));
-      const nextKey=JSON.stringify([next.id,next.title,images,nextProfile,globalThis.OpenCabinetPosters.settings(next.box_3d),next.box_3d?.posters]);if(disposed||key===nextKey)return;
+      const nextKey=JSON.stringify([next.id,next.title,images,nextProfile,globalThis.OpenCabinetPosters.settings(next.box_3d),next.box_3d?.posters,next.box_3d?.cover_reversed]);if(disposed||key===nextKey)return;
       const changed=next.id!==game?.id;api.clear();game=next;profile=nextProfile;key=nextKey;
+      reversible.reset(next.box_3d?.cover_reversed);
       applyDiscFinish(materials.get('Disc Silver'),discFinish(profile,game));
       poster.update(images);
       host.dataset.format=profile.id;host.dataset.variant=modelId;host.dataset.rotationLock=rotationLock;
@@ -522,6 +545,7 @@ export async function createModelViewer(host,options={},definition) {
       if(!options.useModelArtwork&&!options.carousel)compose();void loadArtwork(images,revision);notify();schedule();
     },
     get canOpen(){return !!game&&definition.canOpen!==false;},get isOpen(){return openTarget;},get rotationLock(){return rotationLock;},
+    get canReverseCover(){return reversible.available;},get isCoverReversed(){return reversible.reversed;},reverseCover:()=>reversible.toggle(),
     setRotationLock(mode){if(['free','x','y'].includes(mode)){stopDrag();rotationLock=mode;host.dataset.rotationLock=mode;}},
     setOpen(value,animate=true){if(!api.canOpen)return false;stopDrag();openTarget=!!value;
       if(openTarget)ensureManualBack();else {if(manualExtracted)options.onManualDeactivate?.();api.returnManual();}
@@ -551,10 +575,10 @@ export async function createModelViewer(host,options={},definition) {
     get hasPoster(){return poster.available;},get posters(){return discInteraction.posters;},get isPosterRemoved(){return discInteraction.posterRemoved;},get canRemovePoster(){return discInteraction.canRemovePoster&&(!manual||manualExtracted||discInteraction.manualRemoved);},
     removePoster:id=>discInteraction.removePoster(id),putPosterBack:id=>discInteraction.returnPoster(id),examinePoster:id=>discInteraction.examinePoster(id),togglePoster:id=>discInteraction.togglePoster(id),get isPosterUnfolded(){return discInteraction.posterUnfolded;},
     refreshManual(){if(game)void preloadManual();},
-    clear(){cameraPan.reset();discInteraction.reset();coverFinish.clear();poster.clear();revision++;controller?.abort();controller=null;stopDrag();closeMenu();key=null;game=null;composed.clear();
+    clear(){reversible.reset();cameraPan.reset();discInteraction.reset();coverFinish.clear();poster.clear();revision++;controller?.abort();controller=null;stopDrag();closeMenu();key=null;game=null;composed.clear();
       clearManual();
       if(!options.carousel){dynamicTextures.forEach(texture=>texture.dispose());dynamicTextures.clear();}for(const kind of Object.keys(pictures))delete pictures[kind];
-      for(const name of ['Cover Outside','Cover Inside','Cartridge Cover','UMD Label']){const material=materials.get(name);if(material){if(options.carousel)assign(name,null);else {material.map=options.useModelArtwork?[...originalMaterials].find(value=>value.name===name)?.map||null:null;material.needsUpdate=true;}}}
+      for(const name of ['Cover Outside','Cover Inside','Cover Reverse','Cartridge Cover','UMD Label']){const material=materials.get(name);if(material){if(options.carousel)assign(name,null);else {material.map=options.useModelArtwork?[...originalMaterials].find(value=>value.name===name)?.map||null:null;material.needsUpdate=true;}}}
       if(frame!==null){cancelAnimationFrame(frame);frame=null;}if(!renderLease?.lost&&!renderLease?.paused)renderer.clear();notify();},
     dispose(){if(disposed)return;api.clear();cameraPan.dispose();discInteraction.dispose();poster.dispose();disposed=true;resize.disconnect();listeners.forEach(([target,name,callback,config])=>target.removeEventListener(name,callback,config));
       dynamicTextures.forEach(texture=>texture.dispose());dynamicTextures.clear();

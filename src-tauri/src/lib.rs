@@ -405,6 +405,18 @@ async fn get_games(tracker: tauri::State<'_, PlayTracker>) -> Result<Vec<Game>, 
     }).await.map_err(|e| e.to_string())?
 }
 
+#[tauri::command]
+async fn set_game_cover_reversed(id:i32,reversed:bool) -> Result<platform_details::BoxSettings,String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let mut conn=get_db_connection().map_err(|e|e.to_string())?;
+        let root=data_directory().map_err(|e|e.to_string())?;
+        let tx=conn.transaction_with_behavior(TransactionBehavior::Immediate).map_err(|e|e.to_string())?;
+        let settings=game_box_settings::reverse_cover(&tx,id,reversed)?;
+        let mut copied=PendingImageCopies(Vec::new());media_library::sync_game(&tx,&root,id as i64,&mut copied)?;
+        tx.commit().map_err(|e|e.to_string())?;copied.0.clear();media_library::flush_logged(&conn,&root);Ok(settings)
+    }).await.map_err(|e|e.to_string())?
+}
+
 fn read_library_games(conn: &Connection, root: &Path, tracker: &PlayTracker) -> Result<Vec<Game>, String> {
     let order_groups=game_order::groups(conn)?;
     let order_index=game_order::index(&order_groups);
@@ -2783,6 +2795,7 @@ pub fn run() {
             storage::restart_for_data_move,
             storage::restart_app,
             get_games,
+            set_game_cover_reversed,
             library_features::set_game_personal,
             launch_actions::get_game_launch_actions,
             launch_actions::choose_launch_action,

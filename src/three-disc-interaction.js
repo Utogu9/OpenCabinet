@@ -5,12 +5,21 @@ const opticalMaterials=new Set(['UMD Label','Disc Silver','UMD Housing','UMD Win
 
 export function discFinish(profile,game) {
   if(['silver','black','blue','gold'].includes(profile?.discFinish))return profile.discFinish;
+  // Sony specifies black PlayStation CDs, blue PS2 CDs and silver PS2 DVDs.
+  // File names/compressed image sizes cannot reliably distinguish PS2 CD/DVD.
+  const platform=String(game?.platform||'').toLowerCase().replace(/[^a-z0-9]/g,'');
+  if(/^(?:sony)?(?:playstation(?:1)?|ps1|psx)$/.test(platform))return 'black';
   return 'silver';
 }
 export function applyDiscFinish(material,finish) {
   if(!material)return;
-  material.color.set(({silver:0xc3cedb,black:0x171022,blue:0x263b9c,gold:0xa48943})[finish]??0xc3cedb);
+  material.color.set(({silver:0xc3cedb,black:0x090909,blue:0x263b9c,gold:0xa48943})[finish]??0xc3cedb);
   material.metalness=finish==='black'?.65:.9;material.roughness=finish==='black'?.23:.19;
+  material.envMapIntensity=finish==='black'?.35:1;
+  const optics=material.userData.discReverseOptics;
+  // Untinted additive diffraction overwhelmed the dark PlayStation substrate.
+  // Black discs keep their ordinary specular highlight, without a rainbow glow.
+  if(optics){optics.diffraction.value=finish==='black'?0:1;optics.rings.value=finish==='black'?.025:1;}
 }
 
 export function discExtractionPosition(origin,targetX,progress,radius) {

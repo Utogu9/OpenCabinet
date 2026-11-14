@@ -1909,6 +1909,8 @@
     "disc.focusDisc": "Disc",
     "disc.controls": "Select the case, disc or manual to rotate and zoom that object.",
     "disc.flip": "Flip disc",
+    "cover.reverse": "Reverse cover",
+    "cover.restore": "Restore original cover",
     "disc.finish": "Disc underside",
     "disc.silver": "Silver",
     "disc.black": "Black (PlayStation CD)",

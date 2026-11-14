@@ -28,6 +28,8 @@ pub struct BoxSettings {
     base: BoxStyle,
     regions: BTreeMap<String, BoxStyle>,
     #[serde(skip_serializing_if="Option::is_none")]
+    pub(crate) cover_reversed: Option<bool>,
+    #[serde(skip_serializing_if="Option::is_none")]
     poster: Option<PosterSettings>,
     #[serde(skip_serializing_if="Option::is_none")]
     posters: Option<Vec<PosterEntry>>,

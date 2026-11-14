@@ -195,6 +195,7 @@
       const read=button(t('msg.297ba61d09'),()=>{closeBoxMenu();node._viewer?.readManual?.();});
       read.disabled=!node._viewer?.isOpen||node._manualState?.status!=='ready';read.setAttribute('role','menuitem');
       menu.append(open,read);
+      if(node._viewer?.canReverseCover){const reverse=button(t(node._viewer.isCoverReversed?'cover.restore':'cover.reverse'),()=>{closeBoxMenu();void node._viewer?.reverseCover?.();});reverse.setAttribute('role','menuitem');menu.append(reverse);}
       if(node._viewer?.isDiscRemoved||node._viewer?.isManualRemoved||node._viewer?.isPosterRemoved){
         const examine=button(t('box.examine'),()=>{closeBoxMenu();node._viewer?.examineBox?.();});examine.setAttribute('role','menuitem');menu.append(examine);
       }

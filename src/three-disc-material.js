@@ -27,13 +27,16 @@ export function prepareDiscReverse(geometry) {
 // A radial diffraction finish needs no bitmap, animation loop or network
 // texture. Geometry coordinates work with all the existing CD/DVD/UMD UV maps.
 export function configureDiscReverse(material) {
+  const optics=material.userData.discReverseOptics={diffraction:{value:1},rings:{value:1}};
   material.onBeforeCompile=shader=>{
+    shader.uniforms.discDiffractionStrength=optics.diffraction;
+    shader.uniforms.discRingStrength=optics.rings;
     shader.vertexShader=`attribute vec2 discCoordinates;\nattribute vec3 discRadial;\nvarying vec2 vDiscCoordinates;\nvarying vec3 vDiscRadial;\n`+shader.vertexShader.replace('#include <begin_vertex>',`
       #include <begin_vertex>
       vDiscCoordinates=discCoordinates;
       vDiscRadial=mat3(modelViewMatrix)*discRadial;
     `);
-    shader.fragmentShader=`varying vec2 vDiscCoordinates;\nvarying vec3 vDiscRadial;\n`+shader.fragmentShader.replace('#include <opaque_fragment>',`
+    shader.fragmentShader=`uniform float discDiffractionStrength;\nuniform float discRingStrength;\nvarying vec2 vDiscCoordinates;\nvarying vec3 vDiscRadial;\n`+shader.fragmentShader.replace('#include <opaque_fragment>',`
       float discRadius=length(vDiscCoordinates);
       float discPixel=max(fwidth(discRadius),0.0001);
       float discData=smoothstep(0.235,0.27,discRadius)*(1.0-smoothstep(0.97,1.0,discRadius));
@@ -52,9 +55,10 @@ export function configureDiscReverse(material) {
       float discOuterRing=1.0-smoothstep(discPixel,discPixel*2.0+0.003,abs(discRadius-0.98));
       float discHub=1.0-smoothstep(0.17,0.22,discRadius);
       outgoingLight=max(vec3(0.0),outgoingLight*(1.0-discHub*0.16+discGrooves*discData)
-        +(discSpectrum-0.25)*discSheen*discData+vec3(discInnerRing*0.12+discOuterRing*0.06));
+        +(discSpectrum-0.25)*discSheen*discData*discDiffractionStrength
+        +vec3(discInnerRing*0.12+discOuterRing*0.06)*discRingStrength);
       #include <opaque_fragment>
     `);
   };
-  material.customProgramCacheKey=()=> 'opencabinet-optical-disc-reverse-v1';
+  material.customProgramCacheKey=()=> 'opencabinet-optical-disc-reverse-v2';
 }

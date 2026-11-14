@@ -82,6 +82,7 @@
       get hasDisc(){return viewer?.hasDisc??false;},get isDiscRemoved(){return viewer?.isDiscRemoved??false;},
       removeDisc(){return viewer?.removeDisc?.()??false;},returnDisc(){return viewer?.returnDisc?.()??false;},examineDisc(){return viewer?.examineDisc?.()??false;},
       examineBox(){return viewer?.examineBox?.()??false;},
+      get canReverseCover(){return viewer?.canReverseCover??false;},get isCoverReversed(){return viewer?.isCoverReversed??false;},reverseCover(){return viewer?.reverseCover?.()??false;},
       get hasPoster(){return viewer?.hasPoster??false;},get isPosterRemoved(){return viewer?.isPosterRemoved??false;},get canRemovePoster(){return viewer?.canRemovePoster??false;},get isPosterUnfolded(){return viewer?.isPosterUnfolded??false;},
       get posters(){return viewer?.posters||[];},
       removePoster(...args){return viewer?.removePoster?.(...args)??false;},putPosterBack(...args){return viewer?.putPosterBack?.(...args)??false;},examinePoster(...args){return viewer?.examinePoster?.(...args)??false;},togglePoster(...args){return viewer?.togglePoster?.(...args)??false;},

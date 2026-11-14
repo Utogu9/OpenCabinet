@@ -1909,6 +1909,8 @@
     "disc.focusDisc": "Disco",
     "disc.controls": "Seleccioná la caja, el disco o el manual para girar y acercar ese objeto.",
     "disc.flip": "Dar vuelta el disco",
+    "cover.reverse": "Dar vuelta la carátula",
+    "cover.restore": "Volver a la carátula original",
     "disc.finish": "Reverso del disco",
     "disc.silver": "Plateado",
     "disc.black": "Negro (CD de PlayStation)",

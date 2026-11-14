@@ -669,6 +669,15 @@ function regionalGame(game) {
 function findGameSource(id) {
   return allGames.flatMap(game => [game, ...(game.regions || []).map(region => region.game)]).find(game => game.id === id);
 }
+globalThis.OpenCabinetCoverPreferences={
+  async save(game,reversed){
+    if(!Number.isInteger(game?.id))return;
+    const settings=await invoke('set_game_cover_reversed',{id:game.id,reversed});
+    const source=findGameSource(game.id);if(source)source.box_3d=settings;
+    game.box_3d=settings;
+  },
+  error:error=>showToast(String(error),true),
+};
 function displayGameImages(game) {
   const images = gameImages(regionalGame(game));
   return window.OpenCabinetImages ? window.OpenCabinetImages.resolve(images) : images;
@@ -3751,7 +3760,9 @@ function setupGameEditor() {
     let gameBox;
     try { if (gameBoxEditor) gameBox = inheritBox.checked ? null : gameBoxEditor.getValue(); }
     catch(error) { showEditorTab("box"); showToast(String(error),true); return; }
-    try { gameBox=window.OpenCabinetPosters.withPoster(gameBox,posterEditor.value()); }
+    try { gameBox=window.OpenCabinetPosters.withPoster(gameBox,posterEditor.value());
+      if(editingSourceGame?.box_3d?.cover_reversed!=null)gameBox={...gameBox,cover_reversed:editingSourceGame.box_3d.cover_reversed};
+    }
     catch(error) { showEditorTab("posters"); showToast(String(error),true); return; }
     let orderPatch;
     try { orderPatch = orderEditor?.value(); }
