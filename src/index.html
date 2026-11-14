@@ -312,7 +312,24 @@
           <div id="platform-editor-panels">
           <section id="platform-edit-panel-folders" class="hidden" role="tabpanel" aria-labelledby="platform-edit-tab-folders"><h3 data-i18n="library.folders"></h3><div id="platform-folders-list"></div></section>
           <section id="platform-edit-panel-details" role="tabpanel" aria-labelledby="platform-edit-tab-details">
+        <h3 data-i18n="msg.c8a74ca68d"></h3>
         <div class="form-grid">
+          <div class="form-group full-width">
+            <label for="platform-editor-name" data-i18n="msg.e0236ea3bc"></label>
+            <div class="metadata-search-row metadata-game-title-row">
+              <input id="platform-editor-name" type="text" readonly>
+              <div class="metadata-title-actions"><div id="platform-metadata-source"></div><button class="secondary-btn" id="btn-platform-lb-metadata" type="button" data-i18n="msg.671f63fed3"></button></div>
+            </div>
+            <section id="platform-metadata-panel" class="editor-metadata-panel hidden">
+              <p class="help-text" data-i18n="platform.metadata.help"></p>
+              <label for="platform-metadata-query" data-i18n="platform.metadata.query"></label>
+              <div class="metadata-search-row"><input id="platform-metadata-query" type="text"><button class="secondary-btn" id="btn-platform-metadata-search" type="button" data-i18n="msg.5f55edf900"></button></div>
+              <label for="platform-metadata-result" data-i18n="msg.adf7c8924a"></label><select id="platform-metadata-result"></select>
+              <progress id="platform-metadata-progress" class="hidden" max="100" aria-label="" data-i18n-aria-label="msg.ad0266fefa"></progress>
+              <p id="platform-metadata-message" role="status"></p><p id="platform-metadata-preview" class="metadata-details"></p>
+              <button class="primary-btn" id="btn-platform-metadata-apply" type="button" disabled data-i18n="msg.1e31349633"></button>
+            </section>
+          </div>
           <div class="form-group full-width"><label for="platform-release-date"><span data-i18n="msg.31b614ced2"></span></label><input id="platform-release-date" type="date" /></div>
           <div class="form-group full-width">
             <label for="platform-default-emulator-select"><span data-i18n="msg.3aa2fc0e2f"></span></label>
@@ -348,21 +365,20 @@
           </section>
         <section class="game-image-editor hidden" id="platform-edit-panel-images" role="tabpanel" aria-labelledby="platform-edit-tab-images">
           <h3 id="platform-images-title"><span data-i18n="msg.1a6acdfd76"></span></h3>
-          <div class="image-add-controls"><select id="platform-image-kind" aria-label="" data-i18n-aria-label="msg.bff41f6d57"><option value="logo" data-i18n="msg.d707dc2f19"></option><option value="screenshot" data-i18n="msg.e0236ea3bc"></option><option value="artwork" data-i18n="msg.3dbb2d3239"></option><option value="other" data-i18n="msg.371008571b"></option></select><button class="secondary-btn" id="btn-add-platform-images" type="button"><span data-i18n="msg.4ebca1adca"></span></button></div>
-          <section class="platform-download-panel" aria-label="" data-i18n-aria-label="msg.9a11051043">
+          <div class="image-add-controls"><div class="form-group"><label for="platform-image-kind" data-i18n="msg.bff41f6d57"></label><select id="platform-image-kind" aria-label="" data-i18n-aria-label="msg.bff41f6d57"><option value="logo" data-i18n="msg.d707dc2f19"></option><option value="spine" data-i18n="msg.11ac6da5f0"></option><option value="screenshot" data-i18n="msg.e0236ea3bc"></option><option value="artwork" data-i18n="msg.3dbb2d3239"></option><option value="other" data-i18n="msg.371008571b"></option></select></div><button class="browse-btn" id="btn-add-platform-images" type="button" data-i18n="msg.5367e21bbc"></button><button class="browse-btn" id="btn-download-platform-images" type="button" data-i18n="msg.429da598be"></button></div>
+          <section id="platform-artwork-panel" class="platform-download-panel editor-artwork-panel hidden" aria-label="" data-i18n-aria-label="msg.9a11051043">
             <div class="metadata-catalog-bar">
               <button class="secondary-btn" id="btn-platform-lb-search" type="button"><span data-i18n="msg.01cd2f796a"></span></button>
               <button class="secondary-btn catalog-refresh-btn" id="btn-platform-lb-update" type="button" disabled data-i18n-title="msg.368a0125f2" data-i18n-aria-label="msg.368a0125f2"><span class="ui-icon" data-icon="rotate-ccw" aria-hidden="true"></span></button>
             </div>
-            <label for="platform-lb-source"><span data-i18n="msg.8f7fb99d79"></span></label><select id="platform-lb-source" aria-label="" data-i18n-aria-label="msg.8f7fb99d79"></select>
-            <button class="secondary-btn" id="btn-platform-lb-metadata" type="button" disabled><span data-i18n="msg.2acc658bfe"></span></button>
+            <div class="form-group"><label for="platform-lb-source"><span data-i18n="msg.8f7fb99d79"></span></label><select id="platform-lb-source" aria-label="" data-i18n-aria-label="msg.8f7fb99d79"></select></div>
             <div class="platform-download-options" id="platform-lb-options"></div>
             <label class="preference-toggle platform-download-all"><input id="platform-lb-download-all" type="checkbox" /><span><span data-i18n="msg.f84de4576f"></span></span></label>
             <button class="secondary-btn" id="btn-platform-lb-download" type="button" disabled><span data-i18n="msg.488a8c208f"></span></button>
             <progress id="platform-lb-progress" max="100" class="hidden" aria-label="" data-i18n-aria-label="msg.8991638982"></progress>
             <p class="help-text" id="platform-lb-message" role="status"><span data-i18n="msg.343b265894"></span></p>
           </section>
-          <p class="help-text"><span data-i18n="msg.873132cef4"></span></p>
+          <p class="help-text" data-i18n="platform.images.help"></p>
           <div class="game-image-list" id="platform-image-list"></div>
         </section>
         <section class="hidden" id="platform-edit-panel-variables" role="tabpanel" aria-labelledby="platform-edit-tab-variables">
@@ -374,7 +390,7 @@
           </div>
         </div>
         <p id="platform-editor-error" role="status"></p>
-        <div class="form-actions"><button class="secondary-btn" id="btn-cancel-platform-details" type="button"><span data-i18n="msg.bb9dbb406d"></span></button><button class="primary-btn" id="btn-save-platform-details" type="submit"><span data-i18n="msg.14bdfaf2fa"></span></button></div>
+        <div class="form-actions"><button class="secondary-btn" id="btn-cancel-platform-details" type="button"><span data-i18n="msg.bb9dbb406d"></span></button><button class="primary-btn" id="btn-save-platform-details" type="submit"><span data-i18n="msg.14bdfaf2fa"></span></button><button class="primary-btn hidden" id="btn-platform-download-footer" type="button" data-i18n="msg.488a8c208f"></button></div>
       </form>
     </dialog>
 

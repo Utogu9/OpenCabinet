@@ -4,6 +4,10 @@
     "name": "English (United States)"
   },
   "messages": {
+    "platform.metadata.help": "Search for a platform, review its metadata and apply the available fields. Your local platform name and emulator remain unchanged.",
+    "platform.metadata.review": "Review the selected platform's data, then apply it to the form. Changes take effect when you save.",
+    "platform.metadata.query": "Platform search name",
+    "platform.images.help": "Add local images or download them from the catalog. Review their types and choose the default image with the star. Changes take effect when you save.",
     "poster.title": "Posters",
     "poster.addFront": "Add front image",
     "poster.addBack": "Add back image",
@@ -365,7 +369,7 @@
     "msg.f7c2f18575": "Finding platform images…",
     "msg.c61d0b32bc": "Finding platforms…",
     "msg.81e799c128": "Select the catalog platform…",
-    "msg.c887525256": "Choose the types and quantities. Your current images will be kept; types unavailable in the catalog will be left empty.",
+    "msg.c887525256": "Choose the types to download. One image per type is downloaded by default; enable Download all for every available image.",
     "msg.e78e2429a5": "Search failed: {0}",
     "msg.186b0b3ee1": "Check the image quantities.",
     "msg.b192ed44c6": "Select at least one image type.",

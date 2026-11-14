@@ -137,6 +137,8 @@ impl BoxSettings {
 #[derive(Debug, Serialize, Deserialize)]
 pub struct PlatformDetails {
     #[serde(default)]
+    metadata_source: Option<crate::media_provenance::Source>,
+    #[serde(default)]
     variables: Option<crate::entity_variables::Variables>,
     platform_id: i32,
     release_date: Option<String>,
@@ -152,7 +154,8 @@ pub struct PlatformDetails {
 
 pub(super) fn init_schema(conn: &Connection) -> rusqlite::Result<()> {
     conn.execute_batch(
-        "CREATE TABLE IF NOT EXISTS platform_details (
+        "CREATE TABLE IF NOT EXISTS image_sources(path TEXT PRIMARY KEY, details TEXT NOT NULL);
+         CREATE TABLE IF NOT EXISTS platform_details (
             platform_id INTEGER PRIMARY KEY, release_date TEXT, developer TEXT, manufacturer TEXT
          );
          CREATE TABLE IF NOT EXISTS platform_images (
@@ -178,6 +181,9 @@ pub(super) fn init_schema(conn: &Connection) -> rusqlite::Result<()> {
     }
     if !columns.iter().any(|column| column == "box_3d") {
         conn.execute("ALTER TABLE platform_details ADD COLUMN box_3d TEXT", [])?;
+    }
+    if !columns.iter().any(|column| column == "metadata_source") {
+        conn.execute("ALTER TABLE platform_details ADD COLUMN metadata_source TEXT", [])?;
     }
     let emulators_exist: bool = conn.query_row(
         "SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE type='table' AND name='emulators')",
@@ -229,10 +235,11 @@ pub(super) fn read(conn: &Connection, id: i32, root: &Path) -> Result<PlatformDe
     }
     let mut details = conn
         .query_row(
-            "SELECT release_date,developer,manufacturer,default_emulator_id,box_3d FROM platform_details WHERE platform_id=?1",
+            "SELECT release_date,developer,manufacturer,default_emulator_id,box_3d,metadata_source FROM platform_details WHERE platform_id=?1",
             [id],
             |row| {
                 Ok(PlatformDetails {
+                    metadata_source: crate::media_provenance::decode(row.get(5)?),
                     variables: None,
                     platform_id: id,
                     release_date: row.get(0)?,
@@ -248,6 +255,7 @@ pub(super) fn read(conn: &Connection, id: i32, root: &Path) -> Result<PlatformDe
         .optional()
         .map_err(|e| e.to_string())?
         .unwrap_or(PlatformDetails {
+            metadata_source: None,
             variables: None,
             platform_id: id,
             release_date: None,
@@ -259,10 +267,10 @@ pub(super) fn read(conn: &Connection, id: i32, root: &Path) -> Result<PlatformDe
         });
     details.variables = Some(crate::entity_variables::read(conn, "platform", id)?);
     details.images = conn
-        .prepare("SELECT path,kind FROM platform_images WHERE platform_id=?1 ORDER BY position")
+        .prepare("SELECT i.path,i.kind,s.details FROM platform_images i LEFT JOIN image_sources s ON s.path=i.path WHERE i.platform_id=?1 ORDER BY i.position")
         .map_err(|e| e.to_string())?
         .query_map([id], |row| {
-            Ok(GameImage { source: None,
+            Ok(GameImage { source: crate::media_provenance::decode(row.get(2)?),
                 path: row.get(0)?,
                 kind: row.get(1)?,
             })
@@ -310,7 +318,7 @@ fn save(
     if details
         .images
         .iter()
-        .any(|image| !["logo", "screenshot", "artwork", "other"].contains(&image.kind.as_str()))
+        .any(|image| !["logo", "spine", "screenshot", "artwork", "other"].contains(&image.kind.as_str()))
     {
         return Err(crate::i18n::text("msg.4c7b49b27f").into());
     }
@@ -368,15 +376,18 @@ fn save(
             return Err(crate::i18n::text("msg.62a91680c7").into());
         }
     }
-    tx.execute("INSERT INTO platform_details(platform_id,release_date,developer,manufacturer,default_emulator_id,box_3d) VALUES (?1,?2,?3,?4,?5,?6)
-        ON CONFLICT(platform_id) DO UPDATE SET release_date=excluded.release_date,developer=excluded.developer,manufacturer=excluded.manufacturer,default_emulator_id=excluded.default_emulator_id,box_3d=excluded.box_3d",
-        params![details.platform_id, details.release_date, details.developer, details.manufacturer, details.default_emulator_id, box_3d]).map_err(|e| e.to_string())?;
+    let metadata_source=details.metadata_source.as_ref().and_then(crate::media_provenance::Source::clean)
+        .map(|source|serde_json::to_string(&source)).transpose().map_err(|e|e.to_string())?;
+    tx.execute("INSERT INTO platform_details(platform_id,release_date,developer,manufacturer,default_emulator_id,box_3d,metadata_source) VALUES (?1,?2,?3,?4,?5,?6,?7)
+        ON CONFLICT(platform_id) DO UPDATE SET release_date=excluded.release_date,developer=excluded.developer,manufacturer=excluded.manufacturer,default_emulator_id=excluded.default_emulator_id,box_3d=excluded.box_3d,metadata_source=CASE WHEN ?8 THEN excluded.metadata_source ELSE platform_details.metadata_source END",
+        params![details.platform_id, details.release_date, details.developer, details.manufacturer, details.default_emulator_id, box_3d, metadata_source,details.metadata_source.is_some()]).map_err(|e| e.to_string())?;
     tx.execute(
         "DELETE FROM platform_images WHERE platform_id=?1",
         [details.platform_id],
     )
     .map_err(|e| e.to_string())?;
     for (position, image) in details.images.iter().enumerate() {
+        crate::media_provenance::save_image(&tx,&image.path,image.source.as_ref())?;
         tx.execute(
             "INSERT INTO platform_images(platform_id,path,kind,position) VALUES (?1,?2,?3,?4)",
             params![details.platform_id, image.path, image.kind, position as i64],
@@ -449,6 +460,7 @@ mod tests {
         }
         fn details(&self) -> PlatformDetails {
             PlatformDetails {
+                metadata_source: None,
                 variables: None,
                 platform_id: 1,
                 release_date: Some("1990-11-21".into()),
@@ -671,16 +683,17 @@ mod tests {
     fn images_are_portable_classified_and_reused_without_copying_again() {
         let mut library = Library::new();
         let mut details = library.details();
-        details.images = vec![library.image("logo"), library.image("screenshot")];
+        details.images = vec![library.image("logo"), library.image("screenshot"), library.image("spine")];
         let source = details.images[0].path.clone();
         let saved = save(&mut library.conn, details, &library.root).unwrap();
         assert_eq!(saved.images[0].kind, "logo");
         assert_eq!(saved.images[1].kind, "screenshot");
+        assert_eq!(saved.images[2].kind, "spine");
         assert_ne!(source, saved.images[0].path);
         assert!(Path::new(&source).is_file());
-        assert_eq!(image_files(&library.root.join("images")), 2);
+        assert_eq!(image_files(&library.root.join("images")), 3);
         save(&mut library.conn, saved, &library.root).unwrap();
-        assert_eq!(image_files(&library.root.join("images")), 2);
+        assert_eq!(image_files(&library.root.join("images")), 3);
         let relative: String = library
             .conn
             .query_row(
@@ -707,6 +720,19 @@ mod tests {
                 .unwrap(),
             0
         );
+    }
+
+    #[test]
+    fn console_metadata_and_artwork_credits_survive_editing_and_data_relocation() {
+        let mut library=Library::new();let mut details=library.details();
+        let metadata=crate::media_provenance::Source{uploader:None,url:Some("https://www.wikidata.org/wiki/Q172742".into())};
+        let image_source=crate::media_provenance::Source{uploader:Some("Uploader".into()),url:Some("https://example.org/console/logo".into())};
+        details.metadata_source=Some(metadata.clone());let mut image=library.image("logo");image.source=Some(image_source.clone());details.images.push(image);
+        let mut saved=save(&mut library.conn,details,&library.root).unwrap();
+        assert_eq!(saved.metadata_source,Some(metadata.clone()));assert_eq!(saved.images[0].source,Some(image_source.clone()));
+        saved.metadata_source=None;let saved=save(&mut library.conn,saved,&library.root).unwrap();assert_eq!(saved.metadata_source,Some(metadata));
+        let moved=read(&library.conn,1,&library.root.join("moved")).unwrap();assert_eq!(moved.images[0].source,Some(image_source));
+        let mut clear=saved;clear.metadata_source=Some(Default::default());assert!(save(&mut library.conn,clear,&library.root).unwrap().metadata_source.is_none());
     }
 
     #[test]

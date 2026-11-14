@@ -62,7 +62,8 @@ function app(options = {}) {
       this.classList = { add: name => classes.add(name), remove: name => classes.delete(name), contains: name => classes.has(name),
         toggle: (name, value) => value ? classes.add(name) : classes.delete(name) };
     }
-    appendChild(item) { item.parent=this; this.children.push(item); return item; }
+    appendChild(item) { item.remove();item.parent=this; this.children.push(item); return item; }
+    remove(){if(this.parent)this.parent.children=this.parent.children.filter(child=>child!==this);this.parent=null;}
     append(...items) { items.forEach(item=>this.appendChild(item)); }
     replaceChildren(...items) { this.children = items; }
     setAttribute() {} removeAttribute() {} focus() { this.focused=true; } scrollIntoView() {}
@@ -70,7 +71,8 @@ function app(options = {}) {
     closest(selector) { if(selector==='.platform-filter' && this.className==='platform-filter') return this; return this.parent?.closest(selector) || null; }
     getBoundingClientRect() { return {left:100,top:100}; }
     addEventListener(name, callback) { this.handlers[name] = callback; }
-    querySelectorAll() { return []; }
+    querySelectorAll(selector) { const matches=node=>selector.startsWith('.')?(node.className||'').split(' ').includes(selector.slice(1)):node.tag===selector;return this.children.flatMap(child=>[...(matches(child)?[child]:[]),...child.querySelectorAll(selector)]); }
+    querySelector(selector){return this.querySelectorAll(selector)[0]||null;}
     showModal() { this.open = true; }
     close() { this.open = false; this.handlers.close?.(); }
   }
@@ -93,7 +95,7 @@ function app(options = {}) {
       if (command === 'launch_game') return { message: 'Started', session_count: 2, play_time_seconds: 60, is_running: true, last_played: '2026-10-17T16:00:00Z' };
       throw new Error(command);
     }, Channel: class {} } } },
-    console, seedGames: fixtures(), media: game => media.push(game),
+    console, URL, seedGames: fixtures(), media: game => media.push(game),
   });
   const evaluate = code => vm.runInContext(code, context);
   evaluate(fs.readFileSync(path.join(__dirname, '../src/main.js'), 'utf8') + `
@@ -158,11 +160,12 @@ test('Console editor saves only its metadata and classified images; cancellation
   const ui = app();
   await ui.evaluate('openPlatformDetailsEditor(allPlatforms[0])');
   ui.get('platform-developer').value = ' Edited ';
-  ui.get('platform-image-kind').value = 'screenshot'; await ui.get('btn-add-platform-images').onclick();
+  assert.match(fs.readFileSync(path.join(__dirname,'../src/index.html'),'utf8'),/id="platform-image-kind"[^>]*>[\s\S]*?<option value="spine"/);
+  ui.get('platform-image-kind').value = 'spine'; await ui.get('btn-add-platform-images').onclick();
   await ui.get('platform-details-form').onsubmit({ preventDefault() {} });
   const saved = ui.calls.find(call => call.command === 'save_platform_details').args.details;
   assert.equal(saved.developer, 'Edited'); assert.equal(saved.platform_id, 1);
-  assert.equal(saved.images[1].kind, 'screenshot'); assert.equal(saved.images[1].path, 'new-photo.png');
+  assert.equal(saved.images[1].kind, 'spine'); assert.equal(saved.images[1].path, 'new-photo.png');
   assert.equal(ui.get('platform-details-dialog').open, false);
   await ui.evaluate('openPlatformDetailsEditor(allPlatforms[0])');
   ui.get('platform-developer').value = 'Discard me'; ui.get('btn-cancel-platform-details').onclick();
@@ -407,12 +410,13 @@ test('Image messages distinguish an empty PS2 page, unselected image types, and 
 
 test('Completing console metadata uses the chosen source and only persists on Save', async () => {
   const ui=app();await ui.evaluate('openPlatformDetailsEditor(allPlatforms[0])');
-  assert.equal(ui.get('btn-platform-lb-metadata').disabled,true);
-  await ui.get('btn-platform-lb-search').onclick();
   assert.equal(ui.get('btn-platform-lb-metadata').disabled,false);
   await ui.get('btn-platform-lb-metadata').onclick();
+  assert.equal(ui.calls.some(call=>call.command==='get_platform_image_types'),false,'metadata search does not wait for artwork analysis');
   const request=ui.calls.find(call=>call.command==='get_catalog_platform_metadata');
   assert.equal(request.args.sourcePlatform,'Super Nintendo Entertainment System');
+  assert.equal(ui.get('platform-developer').value,'Nintendo R&D','preview does not overwrite fields');
+  ui.get('btn-platform-metadata-apply').onclick();
   assert.equal(ui.get('platform-developer').value,'metadata catalog developer');
   assert.equal(ui.calls.some(call=>call.command==='save_platform_details'),false);
   await ui.get('platform-details-form').onsubmit({preventDefault(){}});
@@ -421,10 +425,39 @@ test('Completing console metadata uses the chosen source and only persists on Sa
   assert.equal(details.platform_id,1);assert.equal(details.images.length,1);
 });
 
+test('Console metadata credits and artwork uploaders link to exact articles and persist with reviewed drafts',async()=>{
+  const source={url:'https://www.wikidata.org/wiki/Q172742'};
+  const imageSource={uploader:'Archive uploader',url:'https://example.org/files/console-logo'};
+  const ui=app({get_catalog_platform_metadata:({sourcePlatform})=>({name:sourcePlatform,developer:'Reviewed',source}),
+    download_platform_images:()=>({images:[{path:'downloaded-logo.svg',kind:'other',source:imageSource}],image_count:1,available_count:1,failures:[]}),open_source_url:()=>{}});
+  await ui.evaluate('openPlatformDetailsEditor(allPlatforms[0])');await ui.get('btn-platform-lb-metadata').onclick();
+  assert.equal(ui.get('platform-metadata-source').children[0].textContent,'Wikidata');
+  ui.get('platform-metadata-source').children[0].handlers.click();await turn();
+  assert.equal(ui.calls.find(call=>call.command==='open_source_url').args.url,source.url);
+  ui.get('btn-platform-metadata-apply').onclick();
+  ui.get('platform-metadata-query').value='Playstation';await ui.get('btn-platform-metadata-search').onclick();
+  assert.equal(ui.calls.filter(call=>call.command==='get_catalog_platform_metadata').at(-1).args.sourcePlatform,'Sony Playstation 2');
+  assert.equal(ui.get('platform-developer').value,'Reviewed');
+  ui.get('platform-edit-tab-images').handlers.click();await ui.get('btn-download-platform-images').onclick();
+  assert.equal(ui.get('platform-artwork-panel').classList.contains('hidden'),false);
+  assert.equal(ui.get('btn-platform-download-footer').classList.contains('hidden'),false);
+  await ui.get('btn-platform-download-footer').onclick();
+  const row=ui.get('platform-image-list').children.find(row=>row.dataset.imagePath==='downloaded-logo.svg');
+  assert.equal(row.querySelector('.media-uploader-badge').textContent,'Archive uploader');
+  assert.equal(row.querySelector('.media-source-badge').title,imageSource.url);
+  ui.get('platform-editor-panels').scrollTop=275;row.querySelector('select').value='spine';row.querySelector('select').onchange();
+  assert.equal(ui.get('platform-editor-panels').scrollTop,275);assert.equal(ui.get('platform-image-list').children.find(item=>item.dataset.imagePath==='downloaded-logo.svg'),row,'classification keeps the row mounted');
+  await ui.get('platform-details-form').onsubmit({preventDefault(){}});
+  const saved=ui.calls.find(call=>call.command==='save_platform_details').args.details;
+  assert.deepEqual(saved.metadata_source,source);assert.deepEqual(saved.images.find(image=>image.kind==='spine').source,imageSource);
+  await ui.evaluate('openPlatformDetailsEditor(allPlatforms[0])');assert.equal(ui.get('platform-metadata-source').children[0].textContent,'Wikidata');
+});
+
 test('Missing source metadata preserves manual fields and cancellation discards fetched data', async () => {
   const ui=app({get_catalog_platform_metadata:()=>({name:'Source',release_date:null,developer:'Fetched developer',manufacturer:null})});
   await ui.evaluate('openPlatformDetailsEditor(allPlatforms[0])');await ui.get('btn-platform-lb-search').onclick();
   await ui.get('btn-platform-lb-metadata').onclick();
+  ui.get('btn-platform-metadata-apply').onclick();
   assert.equal(ui.get('platform-release-date').value,'1990-11-21');assert.equal(ui.get('platform-manufacturer').value,'Nintendo');
   await ui.get('btn-cancel-platform-details').onclick();await ui.evaluate('openPlatformDetailsEditor(allPlatforms[0])');
   assert.equal(ui.get('platform-developer').value,'Nintendo R&D');
@@ -439,6 +472,6 @@ test('Late console metadata after cancellation is ignored; lookup errors permit 
   await ui.evaluate('openPlatformDetailsEditor(allPlatforms[0])');assert.equal(ui.get('platform-developer').value,'Nintendo R&D');
   let fail=true;const other=app({get_catalog_platform_metadata:()=>{if(fail)throw new Error('Offline');return {name:'Source',manufacturer:'Restored'};}});
   await other.evaluate('openPlatformDetailsEditor(allPlatforms[0])');await other.get('btn-platform-lb-search').onclick();
-  await other.get('btn-platform-lb-metadata').onclick();assert.match(other.get('platform-lb-message').textContent,/Offline/);
-  fail=false;await other.get('btn-platform-lb-metadata').onclick();assert.equal(other.get('platform-manufacturer').value,'Restored');
+  await other.get('btn-platform-lb-metadata').onclick();assert.match(other.get('platform-metadata-message').textContent,/Offline/);
+  fail=false;await other.get('btn-platform-lb-metadata').onclick();other.get('btn-platform-metadata-apply').onclick();assert.equal(other.get('platform-manufacturer').value,'Restored');
 });

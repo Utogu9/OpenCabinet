@@ -4,6 +4,10 @@
     "name": "Español (Argentina)"
   },
   "messages": {
+    "platform.metadata.help": "Buscá una plataforma, revisá sus datos y aplicá los campos disponibles. Se conservan el nombre local de la consola y su emulador.",
+    "platform.metadata.review": "Revisá los datos de la plataforma seleccionada y aplicalos al formulario. Los cambios se guardan al confirmar.",
+    "platform.metadata.query": "Nombre de la plataforma para buscar",
+    "platform.images.help": "Agregá imágenes locales o descargalas del catálogo. Revisá sus tipos y elegí la predeterminada con la estrella. Los cambios se guardan al confirmar.",
     "poster.title": "Pósteres",
     "poster.addFront": "Agregar imagen frontal",
     "poster.addBack": "Agregar imagen del dorso",
@@ -365,7 +369,7 @@
     "msg.f7c2f18575": "Buscando imágenes de la consola…",
     "msg.c61d0b32bc": "Buscando plataformas…",
     "msg.81e799c128": "Selecciona la consola del catálogo…",
-    "msg.c887525256": "Elige los tipos y cantidades. Se conservarán tus imágenes actuales; los tipos que el catálogo no publique quedarán vacíos.",
+    "msg.c887525256": "Elegí los tipos para descargar. Por defecto se descarga una imagen de cada tipo; activá Descargar todas para obtener todas las disponibles.",
     "msg.e78e2429a5": "No se pudo buscar: {0}",
     "msg.186b0b3ee1": "Revisa las cantidades de imágenes.",
     "msg.b192ed44c6": "Selecciona al menos un tipo de imagen.",

@@ -315,6 +315,8 @@ fn prepare_with_counts(
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct PlatformMetadata {
+    #[serde(default)]
+    pub source: Option<crate::media_provenance::Source>,
     pub name: String,
     pub release_date: Option<String>,
     pub developer: Option<String>,
@@ -348,6 +350,7 @@ pub(super) fn platform_metadata(catalog: &Connection, source: &str) -> Result<Pl
         return serde_json::from_value(values.get(language).unwrap_or(&values["en"]).clone()).map_err(err);
     }
     catalog.query_row("SELECT name,release_date,developer,manufacturer FROM platform_metadata WHERE name=?1", [source], |row| Ok(PlatformMetadata {
+        source: None,
         name: row.get(0)?, release_date: row.get(1)?, developer: row.get(2)?, manufacturer: row.get(3)?,
     })).optional().map_err(err)?.ok_or_else(|| crate::i18n::text("msg.5c8018aaa8").into())
 }
@@ -530,7 +533,8 @@ pub(super) fn commit_auto(
             params![platform.id, relative, image.kind, position],
         )
         .map_err(err)?;
-        existing.push(GameImage { source: None,
+        crate::media_provenance::save_image(conn,&relative,image.source.as_ref())?;
+        existing.push(GameImage { source: image.source.clone(),
             path: destination.to_string_lossy().into_owned(),
             kind: image.kind.clone(),
         });

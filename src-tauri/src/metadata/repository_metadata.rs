@@ -57,6 +57,11 @@ impl Record {
                 .filter_map(|key| source[key].as_str())
                 .find_map(crate::media_provenance::web_url)
                 .map(|url| crate::media_provenance::Source { uploader: None, url: Some(url) })
+        }).or_else(|| {
+            let id=self.entity()?;
+            let number=id.strip_prefix('Q')?;
+            if number.is_empty()||!number.bytes().all(|value|value.is_ascii_digit()){return None;}
+            Some(crate::media_provenance::Source{uploader:None,url:Some(format!("https://www.wikidata.org/wiki/{id}"))})
         })
     }
     pub fn title(&self, locale: &str) -> Option<&str> {

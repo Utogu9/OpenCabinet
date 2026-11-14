@@ -12,7 +12,8 @@ const RAW_URL: &str = "https://raw.githubusercontent.com/Utogu9/OpenCabinet-BDD/
 const CONFIG: &str = "metadata/source.json";
 const MIN_REPOSITORY_ID: i64 = 1_000_000_000_000;
 // Retain release names and canonical title aliases for regional ROM matching.
-const REPOSITORY_GAME_VERSION: i64 = 10;
+const REPOSITORY_GAME_VERSION: i64 = 11;
+const CONSOLE_ARTWORK_VERSION: i64 = 4;
 
 #[derive(Default, Serialize, Deserialize)]
 struct Settings {
@@ -656,7 +657,7 @@ fn insert_platform(
     let mut console_localized=serde_json::Map::new();
     for locale in ["es", "en"] {
         let values=data.console().values(locale,None,&[]);
-        console_localized.insert(locale.into(),serde_json::json!({"name":source,"release_date":values.release_date,"developer":values.developer,"manufacturer":values.manufacturer}));
+        console_localized.insert(locale.into(),serde_json::json!({"name":source,"release_date":values.release_date,"developer":values.developer,"manufacturer":values.manufacturer,"source":data.console().origin()}));
     }
     tx.execute("INSERT OR REPLACE INTO repository_console_metadata VALUES(?1,?2)",params![source,serde_json::to_string(&console_localized).map_err(err)?]).map_err(err)?;
     tx.execute("DELETE FROM repository_image_sources WHERE filename IN (SELECT filename FROM images WHERE game_id IN (SELECT id FROM games WHERE platform=?1))",[source]).map_err(err)?;
@@ -1044,21 +1045,26 @@ fn insert_console_artwork(conn: &mut Connection, source: &str, file: &Path) -> R
     let tx=conn.transaction().map_err(err)?;
     metadata_schema(&tx)?;
     let raw=sources::base(&tx,source)?;
+    tx.execute("DELETE FROM repository_image_sources WHERE filename IN (SELECT filename FROM repository_platform_images WHERE platform=?1)",[source]).map_err(err)?;
     tx.execute("DELETE FROM image_urls WHERE filename IN (SELECT filename FROM repository_platform_images WHERE platform=?1)",[source]).map_err(err)?;
     tx.execute("DELETE FROM repository_platform_images WHERE platform=?1",[source]).map_err(err)?;
     for (key,image) in data.images {
         if !valid_relative(&image.path) || image.path.contains('/') { continue; }
         let kind=match if image.kind.is_empty(){key.as_str()}else{image.kind.as_str()} {
             "logo" if matches!(image.path.as_str(),"logo.svg"|"logo.webp"|"logo.png"|"logo.jpg"|"logo.jpeg"|"logo.avif")=>"logo",
+            value if value.trim_end_matches(|c:char|c.is_ascii_digit()).eq_ignore_ascii_case("spine")=>"spine",
             "render"|"screenshot"=>"screenshot", "artwork"|"fanart"=>"artwork", _=>"other",
         };
         let extension=Path::new(&image.path).extension().and_then(|s|s.to_str()).unwrap_or("");
         if !["svg","webp","png","jpg","jpeg","avif"].contains(&extension) { continue; }
         let filename=console_image_filename(source,&image.path);
+        if let Some(origin)=image_origin(source,&image.sources) {
+            tx.execute("INSERT OR REPLACE INTO repository_image_sources VALUES(?1,?2)",params![filename,serde_json::to_string(&origin).map_err(err)?]).map_err(err)?;
+        }
         tx.execute("INSERT INTO repository_platform_images VALUES(?1,?2,?3,'World',?4)",params![source,filename,kind,image.sha256]).map_err(err)?;
         tx.execute("INSERT OR REPLACE INTO image_urls VALUES(?1,?2)",params![filename,format!("{raw}{}",url_path(&image.path))]).map_err(err)?;
     }
-    tx.execute("INSERT OR REPLACE INTO repository_versions VALUES(?1,2)",[format!("artwork:{source}")]).map_err(err)?;
+    tx.execute("INSERT OR REPLACE INTO repository_versions VALUES(?1,?2)",params![format!("artwork:{source}"),CONSOLE_ARTWORK_VERSION]).map_err(err)?;
     tx.commit().map_err(err)
 }
 pub(super) fn console_images(job: &ImportJob, source: &str) -> Result<Vec<CatalogImage>> {
@@ -1068,7 +1074,7 @@ pub(super) fn console_images(job: &ImportJob, source: &str) -> Result<Vec<Catalo
     if !valid_relative(source) || source.contains('/') || !conn.query_row("SELECT EXISTS(SELECT 1 FROM platforms WHERE name=?1)",[source],|r|r.get::<_,bool>(0)).map_err(err)? {
         return Err(crate::i18n::text("source.invalid").into());
     }
-    let cached=conn.query_row("SELECT version FROM repository_versions WHERE name=?1",[format!("artwork:{source}")],|r|r.get::<_,i64>(0)).ok()==Some(2);
+    let cached=conn.query_row("SELECT version FROM repository_versions WHERE name=?1",[format!("artwork:{source}")],|r|r.get::<_,i64>(0)).ok()==Some(CONSOLE_ARTWORK_VERSION);
     let raw=sources::base(&conn,source)?;
     drop(conn);
     if !cached {
@@ -1086,9 +1092,11 @@ pub(super) fn console_images(job: &ImportJob, source: &str) -> Result<Vec<Catalo
         job.image_urls.lock().map_err(err)?.clear();
     }
     let conn=open_catalog(&path)?;
-    conn.prepare("SELECT filename,kind,region,crc FROM repository_platform_images WHERE platform=?1 ORDER BY kind,filename").map_err(err)?
+    let mut images=conn.prepare("SELECT filename,kind,region,crc FROM repository_platform_images WHERE platform=?1 ORDER BY kind,filename").map_err(err)?
         .query_map([source],|r|Ok(CatalogImage{ source: None,filename:r.get(0)?,kind:r.get(1)?,region:r.get(2)?,crc:r.get(3)?})).map_err(err)?
-        .collect::<rusqlite::Result<Vec<_>>>().map_err(err)
+        .collect::<rusqlite::Result<Vec<_>>>().map_err(err)?;
+    attach_image_sources(&conn,&mut images)?;
+    Ok(images)
 }
 
 pub(crate) fn console_image_filename(source: &str, image: &str) -> String {
@@ -1561,6 +1569,7 @@ mod tests {
         let missing=search_catalog(&conn,"Unknown Game",source).unwrap();
         assert_eq!(missing[0].game.developer,None);
         let console=platforms::platform_metadata(&conn,source).unwrap();
+        assert_eq!(console.source.as_ref().and_then(|source|source.url.as_deref()),Some("https://www.wikidata.org/wiki/Q10680"));
         assert_eq!(console.release_date.as_deref(),Some("2000-03-04"));
         assert!(console.developer.unwrap().contains("Sony"));
         assert!(console.manufacturer.unwrap().contains("Sony"));
@@ -1578,14 +1587,20 @@ mod tests {
             "logo2":{"path":"logo2.svg","kind":"logo","sha256":"a"},
             "logo3":{"path":"logo3.svg","kind":"logo","sha256":"a"},
             "render":{"path":"render.webp","kind":"render"},
+            "spine":{"path":"spine.webp","kind":"spine","sources":[{"uploader":"Console archivist","file_page":"https://example.org/artwork/spine"}]},
+            "spine2":{"path":"spine2.webp"},
             "bad":{"path":"../outside.svg","kind":"logo"}}}"#).unwrap();
         insert_console_artwork(&mut conn,"Sony - PlayStation 2",&fixture).unwrap();drop(conn);
         let images=console_images(&files.job,"Sony - PlayStation 2").unwrap();
-        assert_eq!(images.len(),4);
+        assert_eq!(images.len(),6);
+        assert_eq!(images.iter().filter(|i|i.kind=="spine").count(),2);
+        let credited=images.iter().find_map(|image|image.source.as_ref()).unwrap();
+        assert_eq!(credited.uploader.as_deref(),Some("Console archivist"));assert_eq!(credited.url.as_deref(),Some("https://example.org/artwork/spine"));
         assert_eq!(images.iter().filter(|i|i.kind=="logo").count(),1);
         assert_eq!(images.iter().filter(|i|i.kind=="other").count(),2);
-        let batch=platforms::prepare(&files.job,"Sony - PlayStation 2",&MediaOptions{logo:1,other:20,..Default::default()},crate::catalog_compat::SITE).unwrap();
+        let batch=platforms::prepare(&files.job,"Sony - PlayStation 2",&MediaOptions{logo:1,spine:1,other:20,..Default::default()},crate::catalog_compat::SITE).unwrap();
         assert_eq!(batch.tasks.iter().filter(|task|task.image.kind=="other").count(),2);
+        assert_eq!(batch.tasks.iter().filter(|task|task.image.kind=="spine").count(),1);
         let logo=images.iter().find(|i|i.kind=="logo").unwrap();
         assert!(logo.filename.ends_with(".svg"));assert!(safe_image_name(&logo.filename));
         let url=image_url(&files.job,platforms::PLATFORM_IMAGES,&logo.filename).unwrap();
@@ -1594,7 +1609,7 @@ mod tests {
         fs::write(&fixture,r#"{"schema_version":1,"system":"Wrong","images":{}}"#).unwrap();
         let mut conn=Connection::open(files.job.catalog_path()).unwrap();
         assert!(insert_console_artwork(&mut conn,"Sony - PlayStation 2",&fixture).is_err());drop(conn);
-        assert_eq!(console_images(&files.job,"Sony - PlayStation 2").unwrap().len(),4);
+        assert_eq!(console_images(&files.job,"Sony - PlayStation 2").unwrap().len(),6);
     }
     const SERIAL_FIXTURE: &str = r#"{"schema_version":2,"system":"Sony - PlayStation 2","games":{
       "SLUS-20998":{"entries":[{"name":"Dragon Ball Z - Budokai 3 (USA)"}]},

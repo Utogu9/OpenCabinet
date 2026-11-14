@@ -77,7 +77,7 @@ let inlineRetroarchSetup = null;
 let savingInlineEmulator = false;
 let savingEmulator = false;
 let emulatorArgumentDefaults = null, inlineEmulatorArgumentDefaults = null;
-const PLATFORM_IMAGE_TYPES = [["logo", globalThis.OpenCabinetI18n.t("msg.d707dc2f19")], ["screenshot", globalThis.OpenCabinetI18n.t("msg.e0236ea3bc")], ["artwork", globalThis.OpenCabinetI18n.t("msg.3dbb2d3239")], ["other", globalThis.OpenCabinetI18n.t("msg.371008571b")]];
+const PLATFORM_IMAGE_TYPES = [["logo", globalThis.OpenCabinetI18n.t("msg.d707dc2f19")], ["spine", globalThis.OpenCabinetI18n.t("msg.11ac6da5f0")], ["screenshot", globalThis.OpenCabinetI18n.t("msg.e0236ea3bc")], ["artwork", globalThis.OpenCabinetI18n.t("msg.3dbb2d3239")], ["other", globalThis.OpenCabinetI18n.t("msg.371008571b")]];
 let scanInProgress = false;
 let importMode = "folder";
 let importConfigPage = "platform";
@@ -2354,13 +2354,16 @@ function createPlatformDetailsEditor() {
   const variablesEditor = window.OpenCabinetVariables?.createEditor(document.getElementById("platform-variables-editor"), document, { getNames: libraryVariableNames });
   const platformTabs = ["details","boxes","images","variables","folders"].map(name => ({ name,
     tab: document.getElementById(`platform-edit-tab-${name}`), panel: document.getElementById(`platform-edit-panel-${name}`) }));
+  let activeTab='details';
   function showPlatformTab(name, focus = false) {
+    activeTab=name;
     document.getElementById("platform-editor-panels").scrollTop = 0;
     platformTabs.forEach(item => {
       const active = item.name === name; item.tab.setAttribute("aria-selected",String(active)); item.tab.tabIndex=active?0:-1;
       item.panel.classList.toggle("hidden",!active); if(active && focus)item.tab.focus();
     });
     document.getElementById("platform-box-settings").open = name === "boxes";
+    updateActions();
   }
   platformTabs.forEach((item,index) => {
     item.tab.addEventListener("click",()=>showPlatformTab(item.name));
@@ -2383,6 +2386,16 @@ function createPlatformDetailsEditor() {
   const lbProgress = document.getElementById("platform-lb-progress");
   const lbMessage = document.getElementById("platform-lb-message");
   const downloadAll = document.getElementById("platform-lb-download-all");
+  const artworkPanel=document.getElementById('platform-artwork-panel'),downloadFooter=document.getElementById('btn-platform-download-footer');
+  const metadataPanel=document.getElementById('platform-metadata-panel'),metadataQuery=document.getElementById('platform-metadata-query'),metadataResult=document.getElementById('platform-metadata-result');
+  const metadataSearch=document.getElementById('btn-platform-metadata-search'),metadataApply=document.getElementById('btn-platform-metadata-apply'),metadataMessage=document.getElementById('platform-metadata-message');
+  let metadataSource=null,metadataPreview=null;
+  function showMetadataSource(source=metadataSource){const host=document.getElementById('platform-metadata-source');host.replaceChildren();const badge=sourceBadge(source);if(badge)host.appendChild(badge);}
+  function updateActions(){
+    const downloadingImages=activeTab==='images'&&!artworkPanel.classList.contains('hidden');
+    downloadFooter.classList.toggle('hidden',!downloadingImages);downloadFooter.disabled=lbDownload.disabled;
+    save.classList.toggle('primary-btn',!downloadingImages);save.classList.toggle('secondary-btn',downloadingImages);
+  }
   const quantities = new Map();
   const typeChoices = new Map();
   let typesReady = false;
@@ -2417,7 +2430,9 @@ function createPlatformDetailsEditor() {
     boxSettings?.setBusy(value);
     downloadAll.disabled = value || !typesReady || !quantities.size;
     lbDownload.disabled = value || !jobId || !lbSource.value || !typesReady || ![...quantities.values()].some(input => input.checked);
-    lbMetadata.disabled = value || !jobId || !lbSource.value;
+    lbMetadata.disabled = value || !current;
+    metadataSearch.disabled=value||!current;metadataResult.disabled=value;metadataQuery.disabled=value;
+    metadataApply.disabled=value||!metadataPreview;
     const personal = !!catalog?.source && catalog.source !== "OpenCabinet-BDD";
     lbUpdate.disabled = value || !jobId || !catalog || personal;
     lbUpdate.classList.toggle("hidden", personal);
@@ -2425,25 +2440,40 @@ function createPlatformDetailsEditor() {
       document.getElementById("btn-close-platform-details").disabled = false;
       document.getElementById("btn-cancel-platform-details").disabled = false;
     }
+    updateActions();
   }
   function render() {
-    list.replaceChildren();
-    images.forEach((image) => {
+    const panels=document.getElementById('platform-editor-panels'),scroll=panels.scrollTop;
+    const existing=new Map([...list.children].map(row=>[row.dataset.imagePath,row])),paths=new Set(images.map(image=>image.path));
+    for(const [path,row]of existing)if(!paths.has(path))row.remove();
+    images.forEach((image,index) => {
+      const previous=existing.get(image.path);
+      if(previous){
+        previous.querySelector('select').value=image.kind;
+        const preferred=previous.querySelector('.media-preference-button');
+        preferred.setAttribute('aria-pressed',String(images.find(item=>item.kind===image.kind)?.path===image.path));preferred.classList.toggle('hidden',images.filter(item=>item.kind===image.kind).length<2);
+        if(list.children[index]!==previous)list.appendChild(previous);return;
+      }
       const row = document.createElement("div"); row.className = "game-image-item";
+      row.dataset.imagePath=image.path;
       const thumbnail = document.createElement("div"); thumbnail.className = "image-editor-thumbnail";
       thumbnail.appendChild(mediaImage(image.path, ""));
       const fields = document.createElement("div"); fields.className = "image-editor-fields";
-      const filename = document.createElement("span"); filename.textContent = image.path.split(/[\\/]/).pop(); filename.title = image.path;
-      const select = document.createElement("select"); select.setAttribute("aria-label", globalThis.OpenCabinetI18n.t("msg.1cc7c11dd8", filename.textContent));
+      const filename = imageFilename(image),name=image.path.split(/[\\/]/).pop();
+      const select = document.createElement("select"); select.setAttribute("aria-label", globalThis.OpenCabinetI18n.t("msg.1cc7c11dd8", name));
       PLATFORM_IMAGE_TYPES.forEach(([value, label]) => { const option = document.createElement("option"); option.value = value; option.textContent = label; select.appendChild(option); });
       select.value = image.kind;
       select.onchange = () => { images = assignImageType(images, image.path, select.value); render(); };
       fields.append(filename, select);
       const remove = document.createElement("button"); remove.type = "button"; remove.className = "delete-btn"; globalThis.OpenCabinetIcons.set(remove, "trash-2");
-      remove.setAttribute("aria-label", `Quitar ${filename.textContent}`);
+      remove.setAttribute("aria-label", globalThis.OpenCabinetI18n.t('msg.d51882b2fa')+' '+name);
       remove.onclick = () => { images = images.filter((item) => item.path !== image.path); render(); };
-      row.append(thumbnail, fields, remove); list.appendChild(row);
+      const preferred=document.createElement('button');preferred.type='button';preferred.className='media-preference-button';globalThis.OpenCabinetIcons.set(preferred,'star');
+      preferred.title=globalThis.OpenCabinetI18n.t('media.preferred');preferred.setAttribute('aria-label',preferred.title);preferred.setAttribute('aria-pressed',String(images.find(item=>item.kind===image.kind)?.path===image.path));preferred.classList.toggle('hidden',images.filter(item=>item.kind===image.kind).length<2);
+      preferred.onclick=()=>{if(busy)return;images=[...images.filter(item=>item.path===image.path),...images.filter(item=>item.path!==image.path)];render();};
+      row.append(thumbnail, fields, remove,preferred); list.appendChild(row);
     });
+    panels.scrollTop=scroll;
   }
   function endSession() {
     if (ending) return ending;
@@ -2465,7 +2495,7 @@ function createPlatformDetailsEditor() {
   document.getElementById("btn-close-platform-details").onclick = close;
   document.getElementById("btn-cancel-platform-details").onclick = close;
   dialog.addEventListener("cancel", (event) => { event.preventDefault(); close(); });
-  dialog.addEventListener("close", () => { current = null; images = []; list.replaceChildren(); });
+  dialog.addEventListener("close", () => { current = null; images = [];metadataPreview=null; list.replaceChildren(); });
   lbSource.onchange = async () => {
     if (busy || !jobId) return;
     const token = ++operation; typesReady = false; downloading = true; controls(true);
@@ -2473,32 +2503,38 @@ function createPlatformDetailsEditor() {
     catch (reason) { if (token === operation) lbMessage.textContent = globalThis.OpenCabinetI18n.t("msg.e78e2429a5", reason); }
     finally { if (token === operation) { downloading = false; lbProgress.classList.add("hidden"); controls(false); } }
   };
-  function channel(token) {
+  function channel(token, metadata=false) {
     const channel = new window.__TAURI__.core.Channel();
     channel.onmessage = (value) => {
       if (operation !== token || closing || value.job_id !== jobId) return;
-      lbProgress.classList.remove("hidden");
-      if (value.total) lbProgress.value = Math.min(100, Math.floor(value.processed / value.total * 100)); else lbProgress.removeAttribute("value");
-      lbMessage.textContent = value.phase === "catalog" ? globalThis.OpenCabinetI18n.t("msg.7252c7d8d3") : value.phase === "indexing" ? globalThis.OpenCabinetI18n.t("msg.be5d99978e")
+      const progress=metadata?document.getElementById('platform-metadata-progress'):lbProgress,message=metadata?metadataMessage:lbMessage;
+      progress.classList.remove("hidden");
+      if (value.total) progress.value = Math.min(100, Math.floor(value.processed / value.total * 100)); else progress.removeAttribute("value");
+      message.textContent = value.phase === "catalog" ? globalThis.OpenCabinetI18n.t("msg.7252c7d8d3") : value.phase === "indexing" ? globalThis.OpenCabinetI18n.t("msg.be5d99978e")
         : value.total ? globalThis.OpenCabinetI18n.t("msg.37c81d138a", value.processed, value.total) : globalThis.OpenCabinetI18n.t("msg.f7c2f18575");
     };
     return channel;
   }
+  async function ensureCatalog(token,refresh=false,metadata=false){
+    if (!jobId) sessionPending = invoke("start_metadata_import", { platform: current.name }).then((session) => { jobId = session.job_id; return session; });
+    const session = sessionPending ? await sessionPending : null;
+    if (token !== operation) return null;
+    const summary = !refresh && (catalog || session?.catalog) || await invoke("prepare_metadata_catalog", { jobId, refresh, onProgress: channel(token,metadata) });
+    if (token !== operation) return null;
+    catalog = summary; rememberMetadataCatalog(summary);
+    const previous = lbSource.value || session?.source_platform || metadataPlatformSuggestion(current.name, summary.platforms);
+    lbSource.replaceChildren();
+    const empty = document.createElement("option"); empty.value = ""; empty.textContent = globalThis.OpenCabinetI18n.t("msg.81e799c128"); lbSource.appendChild(empty);
+    summary.platforms.forEach((name) => { const option = document.createElement("option"); option.value = name; option.textContent = name; lbSource.appendChild(option); });
+    lbSource.value = summary.platforms.includes(previous) ? previous : "";
+    return summary;
+  }
   async function findPlatformImages(refresh = false) {
     if (busy || !current) return;
+    artworkPanel.classList.remove('hidden');
     const token = ++operation; downloading = true; controls(true); lbMessage.textContent = globalThis.OpenCabinetI18n.t("msg.c61d0b32bc");
     try {
-      if (!jobId) sessionPending = invoke("start_metadata_import", { platform: current.name }).then((session) => { jobId = session.job_id; return session; });
-      const session = sessionPending ? await sessionPending : null;
-      if (token !== operation) return;
-      const summary = !refresh && (catalog || session?.catalog) || await invoke("prepare_metadata_catalog", { jobId, refresh, onProgress: channel(token) });
-      if (token !== operation) return;
-      catalog = summary; rememberMetadataCatalog(summary);
-      const previous = lbSource.value || session?.source_platform || metadataPlatformSuggestion(current.name, summary.platforms);
-      lbSource.replaceChildren();
-      const empty = document.createElement("option"); empty.value = ""; empty.textContent = globalThis.OpenCabinetI18n.t("msg.81e799c128"); lbSource.appendChild(empty);
-      summary.platforms.forEach((name) => { const option = document.createElement("option"); option.value = name; option.textContent = name; lbSource.appendChild(option); });
-      lbSource.value = summary.platforms.includes(previous) ? previous : "";
+      if(!await ensureCatalog(token,refresh))return;
       await loadTypes(token);
       if (token !== operation) return;
       lbMessage.textContent = globalThis.OpenCabinetI18n.t("msg.c887525256");
@@ -2506,6 +2542,8 @@ function createPlatformDetailsEditor() {
     finally { if (token === operation) { downloading = false; lbProgress.classList.add("hidden"); controls(false); } }
   }
   lbSearch.onclick = () => findPlatformImages();
+  document.getElementById('btn-download-platform-images').onclick=()=>findPlatformImages();
+  downloadFooter.onclick=()=>lbDownload.onclick();
   lbUpdate.onclick = () => { if (!lbUpdate.disabled) return findPlatformImages(true); };
   lbDownload.onclick = async () => {
     if (busy || !current || !jobId || !lbSource.value || !typesReady) return;
@@ -2515,7 +2553,7 @@ function createPlatformDetailsEditor() {
     try {
       const report = await invoke("download_platform_images", { jobId, platformId: current.id, sourcePlatform: lbSource.value, options, existingImages: images, onProgress: channel(token) });
       if (token !== operation) return;
-      report.images.forEach((image) => { images = assignImageType(images, image.path, image.kind); }); render();
+      report.images.forEach((image) => { images = assignImageType(images, image.path, image.kind);if(image.source)images.find(item=>item.path===image.path).source=image.source; }); render();
       const published = report.published_counts;
       const total = published ? Object.values(published).reduce((sum, count) => sum + count, 0) : report.available_count;
       const counts = published ? globalThis.OpenCabinetI18n.t("msg.5f923cef12") + PLATFORM_IMAGE_TYPES.map(([key, label]) => `${label}: ${published[key] || 0}`).join(" · ") + "." : "";
@@ -2530,21 +2568,44 @@ function createPlatformDetailsEditor() {
     } catch (reason) { if (token === operation) lbMessage.textContent = globalThis.OpenCabinetI18n.t("msg.9342abe8d4", reason); }
     finally { if (token === operation) { downloading = false; lbProgress.classList.add("hidden"); controls(false); } }
   };
-  lbMetadata.onclick = async () => {
-    if (busy || !current || !jobId || !lbSource.value) return;
-    const token = ++operation; downloading = true; controls(true);
-    lbMessage.textContent = globalThis.OpenCabinetI18n.t("msg.12beaf30fb");
+  async function previewPlatformMetadata(token){
+    const data=await invoke('get_catalog_platform_metadata',{jobId,sourcePlatform:metadataResult.value,onProgress:channel(token,true)});
+    if(token!==operation||closing)return;
+    metadataPreview=data;showMetadataSource(data.source||null);
+    document.getElementById('platform-metadata-preview').textContent=[data.name,data.release_date?formatReleaseDate(data.release_date):'',data.developer||'',data.manufacturer||''].filter(Boolean).join('\n');
+    metadataMessage.textContent=globalThis.OpenCabinetI18n.t('platform.metadata.review');
+  }
+  async function findPlatformMetadata(){
+    if(busy||!current)return;
+    metadataPanel.classList.remove('hidden');metadataPreview=null;
+    const token=++operation;downloading=true;controls(true);metadataMessage.textContent=globalThis.OpenCabinetI18n.t('msg.12beaf30fb');
     try {
-      const data = await invoke("get_catalog_platform_metadata", { jobId, sourcePlatform: lbSource.value, onProgress: channel(token) });
-      if (token !== operation) return;
-      let count = 0;
-      for (const [key, id] of [["release_date", "platform-release-date"], ["developer", "platform-developer"], ["manufacturer", "platform-manufacturer"]]) {
-        if (data[key]) { document.getElementById(id).value = data[key]; ++count; }
-      }
-      lbMessage.textContent = count ? globalThis.OpenCabinetI18n.t("msg.7b365bd569", count, data.name)
-        : globalThis.OpenCabinetI18n.t("msg.c057b21db9");
-    } catch (reason) { if (token === operation) lbMessage.textContent = globalThis.OpenCabinetI18n.t("msg.48aa978d5e", reason); }
-    finally { if (token === operation) { downloading = false; lbProgress.classList.add("hidden"); controls(false); } }
+      const summary=await ensureCatalog(token,false,true);if(!summary)return;
+      const normalize=value=>String(value).normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/[^a-z0-9]/g,'');
+      const query=normalize(metadataQuery.value),preferred=metadataPlatformSuggestion(metadataQuery.value,summary.platforms);
+      const results=summary.platforms.filter(name=>!query||normalize(name).includes(query)||name===preferred);
+      metadataResult.replaceChildren();const empty=document.createElement('option');empty.value='';empty.textContent=globalThis.OpenCabinetI18n.t(results.length?'msg.d6deb70f0f':'msg.bf9fc1983f');metadataResult.appendChild(empty);
+      results.forEach(name=>{const option=document.createElement('option');option.value=name;option.textContent=name;metadataResult.appendChild(option);});
+      metadataResult.value=results.includes(preferred)?preferred:results.length===1?results[0]:'';
+      if(metadataResult.value)await previewPlatformMetadata(token);
+      else{document.getElementById('platform-metadata-preview').textContent='';showMetadataSource();metadataMessage.textContent=globalThis.OpenCabinetI18n.t(results.length?'msg.d6deb70f0f':'msg.bf9fc1983f');}
+    }catch(reason){if(token===operation)metadataMessage.textContent=globalThis.OpenCabinetI18n.t('msg.48aa978d5e',reason);}
+    finally{if(token===operation){downloading=false;document.getElementById('platform-metadata-progress').classList.add('hidden');controls(false);}}
+  }
+  lbMetadata.onclick=findPlatformMetadata;metadataSearch.onclick=findPlatformMetadata;
+  metadataQuery.addEventListener('keydown',event=>{if(event.key==='Enter'){event.preventDefault();void findPlatformMetadata();}});
+  metadataResult.onchange=async()=>{
+    if(busy||!jobId)return;metadataPreview=null;
+    if(!metadataResult.value){showMetadataSource();document.getElementById('platform-metadata-preview').textContent='';controls(false);return;}
+    const token=++operation;downloading=true;controls(true);
+    try{await previewPlatformMetadata(token);}catch(reason){if(token===operation)metadataMessage.textContent=String(reason);}
+    finally{if(token===operation){downloading=false;document.getElementById('platform-metadata-progress').classList.add('hidden');controls(false);}}
+  };
+  metadataApply.onclick=()=>{
+    if(busy||!metadataPreview)return;let count=0;
+    for(const [key,id]of [['release_date','platform-release-date'],['developer','platform-developer'],['manufacturer','platform-manufacturer']])if(metadataPreview[key]){document.getElementById(id).value=metadataPreview[key];count++;}
+    metadataSource=metadataPreview.source||{};showMetadataSource();metadataMessage.textContent=count?globalThis.OpenCabinetI18n.t('msg.7b365bd569',count,metadataPreview.name):globalThis.OpenCabinetI18n.t('msg.c057b21db9');
+    if(lbSource.value!==metadataResult.value){lbSource.value=metadataResult.value;typesReady=false;controls(false);}
   };
   add.onclick = async () => {
     if (busy) return;
@@ -2564,6 +2625,7 @@ function createPlatformDetailsEditor() {
         platform_id: current.id, release_date: document.getElementById("platform-release-date").value || null,
         developer: document.getElementById("platform-developer").value.trim() || null,
         manufacturer: document.getElementById("platform-manufacturer").value.trim() || null, images,
+        metadata_source:metadataSource,
         default_emulator_id: defaultEmulator.value ? Number(defaultEmulator.value) : null,
         box_3d: boxSettings?.getValue() ?? savedBoxSettings,
         variables: variablesEditor?.value() ?? null,
@@ -2602,6 +2664,8 @@ function createPlatformDetailsEditor() {
       });
       defaultEmulator.value = availableEmulators.some(emulator => emulator.id === details.default_emulator_id) ? String(details.default_emulator_id) : "";
       current = platform; catalog = null; images = (details.images || []).map((image) => ({ ...image }));
+      metadataSource=details.metadata_source||null;metadataPreview=null;showMetadataSource();
+      document.getElementById('platform-editor-name').value=platform.name;metadataQuery.value=platform.name;metadataResult.replaceChildren();metadataPanel.classList.add('hidden');artworkPanel.classList.add('hidden');metadataMessage.textContent='';document.getElementById('platform-metadata-preview').textContent='';document.getElementById('platform-metadata-progress').classList.add('hidden');
       void getLibraryTools()?.renderFolders(document.getElementById('platform-folders-list'),platform,async(platform,folder)=>{if(busy)return;await close();await startSavedFolderScan(platform,folder);});
       const variableOverrides = details.variables || libraryPlatformVariables[platform.id] || {};
       variablesEditor?.set(window.OpenCabinetVariables.platformDefaults(platform.name, variableOverrides), variableOverrides);
