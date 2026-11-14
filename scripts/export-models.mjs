@@ -16,6 +16,7 @@ const cases=[
   ['gamecube-japan','Nintendo GameCube','Game (Japan).iso'],['ds','Nintendo DS'],
   ['ds-pal','Nintendo DS','Game (Europe).nds'],['3ds','Nintendo 3DS'],['longbox','Sega Saturn'],
   ['cardboard'],['dreamcast'],
+  ['ps2-disc-tray'],
 ];
 const selected=process.argv.slice(2);
 if(selected.some(name=>!cases.some(([id])=>id===name)))throw Error('Unknown case model');
@@ -65,6 +66,7 @@ try {
       let asset;
       if(model==='cardboard')asset=(await import('/scripts/model-sources/cardboard.js')).build();
       else if(model==='dreamcast')asset=await (await import('/scripts/model-sources/dreamcast.js')).build();
+      else if(model==='ps2-disc-tray')asset=(await import('/scripts/model-sources/ps2-disc-tray.js')).build();
       else {
         const {convertLegacyCase}=await import('/src/three-legacy-geometry.js');
         asset=convertLegacyCase(()=>OpenCabinet3D.geometrySource({id:'export-'+model,title:'',platform,rom_path:rom||'Game (USA).rom'}),model);
@@ -76,6 +78,7 @@ try {
       scene.scale.setScalar(.001);scene.updateMatrix();
       const clips=[];
       if(model==='cardboard')metadata.cardboardMaterials=[...new Set(asset.scene.children.flatMap(mesh=>Array.isArray(mesh.material)?mesh.material:[mesh.material]))].map(material=>material.toJSON());
+      else if(model==='ps2-disc-tray') { /* The viewer owns the one-axis hinge. */ }
       else if(model==='dreamcast') {
         const target=scene.getObjectByName('Dreamcast lid');
         clips.push(new THREE.AnimationClip('Open Case',1,[new THREE.QuaternionKeyframeTrack(target.uuid+'.quaternion',[0,1],[0,0,0,1,0,-1,0,0])]));

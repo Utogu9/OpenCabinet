@@ -29,3 +29,8 @@ test('Prepared viewers do not import the legacy compiler or capture temporary co
   assert.match(fs.readFileSync(path.join(root,'src/three-legacy-geometry.js'),'utf8'),/export function convertLegacyCase/,'the authoring code is preserved');
   assert.match(fs.readFileSync(path.join(root,'scripts/export-models.mjs'),'utf8'),/convertLegacyCase/,'conversion remains an explicit development step');
 });
+
+test('Bundled case accessories contain standalone millimetre geometry without external authoring dependencies',async()=>{
+  const {preparedAccessories,readModel}=await import('../scripts/model-assets.mjs');
+  for(const model of preparedAccessories){const {manifest,json}=readModel(path.join(root,'src/models',model,'case.glb'),model);assert.equal(manifest.sourceUnits,'millimeters');assert.ok(json.meshes.length>0);assert.ok(!json.buffers[0].uri);}
+});

@@ -67,7 +67,14 @@ function closingLip(profile) {
   };
   // The rear half has a short overlapping flange behind the closing seam.
   // It blocks the line of sight through the small gap between both molded rims.
-  const shape=new THREE.Shape(outline(.8));shape.holes.push(new THREE.Path(outline(1.4)));
+  const outer=outline(.8),inner=outline(1.4);
+  // PS2's hinge-side wall is flush to the floor. Its overlapping closing lip
+  // must stop there too, rather than remain suspended above the lowered wall.
+  // Follow both open contours around the other three sides and cap their ends.
+  const shape=profile.variant==='ps2'
+    ?new THREE.Shape([...outer,...inner.slice().reverse()])
+    :new THREE.Shape(outer);
+  if(profile.variant!=='ps2')shape.holes.push(new THREE.Path(inner));
   return new THREE.ExtrudeGeometry(shape,{depth:1.3,bevelEnabled:false,steps:1}).translate(0,0,-.5);
 }
 function svgContours(mask,w,h,luminance) {

@@ -29,9 +29,14 @@ test('PS2 converts the legacy pieces to batched GPU geometry with artwork, openi
       const origin=debug.model.localToWorld(new THREE.Vector3(100,y,z)),end=debug.model.localToWorld(new THREE.Vector3(0,y,z));
       ray.set(origin,end.sub(origin).normalize());if(!ray.intersectObject(lip).length)misses.push([y,z]);
     }
-    return {exists:!!lip,misses};
+    const probe=new THREE.Mesh(lip.geometry,lip.material),hingeHits=[],endMisses=[];
+    for(const y of [-75,0,75]){ray.set(new THREE.Vector3(-70,y,0),new THREE.Vector3(1,0,0));const hit=ray.intersectObject(probe)[0];if(hit&&hit.distance<10)hingeHits.push(y);}
+    for(const sign of [-1,1]){ray.set(new THREE.Vector3(0,sign*100,0),new THREE.Vector3(0,-sign,0));if(!ray.intersectObject(probe).length)endMisses.push(sign);}
+    return {exists:!!lip,misses,hingeHits,endMisses};
   });
   assert.equal(seam.exists,true);assert.deepEqual(seam.misses,[],'the seam and notch shoulders block views into the closed box');
+  assert.deepEqual(seam.hingeHits,[],'the closing lip has no floating strip along the lowered spine-side wall');
+  assert.deepEqual(seam.endMisses,[],'upper and lower closing lip sections remain intact');
   const info=await page.evaluate(()=>({renderer:document.getElementById('stage').dataset.renderer,
     draws:debug.renderer.info.render.calls,triangles:debug.renderer.info.render.triangles,
     meshes:debug.meshes.length,hiddenSources:document.querySelectorAll('.game-box-model').length,

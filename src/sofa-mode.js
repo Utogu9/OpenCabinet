@@ -205,10 +205,18 @@
         }
       }
       if(node._viewer?.hasDisc&&(node._viewer.isOpen||node._viewer.isDiscRemoved)){
+        const discs=node._viewer.discs||[];
+        if(discs.length>1){for(const disc of discs){
+          for(const [key,method]of disc.removed?[['disc.examine','examineDisc'],['disc.putBack','returnDisc']]:node._viewer.isOpen?[['disc.remove','removeDisc'],['disc.examine','examineDisc']]:[]){
+            const item=button(t('disc.namedAction',t(key),disc.label),()=>{closeBoxMenu();node._viewer?.[method]?.(disc.id);});item.setAttribute('role','menuitem');menu.append(item);
+          }
+        }}else{
         for(const [key,method] of node._viewer.isDiscRemoved?[['disc.examine','examineDisc'],['disc.putBack','returnDisc']]:[['disc.remove','removeDisc'],['disc.examine','examineDisc']]){
           const item=button(t(key),()=>{closeBoxMenu();node._viewer?.[method]?.();});item.setAttribute('role','menuitem');menu.append(item);
         }
+        }
       }
+      if(node._viewer?.hasDiscTray&&node._viewer.isOpen){const tray=button(t('disc.turnTray'),()=>{closeBoxMenu();node._viewer.toggleDiscTray();});tray.setAttribute('role','menuitem');menu.append(tray);}
       if(node._viewer?.hasPoster&&(node._viewer.isPosterRemoved||node._viewer.canRemovePoster)){
         const posters=node._viewer.posters||[];
         if(posters.length){for(const poster of posters){

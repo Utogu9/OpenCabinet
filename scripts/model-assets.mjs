@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 
 export const preparedModels=['dvd','ps2','ps3','ps4','xbox','psp','genesis','wii','wiiu','gamecube','gamecube-japan','ds','ds-pal','3ds','longbox','cardboard','dreamcast'];
+export const preparedAccessories=['ps2-disc-tray'];
 
 // Validate the distributed artifact, without a browser or any authoring source.
 export function readModel(file,model) {
@@ -20,7 +21,7 @@ export function readModel(file,model) {
     const manifest=json.nodes?.map(node=>node.extras?.opencabinetModel).find(Boolean);
     if(manifest?.version!==1||manifest.model!==model||manifest.dimensions?.length!==3||!manifest.dimensions.every(n=>Number.isFinite(n)&&n>0))throw Error('manifest');
     if(!json.meshes?.length||json.meshes.some(mesh=>!mesh.primitives?.length||mesh.primitives.some(primitive=>!json.accessors?.[primitive.attributes?.POSITION]?.count)))throw Error('meshes');
-    if(model!=='cardboard'&&!json.animations?.some(animation=>animation.name==='Open Case'&&animation.channels?.length))throw Error('opening rig');
+    if(model!=='cardboard'&&!preparedAccessories.includes(model)&&!json.animations?.some(animation=>animation.name==='Open Case'&&animation.channels?.length))throw Error('opening rig');
     return {manifest,json,bytes};
   }catch(error){throw Error(`The bundled ${model} geometry is incomplete or has an unsupported format (${error.message}).`);}
 }

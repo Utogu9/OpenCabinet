@@ -184,11 +184,11 @@ function attachCase(scene,animations,manifest) {
     keyLight.shadow.camera.updateProjectionMatrix();keyLight.shadow.bias=-.00015;keyLight.shadow.normalBias=.18;
     shadowFraming=createCaseShadowFraming(keyLight);
   }
-  function beforeRender({renderer,root,bounds,opened,discRemoved=false,detached=false}) {
+  function beforeRender({renderer,root,bounds,opened,discRemoved=false,detached=false,accessoryPose=''}) {
     if(shadowFraming?.update(root,bounds,detached))renderer.shadowMap.needsUpdate=true;
     shadowReceivers.forEach(mesh=>mesh.visible=opened>0);
     shadowCasters.forEach(mesh=>mesh.visible=opened>0);
-    const key=[...root.quaternion.toArray(),...root.scale.toArray(),...root.position.toArray(),opened,!!booklet?.group.visible,clipLift,discRemoved].join(',');
+    const key=[...root.quaternion.toArray(),...root.scale.toArray(),...root.position.toArray(),opened,!!booklet?.group.visible,clipLift,discRemoved,accessoryPose].join(',');
     if(key!==lightingKey){lightingKey=key;renderer.shadowMap.needsUpdate=true;}
   }
   function releaseLighting() {

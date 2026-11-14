@@ -66,6 +66,17 @@ function scene(options = {}) {
 const game = { id: 1, title: "A <literal> title", platform: "PS2" };
 const artwork = [{ kind: "cover", path: "front.png" }, { kind: "back_cover", path: "back.png" }, { kind: "spine", path: "spine.png" }];
 
+test('PS2 walls beside the flexible spine stay at floor height while the outer perimeter and spine caps remain',()=>{
+  const app=scene();app.viewer.update(game,artwork);app.viewer.setOpen(true,false);app.flush();
+  const scale=Number(app.model().style['--box-scale']);
+  const low=app.elements().filter(element=>element.className==='game-box-face game-box-dvd-wall-rim hinge-clearance');
+  assert.equal(low.length,2);
+  for(const element of low){const xyz=element.style.transform.match(/translate3d\(([^p]+)px,([^p]+)px,([^p]+)px/).slice(1).map(value=>Number(value)/scale);assert.ok(Math.abs(Math.abs(xyz[2])-5.8)<1e-8,'join stays flush to the compartment floor, below the carrier');}
+  assert.equal(app.elements().filter(element=>element.className==='game-box-face game-box-dvd-hinge-cap').length,12,'top and bottom spine closures are preserved');
+  assert.ok(app.elements().some(element=>element.className==='game-box-face game-box-dvd-wall-rim'),'outer case rims remain full-height');
+  app.viewer.dispose();
+});
+
 test('Parked legacy boxes retain their geometry and artwork without rendering until resumed',()=>{
   const app=scene();app.viewer.update(game,artwork);app.loadCover();app.flush();
   const face=app.face('front'),model=app.model(),rotation=model.style.transform;
@@ -1632,7 +1643,8 @@ test('Rotating an open PS2 booklet reuses its textures and geometry without per-
   app.viewer.update(game, artwork); app.flush(0); await turn();
   app.viewer.setOpen(true, false); app.flush(100);
   const faces = app.elements().filter(e => e.className.startsWith('game-box-face'));
-  assert.ok(faces.length < 950, `the detailed interior must stay within its compositing budget (${faces.length} faces)`);
+  // Includes the four end caps sealing the lowered hinge-side walls.
+  assert.ok(faces.length < 960, `the detailed interior must stay within its compositing budget (${faces.length} faces)`);
   const front = faces.find(e => e.className.endsWith('manual-front'));
   const geometryWrites = () => faces.reduce((sum,e) => sum + e.styleWrites.filter(name => ['width','height','left','top','transform'].includes(name)).length,0);
   const before = geometryWrites(), reads = app.host.layoutReads;

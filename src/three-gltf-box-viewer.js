@@ -10,6 +10,7 @@ import { createDiscInteraction, discFinish, applyDiscFinish } from './three-disc
 import { createBoxPoster } from './three-poster.js';
 import { createCoverFinish } from './three-cover-material.js';
 import { createReversibleCover } from './three-reversible-cover.js';
+import { createPS2DiscTray } from './three-ps2-disc-tray.js';
 import './box-camera-pan.js';
 import './spine-template.js';
 
@@ -151,12 +152,15 @@ export async function createModelViewer(host,options={},definition) {
   pose(0);
   let game=null,profile=null,key=null,revision=0,controller=null,disposed=false,renderLease=null;
   const cameraPan=globalThis.OpenCabinetCameraPan.create({host,enabled:()=>!!game,schedule,onStart:()=>{stopDrag();closeMenu();}});
+  const discTray=modelId==='ps2'?createPS2DiscTray({model,parts:procedural.parts,meshes,materials,schedule,getEnvironment:()=>scene.environment,
+    onReady:()=>{if(game&&discTray.ready){composed.delete('disc2');compose();}}}):null;
   const poster=createBoxPoster({getSlot:()=>{
     if(manualLoading||!manualGroup.parent)return null;
     if(!manual&&!procedural?.manualSize){procedural?.fitManual?.({width:profile.width*.8,height:profile.height*.9},{pageCount:1});manualGroup.visible=false;}
     return {front:manualMeshes.find(mesh=>mesh.material===manualFront),parent:manualGroup.parent};
   },getSettings:()=>game?.box_3d,imageSource,schedule,allMeshes:meshes});
   const discInteraction=createDiscInteraction({host,reference:contents,root,scene,camera,meshes,getGame:()=>game,getProfile:()=>profile,isOpen:()=>opened>=.98,schedule,getRotationLock:()=>rotationLock,
+    getDiscs:()=>discTray?.entries,
     getManualMeshes:()=>manualMeshes,getManualFront:()=>manualMeshes.find(mesh=>mesh.material===manualFront),hasManual:()=>!!manual&&!manualExtracted,
     onManualRemoved:()=>{manualGroup.visible=!!manual&&!manualExtracted&&!discInteraction.manualRemoved;if(procedural?.manualCover&&game)compose();schedule();},readManual:()=>api.readManual(),
     getPosterMeshes:()=>poster.meshes,getPosterFront:()=>poster.front,getPosterRoot:()=>poster.root,hasPoster:()=>poster.available,isPosterVisible:()=>poster.visible&&(!manual||manualExtracted||discInteraction.manualRemoved),onPosterRemoved:value=>poster.setRemoved(value),
@@ -249,8 +253,10 @@ export async function createModelViewer(host,options={},definition) {
       opened=THREE.MathUtils.lerp(animation.from,animation.to,eased);pose(opened);
       if(t===1)animation=null;else schedule();
     }
+    discTray?.frame(time,opened);
     const f=Math.min(3,Math.floor(opened*4)),blend=opened*4-f;
     const bounds=new THREE.Box3(frames[f].min.clone().lerp(frames[f+1].min,blend),frames[f].max.clone().lerp(frames[f+1].max,blend));
+    discTray?.expandBounds(bounds);
     contents.position.copy(bounds.getCenter(new THREE.Vector3()).negate());
     root.scale.set(profile.width/manifest.dimensions[0],profile.height/manifest.dimensions[1],profile.depth/manifest.dimensions[2]);
     root.quaternion.fromArray(rotation);
@@ -272,7 +278,7 @@ export async function createModelViewer(host,options={},definition) {
     if(camera.near!==near||camera.far!==far){camera.near=near;camera.far=far;camera.updateProjectionMatrix();}
     camera.position.set(0,0,cameraDistance);camera.lookAt(0,0,0);
     poster.frame(time,opened>.05,!!manual&&!manualExtracted&&!discInteraction.manualRemoved);
-    discInteraction.layout(time,bounds);cameraPan.apply(camera);procedural?.beforeRender?.({renderer,root,bounds,opened,discRemoved:discInteraction.removed,detached:discInteraction.removed||discInteraction.manualRemoved||discInteraction.posterRemoved});renderer.render(scene,camera);frameHold.release();
+    discInteraction.layout(time,bounds);cameraPan.apply(camera);procedural?.beforeRender?.({renderer,root,bounds,opened,discRemoved:discInteraction.removed,accessoryPose:discTray?.lightingKey||'',detached:discInteraction.removed||discInteraction.manualRemoved||discInteraction.posterRemoved});renderer.render(scene,camera);frameHold.release();
     retiredTextures.splice(0).forEach(texture=>texture.dispose());
     host.dataset.triangles=String(renderer.info.render.triangles);host.dataset.drawCalls=String(renderer.info.render.calls);
   }
@@ -387,6 +393,10 @@ export async function createModelViewer(host,options={},definition) {
       if(pictures.disc)assign('UMD Label',pictures.disc);
       else {const disc=document.createElement('canvas');disc.width=512;disc.height=512;label(disc.getContext('2d'),game.title,0,0,512,512);assign('UMD Label',disc);}
     }
+    if(discTray?.ready&&changed('disc2',[pictures.disc2,game.discs?.[1]?.label,game.title])){
+      if(pictures.disc2)assign('Disc 2 Label',pictures.disc2);
+      else {const disc=document.createElement('canvas');disc.width=disc.height=512;label(disc.getContext('2d'),`${game.title}\n${game.discs?.[1]?.label||globalThis.OpenCabinetI18n.t('disc.numbered',2)}`,0,0,512,512);assign('Disc 2 Label',disc);}
+    }
     if(materials.has('Cartridge Cover')&&changed('cartridge',[pictures.cartridge])) {
       if(pictures.cartridge)assign('Cartridge Cover',pictures.cartridge);
       else if(!options.useModelArtwork) {
@@ -408,6 +418,7 @@ export async function createModelViewer(host,options={},definition) {
   async function loadArtwork(images,token) {
     const art=chooseArtwork(images);
     const paths={cover:art.full||art.cover,back_cover:art.back_cover,spine:art.spine,inlay:art.inlay,cartridge:art.cartridge,...(materials.has('UMD Label')?{disc:art.disc}:{})};
+    if(discTray?.wantsSecond){const discArt=(globalThis.OpenCabinetImages?.resolve(images)||images).filter(image=>image.kind==='disc'&&image.path);paths.disc2=discArt.find(image=>image.path!==art.disc)?.path;}
     const signal=controller.signal,current=()=>!disposed&&revision===token&&!signal.aborted;
     const templateTask=!art.full&&!art.spine&&profile.spineTemplate?(async()=>{try{
       const image=await globalThis.OpenCabinetSpines.render(profile.spineTemplate,game.title,{imageSource,signal,profile});
@@ -450,6 +461,7 @@ export async function createModelViewer(host,options={},definition) {
     else if(event?.type==='pointerup'&&previous.manual&&!previous.moved)api.removeManual();
     else if(event?.type==='pointerup'&&previous.poster&&!previous.moved)api.removePoster();
     else if(event?.type==='pointerup'&&previous.disc&&!previous.moved)api.removeDisc();
+    else if(event?.type==='pointerup'&&previous.tray&&!previous.moved)api.toggleDiscTray();
   }
   function closeMenu(focus=false){menu?.remove();menu=null;if(focus)host.focus({preventScroll:true});}
   listen(host,'contextmenu',event=>{
@@ -461,6 +473,7 @@ export async function createModelViewer(host,options={},definition) {
       button.addEventListener('click',()=>{api.setRotationLock(mode);closeMenu(true);});menu.appendChild(button);items.push(button);
     }
     discInteraction.appendMenu(menu,items,()=>closeMenu(true));
+    if(discTray?.ready&&opened>=.98){const button=document.createElement('button');button.type='button';button.className='dropdown-item';button.textContent=globalThis.OpenCabinetI18n.t('disc.turnTray');button.setAttribute('role','menuitem');button.addEventListener('click',()=>{api.toggleDiscTray();closeMenu(true);});menu.appendChild(button);items.push(button);}
     reversible.appendMenu(menu,items,()=>closeMenu(true));
     if(manual&&options.onManualCoverChange) {
       const heading=document.createElement('p');heading.className='game-box-menu-heading';heading.textContent=globalThis.OpenCabinetI18n.t('msg.26b484bdcb');menu.appendChild(heading);
@@ -483,7 +496,11 @@ export async function createModelViewer(host,options={},definition) {
   listen(host,'pointerdown',event=>{
     if(event.button!==0||!game||menu?.contains(event.target))return;event.preventDefault();host.focus({preventScroll:true});
     const wasDiscFocused=discInteraction.focused;
-    const media=discInteraction.select(event),rect=discInteraction.interactionRect(host.getBoundingClientRect());drag={id:event.pointerId,rect,point:arcballPoint(event,rect),x:event.clientX,y:event.clientY,startX:event.clientX,startY:event.clientY,moved:false,media,readManual:discInteraction.pickedManual,manual:!media&&!wasDiscFocused&&hitsManual(event),poster:!media&&!wasDiscFocused&&discInteraction.hitPoster(event),disc:!media&&discInteraction.hit(event)};
+    const media=discInteraction.select(event),rect=discInteraction.interactionRect(host.getBoundingClientRect());
+    let trayHit=false;if(!media&&discTray?.ready&&opened>=.98){const surface=canvas.getBoundingClientRect();pointer.set((event.clientX-surface.left)/surface.width*2-1,-(event.clientY-surface.top)/surface.height*2+1);scene.updateMatrixWorld(true);raycaster.setFromCamera(pointer,camera);
+      const visible=mesh=>{for(let node=mesh;node;node=node.parent)if(!node.visible)return false;return true;};const first=raycaster.intersectObjects(meshes.filter(visible),false)[0];trayHit=discTray.carrier.includes(first?.object);}
+    const discHit=!media&&!trayHit&&discInteraction.hit(event);
+    drag={id:event.pointerId,rect,point:arcballPoint(event,rect),x:event.clientX,y:event.clientY,startX:event.clientX,startY:event.clientY,moved:false,media,readManual:discInteraction.pickedManual,manual:!media&&!wasDiscFocused&&!trayHit&&!discHit&&hitsManual(event),poster:!media&&!wasDiscFocused&&!trayHit&&!discHit&&discInteraction.hitPoster(event),disc:discHit,tray:trayHit};
     host.setPointerCapture(event.pointerId);host.classList.add('dragging');
   });
   listen(host,'pointermove',event=>{
@@ -511,13 +528,13 @@ export async function createModelViewer(host,options={},definition) {
   const api={
     suspend(release=false){cameraPan.stop();stopDrag();renderLease.suspend(release);if(frame!==null){cancelAnimationFrame(frame);frame=null;}},
     resume(){if(!disposed)renderLease.resume();},
-    clearArtwork(){reversible.reset();discInteraction.reset();coverFinish.clear();poster.clear();revision++;controller?.abort();key=null;clearManual();composed.clear();
+    clearArtwork(){reversible.reset();discInteraction.reset();discTray?.clear();coverFinish.clear();poster.clear();revision++;controller?.abort();key=null;clearManual();composed.clear();
       if(!options.carousel){dynamicTextures.forEach(texture=>texture.dispose());dynamicTextures.clear();}for(const kind of Object.keys(pictures))delete pictures[kind];
-      for(const name of ['Cover Outside','Cover Inside','Cover Reverse','Cartridge Cover','UMD Label'])assign(name,null);
+      for(const name of ['Cover Outside','Cover Inside','Cover Reverse','Cartridge Cover','UMD Label','Disc 2 Label'])assign(name,null);
       schedule();},
     update(next,images,settings=null) {
       const nextProfile=globalThis.OpenCabinet3D.profileFor(next.platform,null,next.rom_path,globalThis.OpenCabinet3D.resolveSettings(settings,next.box_3d));
-      const nextKey=JSON.stringify([next.id,next.title,images,nextProfile,globalThis.OpenCabinetPosters.settings(next.box_3d),next.box_3d?.posters,next.box_3d?.cover_reversed]);if(disposed||key===nextKey)return;
+      const nextKey=JSON.stringify([next.id,next.title,images,nextProfile,globalThis.OpenCabinetPosters.settings(next.box_3d),next.box_3d?.posters,next.box_3d?.cover_reversed,next.discs]);if(disposed||key===nextKey)return;
       const changed=next.id!==game?.id;api.clear();game=next;profile=nextProfile;key=nextKey;
       reversible.reset(next.box_3d?.cover_reversed);
       applyDiscFinish(materials.get('Disc Silver'),discFinish(profile,game));
@@ -529,6 +546,7 @@ export async function createModelViewer(host,options={},definition) {
       const style=resolved?.regions?.[globalThis.OpenCabinet3D.regionFor(next.rom_path)]||resolved?.base;
       procedural?.update(profile,next,resolved);
       procedural?.selectArtwork?.(images);
+      discTray?.update(next,profile);
       const switch2=modelId==='switch'&&profile.generation===2;
       switchShells?.set(switch2,style?.color||profile.color);
       for(const mesh of cartridgeMeshes)mesh.material=switch2?redCartridge:cartridgePlastic;
@@ -569,21 +587,22 @@ export async function createModelViewer(host,options={},definition) {
     returnManual(){manualExtracted=false;discInteraction.setManualReading(false);manualGroup.visible=!!manual&&!discInteraction.manualRemoved;if(procedural?.manualCover&&game)compose();schedule();},
     get hasManual(){return !!manual;},get isManualRemoved(){return discInteraction.manualRemoved;},
     removeManual:()=>discInteraction.removeManual(),putManualBack:()=>discInteraction.returnManual(),examineManual:()=>discInteraction.examineManual(),
-    get hasDisc(){return discInteraction.available;},get isDiscRemoved(){return discInteraction.removed;},
-    removeDisc:()=>discInteraction.remove(),returnDisc:()=>discInteraction.putBack(),examineDisc:()=>discInteraction.examine(),
+    get hasDisc(){return discInteraction.available;},get isDiscRemoved(){return discInteraction.removed;},get discs(){return discInteraction.discs;},
+    removeDisc:id=>discInteraction.remove(id),returnDisc:id=>discInteraction.putBack(id),examineDisc:id=>discInteraction.examine(id),
+    get hasDiscTray(){return !!discTray?.ready;},toggleDiscTray:()=>discTray?.toggle(opened)||false,
     examineBox:()=>discInteraction.examineBox(),
     get hasPoster(){return poster.available;},get posters(){return discInteraction.posters;},get isPosterRemoved(){return discInteraction.posterRemoved;},get canRemovePoster(){return discInteraction.canRemovePoster&&(!manual||manualExtracted||discInteraction.manualRemoved);},
     removePoster:id=>discInteraction.removePoster(id),putPosterBack:id=>discInteraction.returnPoster(id),examinePoster:id=>discInteraction.examinePoster(id),togglePoster:id=>discInteraction.togglePoster(id),get isPosterUnfolded(){return discInteraction.posterUnfolded;},
     refreshManual(){if(game)void preloadManual();},
-    clear(){reversible.reset();cameraPan.reset();discInteraction.reset();coverFinish.clear();poster.clear();revision++;controller?.abort();controller=null;stopDrag();closeMenu();key=null;game=null;composed.clear();
+    clear(){reversible.reset();cameraPan.reset();discInteraction.reset();discTray?.clear();coverFinish.clear();poster.clear();revision++;controller?.abort();controller=null;stopDrag();closeMenu();key=null;game=null;composed.clear();
       clearManual();
       if(!options.carousel){dynamicTextures.forEach(texture=>texture.dispose());dynamicTextures.clear();}for(const kind of Object.keys(pictures))delete pictures[kind];
-      for(const name of ['Cover Outside','Cover Inside','Cover Reverse','Cartridge Cover','UMD Label']){const material=materials.get(name);if(material){if(options.carousel)assign(name,null);else {material.map=options.useModelArtwork?[...originalMaterials].find(value=>value.name===name)?.map||null:null;material.needsUpdate=true;}}}
+      for(const name of ['Cover Outside','Cover Inside','Cover Reverse','Cartridge Cover','UMD Label','Disc 2 Label']){const material=materials.get(name);if(material){if(options.carousel)assign(name,null);else {material.map=options.useModelArtwork?[...originalMaterials].find(value=>value.name===name)?.map||null:null;material.needsUpdate=true;}}}
       if(frame!==null){cancelAnimationFrame(frame);frame=null;}if(!renderLease?.lost&&!renderLease?.paused)renderer.clear();notify();},
     dispose(){if(disposed)return;api.clear();cameraPan.dispose();discInteraction.dispose();poster.dispose();disposed=true;resize.disconnect();listeners.forEach(([target,name,callback,config])=>target.removeEventListener(name,callback,config));
       dynamicTextures.forEach(texture=>texture.dispose());dynamicTextures.clear();
       retiredTextures.splice(0).forEach(texture=>texture.dispose());blankTextures.forEach(texture=>texture.dispose());blankTextures.clear();
-      mixer.stopAllAction();mixer.uncacheRoot(model);releaseModel(model);originalMaterials.forEach(value=>value.dispose());
+      discTray?.dispose();mixer.stopAllAction();mixer.uncacheRoot(model);releaseModel(model);originalMaterials.forEach(value=>value.dispose());
       procedural?.dispose?.();
       new Set(materials.values()).forEach(material=>material.dispose());switchShells?.dispose();
       new Set([manualFront,manualBack,manualPages]).forEach(material=>material.dispose());
@@ -604,6 +623,6 @@ export async function createModelViewer(host,options={},definition) {
     new Set([...dynamicTextures,...originalTextures,...retiredTextures,...blankTextures.values()]).forEach(texture=>texture.dispose());
   },()=>{if(game&&renderer.info.render.calls)frameHold.capture();});
   procedural?.onChange?.(schedule);
-  options.debug?.({scene,renderer,camera,root,model,meshes,materials,mixer,action:actions[0],actions,frames,manualGroup,manualMeshes,discInteraction,poster,coverFinish,render:schedule,pose});
+  options.debug?.({scene,renderer,camera,root,model,meshes,materials,mixer,action:actions[0],actions,frames,manualGroup,manualMeshes,discInteraction,discTray,poster,coverFinish,render:schedule,pose});
   return api;
 }

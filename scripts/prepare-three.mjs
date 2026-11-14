@@ -2,7 +2,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { preparedModels, readModel } from './model-assets.mjs';
+import { preparedModels, preparedAccessories, readModel } from './model-assets.mjs';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
 
@@ -40,6 +40,7 @@ export function prepare({projectRoot=root,dependencyRoot=path.join(projectRoot,'
   writeChanged(path.join(destination,'ribs-height.svg'),ribs);
   validateRuntime(destination);
   for(const model of preparedModels)readModel(path.join(projectRoot,'src/models',model,'case.glb'),model);
+  for(const model of preparedAccessories)readModel(path.join(projectRoot,'src/models',model,'case.glb'),model);
   console.log('Using the bundled GLB case models.');
 }
 if (process.argv[1] && path.resolve(process.argv[1])===fileURLToPath(import.meta.url)) prepare();

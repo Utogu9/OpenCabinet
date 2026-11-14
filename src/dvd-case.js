@@ -356,9 +356,16 @@
           }
           continue;
         }
-        face("wall", thickness,height,x,0,z,[direction,0,0],"rotateY(" + direction*90 + "deg)",part);
-        face("wall-inner", thickness,height,x-direction*.8,0,z,[-direction,0,0],"rotateY(" + -direction*90 + "deg)",part);
-        face('wall-rim',.8,height,x-direction*.4,0,rimZ,[0,0,-sign],sign>0?'rotateY(180deg)':'',part);
+        // At the PS2 fold this is a low join to the floor, not a raised
+        // divider between the spine and the disc/manual compartments.
+        const lowFold=ps2&&direction===-1;
+        const wallDepth=lowFold?Math.min(1.2,thickness):thickness;
+        const wallZ=lowFold?sign*(d/2-wallDepth/2):z;
+        const wallRim=lowFold?sign*(d/2-wallDepth):rimZ;
+        face("wall", wallDepth,height,x,0,wallZ,[direction,0,0],"rotateY(" + direction*90 + "deg)",part);
+        face("wall-inner", wallDepth,height,x-direction*.8,0,wallZ,[-direction,0,0],"rotateY(" + -direction*90 + "deg)",part);
+        face('wall-rim'+(lowFold?' hinge-clearance':''),.8,height,x-direction*.4,0,wallRim,[0,0,-sign],sign>0?'rotateY(180deg)':'',part);
+        if(lowFold)for(const sy of [-1,1])face('wall hinge-end',.8,thickness,x+.4,sy*height/2,z,[0,-sy,0],'rotateX('+(sy*90)+'deg)',part);
       }
       const endInset=variant==='genesis'?3.8:0;
       for (const [y, direction] of [[-h/2+endInset,-1],[h/2-endInset,1]]) {
