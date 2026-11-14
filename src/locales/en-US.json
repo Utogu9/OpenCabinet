@@ -31,7 +31,7 @@
     "poster.fold": "Fold poster",
     "poster.columns": "Poster: parts across",
     "poster.rows": "Poster: parts down",
-    "poster.foldsHelp": "The folded poster follows the manual's proportions. Default target: 2 × 2 parts (1–8 per direction). End flaps and the number of folds adjust to fit without stretching the image.",
+    "poster.foldsHelp": "Uses exactly the selected number of parts (1–8 per direction; default: 2 × 2). Flaps fit beneath the manual without stretching the image. If those divisions cannot match the manual's proportions, the folded poster occupies a smaller area.",
     "poster.invalidFolds": "Poster fold divisions must be whole numbers between 1 and 8.",
     "box.examine": "Examine box",
     "manual.remove": "Take manual out",

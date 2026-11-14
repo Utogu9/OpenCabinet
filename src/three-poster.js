@@ -13,22 +13,26 @@ export function posterTextureUV(u,v,rotation=0,reverse=false) {
   return [reverse?1-u:u,v];
 }
 
-// Keep full-sized panels the size of the booklet. Only the last panel in each
-// direction may be shorter: equal subdivisions would give a different folded
-// aspect ratio, while stretching the sheet would distort its artwork.
-export function posterLayout(aspect,width,height,columns,rows) {
-  const requestedHeight=Math.min(height*rows,width*columns/aspect);
-  const fullHeight=Math.min(Math.max(requestedHeight,height,width/aspect),height*8,width*8/aspect);
+// Preserve the requested number of panels. The booklet supplies the maximum
+// folded footprint, never an automatically substituted row/column count.
+export function posterLayout(aspect,width,height,columns,rows,foldOrder='rows_first') {
+  const fullHeight=Math.min(height*rows,width*columns/aspect);
   const fullWidth=fullHeight*aspect;
-  const divide=(total,span)=>{
-    const count=Math.max(1,Math.min(8,Math.ceil(total/span-1e-8)));
-    return Array.from({length:count},(_,index)=>Math.min(span,total-index*span));
+  const rowWrap=foldOrder==='rows_first'?rows>1:columns===1;
+  const columnWrap=foldOrder==='columns_first'?columns>1:rows===1;
+  const divide=(total,span,count,wrap)=>{
+    if(count===1)return [total];
+    // A wrap needs two full outside panels, not one large face plus a shorter
+    // white flap. Smaller intermediate panels tuck inside those two faces.
+    const outside=wrap?2:1;
+    if(count>outside&&total>outside*span+1e-7)return [...Array(outside).fill(span),...Array(count-outside).fill((total-outside*span)/(count-outside))];
+    return Array(count).fill(total/count);
   };
-  return {widths:divide(fullWidth,width),heights:divide(fullHeight,height)};
+  return {widths:divide(fullWidth,width,columns,columnWrap),heights:divide(fullHeight,height,rows,rowWrap)};
 }
 
-// An accordion in each direction. Rows open first, then columns, so a folded
-// packet becomes one continuous sheet with a single front and reverse scan.
+// Nested wrap folds, not an accordion: the remaining panels tuck between the
+// first two panels. Both outside faces therefore belong to the printed front.
 export function createPosterSheet(width,height,columns,rows,front,back,layout=null,settings={}) {
   const leftward=(settings.corner||'').endsWith('right'),upward=(settings.corner||'').startsWith('bottom');
   const dx=leftward?-1:1,dy=upward?1:-1;
@@ -36,16 +40,22 @@ export function createPosterSheet(width,height,columns,rows,front,back,layout=nu
   columns=widths.length;rows=heights.length;
   const offsets=values=>values.reduce((result,value)=>[...result,result.at(-1)+value],[0]);
   const xs=offsets(widths),ys=offsets(heights),fullWidth=xs.at(-1),fullHeight=ys.at(-1);
-  const group=new THREE.Group(),meshes=[],rowHinges=[],columnHinges=[],thickness=.06;
+  const group=new THREE.Group(),meshes=[],outerHinges=[],innerHinges=[],thickness=.06,cells=Array.from({length:rows},()=>[]);
   const edge=new THREE.MeshBasicMaterial({color:0xeee9dd}),geometries=[];
-  let rowParent=group,frontMesh=null;
+  const outerRows=settings.fold_order!=='columns_first',outerCount=outerRows?rows:columns,innerCount=outerRows?columns:rows;
+  const outerSizes=outerRows?heights:widths,innerSizes=outerRows?widths:heights;
+  const outerAxis=outerRows?'x':'y',innerAxis=outerRows?'y':'x';
+  const outerDirection=outerRows?dy:dx,innerDirection=outerRows?dx:dy;
+  const outerAngle=outerRows?-dy:dx,innerAngle=outerRows?dx:-dy;
+  let outerParent=group,frontMesh=null;
   const geometry=(w,h)=>{const g=new THREE.PlaneGeometry(w,h);geometries.push(g);return g;};
-  for(let row=0;row<rows;row++){
-    const rowHeight=heights[row],rowGroup=new THREE.Group();rowParent.add(rowGroup);if(row)rowGroup.position.y=dy*heights[row-1];
-    rowHinges.push(rowGroup);rowParent=rowGroup;let parent=rowGroup;
-    for(let column=0;column<columns;column++){
-      const columnWidth=widths[column],hinge=new THREE.Group();parent.add(hinge);if(column)hinge.position.x=dx*widths[column-1];
-      columnHinges.push({hinge,column});parent=hinge;
+  for(let outer=0;outer<outerCount;outer++){
+    const outerGroup=new THREE.Group();outerParent.add(outerGroup);if(outer)outerGroup.position[outerRows?'y':'x']=outerDirection*outerSizes[outer-1];
+    outerHinges.push({hinge:outerGroup,index:outer});outerParent=outerGroup;let parent=outerGroup;
+    for(let inner=0;inner<innerCount;inner++){
+      const row=outerRows?outer:inner,column=outerRows?inner:outer,rowHeight=heights[row],columnWidth=widths[column];
+      const hinge=new THREE.Group();parent.add(hinge);if(inner)hinge.position[outerRows?'x':'y']=innerDirection*innerSizes[inner-1];
+      innerHinges.push({hinge,index:inner});parent=hinge;const cell=[];
       for(const reverse of [false,true]){
         const g=geometry(columnWidth,rowHeight),uv=g.attributes.uv;
         for(let i=0;i<uv.count;i++){
@@ -55,25 +65,28 @@ export function createPosterSheet(width,height,columns,rows,front,back,layout=nu
           uv.setXY(i,...posterTextureUV(u,v,settings.rotation,reverse));
         }
         const mesh=new THREE.Mesh(g,reverse?back:front);mesh.position.set(dx*columnWidth/2,dy*rowHeight/2,reverse?-.022:.022);
-        hinge.add(mesh);meshes.push(mesh);if(!frontMesh&&!reverse)frontMesh=mesh;
+        hinge.add(mesh);cell.push(mesh);if(!frontMesh&&!reverse)frontMesh=mesh;
       }
       const bodyGeometry=new THREE.BoxGeometry(columnWidth,rowHeight,.04);bodyGeometry.setDrawRange(0,24);geometries.push(bodyGeometry);
-      const body=new THREE.Mesh(bodyGeometry,edge);body.position.set(dx*columnWidth/2,dy*rowHeight/2,0);hinge.add(body);meshes.push(body);
+      const body=new THREE.Mesh(bodyGeometry,edge);body.position.set(dx*columnWidth/2,dy*rowHeight/2,0);hinge.add(body);cell.push(body);cells[row][column]=cell;
     }
   }
+  meshes.push(...cells.flat(2));
   function pose(amount){
     const early=THREE.MathUtils.clamp(amount*2,0,1),late=THREE.MathUtils.clamp(amount*2-1,0,1);
-    const rowOpen=settings.fold_order==='columns_first'?late:early,columnOpen=settings.fold_order==='columns_first'?early:late;
-    for(let row=1;row<rows;row++){
-      const hinge=rowHinges[row],previous=row-1,base=row+(row%2),old=previous+(previous%2);
-      hinge.rotation.x=-dy*(row%2?1:-1)*Math.PI*(1-rowOpen);
-      // Stack behind the first printed panel, not above it. Otherwise the
-      // outside of an even fold packet becomes the unprinted paper reverse.
-      hinge.position.z=-(previous%2?-1:1)*(base-old)*columns*thickness*(1-rowOpen);
+    const outerOpen=innerCount===1?amount:early,innerOpen=outerCount===1?amount:late;
+    const progress=(value,index,count)=>THREE.MathUtils.clamp(value*(count-1)-(index-1),0,1);
+    // Open the enclosing fold before its tucked-in children. Closing reverses
+    // that order, folding the inner flap before the outer one wraps around it.
+    for(const {hinge,index} of outerHinges)if(index){
+      const open=progress(outerOpen,index,outerCount);
+      hinge.rotation[outerAxis]=outerAngle*Math.PI*(1-open);
+      hinge.position.z=-((outerCount-index+1)*innerCount-1)*thickness*(1-open);
     }
-    for(const {hinge,column} of columnHinges)if(column){
-      hinge.rotation.y=dx*(column%2?1:-1)*Math.PI*(1-columnOpen);
-      hinge.position.z=(column%2?-1:1)*thickness*(1-columnOpen);
+    for(const {hinge,index} of innerHinges)if(index){
+      const open=progress(innerOpen,index,innerCount);
+      hinge.rotation[innerAxis]=innerAngle*Math.PI*(1-open);
+      hinge.position.z=-(innerCount-index)*thickness*(1-open);
     }
     group.updateMatrixWorld(true);
   }
@@ -126,7 +139,7 @@ export function createBoxPoster({getSlot,getSettings,imageSource=value=>value,sc
       quaternion.multiply(new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0,0,1),normal));
       const requested=globalThis.OpenCabinetPosters.settings(getSettings()),width=size.x*Math.abs(scale.x)*.985,height=size.y*Math.abs(scale.y)*.985;
       const aspect=requested.rotation%180?source.height/source.width:source.width/source.height;
-      const layout=posterLayout(aspect,width,height,requested.columns,requested.rows);
+      const layout=posterLayout(aspect,width,height,requested.columns,requested.rows,requested.fold_order);
       const columns=layout.widths.length,rows=layout.heights.length;
       sheet=createPosterSheet(width,height,columns,rows,front,back,layout,requested);mount=new THREE.Group();mount.name='Folded Poster';
       mount.position.copy(center).addScaledVector(new THREE.Vector3(0,0,1).applyQuaternion(quaternion),-.06);mount.quaternion.copy(quaternion);

@@ -30,20 +30,25 @@ Fuera de la caja, **Desplegar póster** y **Plegar póster** animan sus pliegues
 el control principal de frente/dorso permite ver la otra cara. El foco, giro
 y zoom son independientes de caja, disco y manual, también en Couch Mode.
 Al guardarlo se pliega automáticamente; una cara sin imagen queda blanca.
+Los dobleces son envolventes: se pliegan primero las solapas interiores y las
+dos exteriores las rodean. El frente impreso queda por fuera a ambos lados del
+paquete; el dorso real se ve al desplegarlo. Una hoja sin dobleces conserva sus
+dos caras originales. No se ocultan ni se sustituyen caras para simular el cierre.
 
 En **Editar juego → Pósteres**, **Partes a lo ancho** y **Partes a lo alto**
-definen una cuadrícula orientativa de 1 a 8 partes por dirección (2 × 2 por defecto).
+definen exactamente una cuadrícula de 1 a 8 partes por dirección (2 × 2 por defecto).
 Los ajustes son exclusivos de cada juego y no se heredan de la consola. La sección
 muestra las imágenes del frente y del dorso, permite agregarlas o seleccionar otra
 entre las disponibles, elegir la cara que queda afuera, girar la imagen y cambiar
 la esquina y el orden de despliegue. Los pliegues antiguos guardados en el juego
 se conservan al pasar a esta sección.
-El tamaño plegado sigue la proporción del manual de esa caja. La última solapa
-de cada dirección puede ser más corta y se ajusta la cantidad de dobleces si
-hace falta para encajar. Al desplegarlo se conserva la proporción del escaneo,
+El tamaño plegado sigue la proporción del manual de esa caja cuando las
+divisiones elegidas lo permiten. Las solapas interiores pueden ser más cortas;
+nunca se agregan ni se quitan partes automáticamente. Cuando no es posible
+igualar la proporción del manual con esas divisiones, el paquete ocupa menos
+espacio y sigue entrando debajo de él. Al desplegarlo se conserva la proporción del escaneo,
 sin estirarlo ni recortarlo; no supone conocer las medidas reales del póster.
-La geometría está limitada a 8 × 8 partes: un escaneo de proporciones extremas
-puede ocupar menos que el manual en una dirección. Las imágenes
+La geometría está limitada a 8 × 8 partes. Las imágenes
 se cargan únicamente al abrir la caja, y los escaneos originales no se modifican.
 
 Cada manual guardado tiene un botón de papelera en **Editar juego → Manuales**.

@@ -102,12 +102,13 @@ test('Posters stay folded beneath booklets, unfold with paired artwork and share
   assert.equal(outside.printed&&outside.isFront,true,'a front-only scan stays visible while folded instead of showing a white reverse');
   if(process.env.OPENCABINET_POSTER_FIXTURE)await page.screenshot({path:'target/poster-local-fixture-folded.png'});
   await page.evaluate(()=>{viewer.removePoster();select(2);});assert.equal(await page.evaluate(()=>debug.discInteraction.posterObject.visible),false);
-  // Portrait PS2 booklet: the source scan has a different aspect and cannot
-  // fit the booklet footprint when divided into equal 2 x 2 panels.
-  await page.goto(url('Sony PlayStation 2').replace('columns=3','columns=2').replace('poster=1','poster=front')+'&manual-ratio='+(1023/1620));
+  // The current San Andreas example uses exactly 3 x 3 parts and a portrait booklet.
+  await page.goto(url('Sony PlayStation 2').replace('rows=2','rows=3').replace('poster=1','poster=front')+'&manual-ratio='+(1023/1620));
   await page.waitForFunction(()=>viewer.hasManual);
   if(process.env.OPENCABINET_POSTER_FIXTURE)await page.evaluate(()=>{art.find(image=>image.kind==='poster_front').path='/poster-local-fixture.jpg';select(3);});
+  else await page.evaluate(()=>{const canvas=document.createElement('canvas');canvas.width=258;canvas.height=320;const context=canvas.getContext('2d');context.fillStyle='#168140';context.fillRect(0,0,258,320);art.find(image=>image.kind==='poster_front').path=canvas.toDataURL();select(3);});
   await page.waitForFunction(()=>viewer.hasManual);await page.evaluate(()=>viewer.setOpen(true,false));await page.waitForFunction(()=>viewer.hasPoster);
+  assert.equal(await page.evaluate(()=>debug.poster.meshes.length),27,'San Andreas keeps all nine requested panels');
   const portrait=await page.evaluate(async()=>{
     const THREE=await import('/src/vendor/three/three.module.js'),mesh=debug.poster.front;
     mesh.geometry.computeBoundingBox();const size=mesh.geometry.boundingBox.getSize(new THREE.Vector3());return size.x/size.y;
@@ -115,8 +116,28 @@ test('Posters stay folded beneath booklets, unfold with paired artwork and share
   assert.ok(Math.abs(portrait-1023/1620)<1e-5,'a portrait PS2 booklet determines the folded poster proportions');
   await page.evaluate(()=>viewer.removeManual());await ready();await page.evaluate(()=>viewer.examineBox());await ready();
   if(process.env.OPENCABINET_POSTER_FIXTURE)await page.screenshot({path:'target/poster-local-fixture-booklet-folded.png'});
-  await page.evaluate(()=>viewer.removePoster());await ready();await page.evaluate(()=>viewer.togglePoster());await page.waitForFunction(()=>!debug.poster.animating);
+  await page.evaluate(()=>viewer.removePoster());await ready();
+  assert.ok(await page.evaluate(()=>debug.discInteraction.posterObject.children[0].children.every(mesh=>mesh.visible)),'the extracted packet uses the complete physical sheet, without hidden paper faces');
+  await page.evaluate(()=>viewer.togglePoster());await page.waitForFunction(()=>!debug.poster.animating);
+  assert.ok(await page.evaluate(()=>debug.discInteraction.posterObject.children[0].children.every(mesh=>mesh.visible)),'the full sheet remains present when unfolded');
   if(process.env.OPENCABINET_POSTER_FIXTURE)await page.screenshot({path:'target/poster-local-fixture-booklet-unfolded.png'});
+  await page.evaluate(()=>viewer.togglePoster());await page.waitForFunction(()=>!debug.poster.animating);
+  assert.ok(await page.evaluate(()=>debug.discInteraction.posterObject.children[0].children.every(mesh=>mesh.visible)),'refolding uses the actual geometry without hiding its reverse');
+  await page.evaluate(async()=>{viewer.toggleSide();await settle();});
+  if(process.env.OPENCABINET_POSTER_FIXTURE)await page.screenshot({path:'target/poster-san-andreas-folded-rear.png'});
+  const reversePrinted=await page.evaluate(async()=>{
+    const THREE=await import('/src/vendor/three/three.module.js'),copies=debug.discInteraction.posterObject.children[0].children;
+    const box=host=>{for(let n=host;n;n=n.parent)if(!n.visible)return false;return true;};
+    debug.scene.updateMatrixWorld(true);const projected=debug.discInteraction.posterObject.getWorldPosition(new THREE.Vector3()).project(debug.camera),ray=new THREE.Raycaster();
+    ray.setFromCamera(new THREE.Vector2(projected.x,projected.y),debug.camera);
+    const hit=ray.intersectObjects(copies.filter(box),false)[0];return {printed:!!hit?.object.material.map,materialIsFront:hit?.object.material===debug.poster.front.material};
+  });
+  assert.deepEqual(reversePrinted,{printed:true,materialIsFront:true},'the rear of the folded San Andreas packet is a genuine printed front panel');
+  for(const [columns,rows] of [[1,1],[2,5],[5,2],[8,3]]){
+    await page.evaluate(([columns,rows])=>{window.posterOptions={columns,rows};select(3);viewer.setOpen(true,false);},[columns,rows]);
+    await page.waitForFunction(()=>viewer.hasPoster);
+    assert.equal(await page.evaluate(()=>debug.poster.meshes.length),columns*rows*3,'configured grid remains exact: '+columns+' x '+rows);
+  }
   await page.goto(url('Sony PlayStation 2'));await page.waitForFunction(()=>viewer.hasManual);
   await page.evaluate(()=>{window.posterOptions={rotation:90,corner:'bottom_right',first_side:'back',fold_order:'columns_first'};select(5);viewer.setOpen(true,false);});
   await page.waitForFunction(()=>viewer.hasPoster);

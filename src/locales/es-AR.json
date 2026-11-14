@@ -31,7 +31,7 @@
     "poster.fold": "Plegar póster",
     "poster.columns": "Póster: partes a lo ancho",
     "poster.rows": "Póster: partes a lo alto",
-    "poster.foldsHelp": "El póster plegado sigue la proporción del manual. Objetivo predeterminado: 2 × 2 partes (de 1 a 8 por dirección). Las solapas finales y la cantidad de pliegues se ajustan para encajar sin deformar la imagen.",
+    "poster.foldsHelp": "Usa exactamente la cantidad de partes elegida (de 1 a 8 por dirección; predeterminado: 2 × 2). Las solapas encajan debajo del manual sin deformar la imagen. Si esas divisiones no permiten igualar su proporción, el póster plegado ocupa menos espacio.",
     "poster.invalidFolds": "Las divisiones del póster deben ser números enteros entre 1 y 8.",
     "box.examine": "Inspeccionar caja",
     "manual.remove": "Sacar manual",
