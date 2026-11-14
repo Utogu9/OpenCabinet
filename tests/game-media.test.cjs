@@ -212,6 +212,12 @@ function mediaApp(options = {}) {
   };
 }
 
+test('Packed cover maps reach the box viewer without becoming photos in the carousel',()=>{
+  const app=mediaApp({box3D:true});app.evaluate(`allGames[0].images.push({kind:'cover_full_material',path:'C:/material.png'});renderGameMedia(allGames[0]);`);
+  assert.ok(app.boxCalls.some(call=>call[0]==='update'&&call[2].includes('cover_full_material')));
+  assert.equal(app.get('gallery-thumbnails').children.some(button=>button.children.some(image=>image.src==='asset://'+encodeURIComponent('C:/material.png'))),false);
+});
+
 test('Theme media restrictions apply live, skip disabled 3D models and allow Photos when viewing consoles',async()=>{
   const app=mediaApp({box3D:true});app.document.documentElement.dataset.themeMedia='photos';
   app.evaluate('renderGameMedia(allGames[0])');

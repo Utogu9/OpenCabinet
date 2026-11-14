@@ -12,7 +12,7 @@ const RAW_URL: &str = "https://raw.githubusercontent.com/Utogu9/OpenCabinet-BDD/
 const CONFIG: &str = "metadata/source.json";
 const MIN_REPOSITORY_ID: i64 = 1_000_000_000_000;
 // Retain release names and canonical title aliases for regional ROM matching.
-const REPOSITORY_GAME_VERSION: i64 = 11;
+const REPOSITORY_GAME_VERSION: i64 = 12;
 const CONSOLE_ARTWORK_VERSION: i64 = 4;
 
 #[derive(Default, Serialize, Deserialize)]
@@ -1762,6 +1762,21 @@ mod tests {
         }
         let temporary:i64=conn.query_row("SELECT count(*) FROM sqlite_temp_master",[],|r|r.get(0)).unwrap();
         assert_eq!(temporary,0,"filename fallbacks must use exact indexed lookups before preparing fuzzy search");
+    }
+
+    #[test]
+    fn repository_full_cover_material_is_available_as_an_independent_download_type() {
+        let files=Sandbox::new();let mut conn=files.catalog();let source="Sony - PlayStation 2";
+        let fixture=files.job.directory.join("material.json");
+        fs::write(&fixture,serde_json::json!({"schema_version":2,"system":source,"games":{"TEST":{"entries":[{"name":"Example"}],"images":{
+            "cover_full":{"path":"TEST/cover_full.webp"},"cover_full_material":{"path":"TEST/cover_full_material.png"}
+        }}}}).to_string()).unwrap();
+        insert_platform(&mut conn,&files.job,source,&fixture,|_|()).unwrap();
+        let available=available_image_types(&conn,&[token(&format!("{source}/TEST"))],&files.job).unwrap();
+        assert_eq!(available.counts["cover_full_material"],1);assert_eq!(available.counts["box_full"],1);
+        assert_eq!(kind("cover_full_material2").as_deref(),Some("cover_full_material"));
+        let selected:MediaOptions=serde_json::from_value(serde_json::json!({"selected_types":["cover_full_material"]})).unwrap();selected.validate().unwrap();
+        crate::validate_game_images(&[GameImage{source:None,path:"packed.png".into(),kind:"cover_full_material".into()}]).unwrap();
     }
 
     #[test]

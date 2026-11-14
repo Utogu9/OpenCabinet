@@ -96,6 +96,7 @@ const GAME_IMAGE_TYPES = [
   ["spine", globalThis.OpenCabinetI18n.t("msg.11ac6da5f0")],
   ["box_3d", globalThis.OpenCabinetI18n.t("msg.4c03aa2d90")],
   ["box_full", globalThis.OpenCabinetI18n.t("msg.768eb3ad45")],
+  ["cover_full_material", globalThis.OpenCabinetI18n.t("image.kind.coverFullMaterial")],
   ["cover_reconstructed", globalThis.OpenCabinetI18n.t("msg.310ed124f1")],
   ["back_cover_reconstructed", globalThis.OpenCabinetI18n.t("msg.577185c50b")],
   ["cart_front", globalThis.OpenCabinetI18n.t("msg.36b12eff47")],
@@ -1239,14 +1240,15 @@ function createDetailsGameBox() {
 
 function renderGameMedia(game) {
   const firstKind = game.is_platform ? "screenshot" : "cover";
-  const images = displayGameImages(game).sort((a, b) => Number(b.kind === firstKind) - Number(a.kind === firstKind));
+  const artwork = displayGameImages(game).sort((a, b) => Number(b.kind === firstKind) - Number(a.kind === firstKind));
+  const images=artwork.filter(image=>image.kind!=='cover_full_material');
   renderGameLogo(game, images);
   if (game.is_platform) {
     detailsGameBox?.clear();
     document.getElementById("gallery-photos").classList.remove("hidden");
   } else if (window.OpenCabinet3D) {
     detailsGameBox ??= createDetailsGameBox();
-    detailsGameBox.update({ ...regionalGame(game), title: game.title }, images);
+    detailsGameBox.update({ ...regionalGame(game), title: game.title }, artwork);
   }
   const viewer = document.getElementById("gallery-viewer");
   const thumbnails = document.getElementById("gallery-thumbnails");

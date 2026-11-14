@@ -38,6 +38,7 @@ const GAME_IMAGE_TYPES: &[(&str, &str)] = &[
     ("Box - Spine", "spine"),
     ("Box - 3D", "box_3d"),
     ("Box - Full", "box_full"),
+    ("Box - Full - Material", "cover_full_material"),
     ("Box - Front - Reconstructed", "cover_reconstructed"),
     ("Box - Back - Reconstructed", "back_cover_reconstructed"),
     ("Cart - Front", "cart_front"),

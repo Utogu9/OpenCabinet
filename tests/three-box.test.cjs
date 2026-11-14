@@ -225,6 +225,8 @@ test('Full covers retain contiguous UV windows; separate back and spine images e
   assert.equal(front.offset[0]+front.repeat[0],1);
   assert.deepEqual(artworkWindow('back_cover'),{offset:[0,0],repeat:[1,1]});assert.deepEqual(artworkWindow('spine'),{offset:[0,0],repeat:[1,1]});
   assert.equal(chooseArtwork([{kind:'cover',path:'front'},{kind:'box_full',path:'wrap'}]).cover,'wrap');
+  assert.equal(chooseArtwork([{kind:'cover_full_material',path:'data.png'}]).fullMaterial,null,'material maps are only meaningful with a full cover');
+  assert.equal(chooseArtwork([{kind:'cover_full_material',path:'data.png'},{kind:'box_full',path:'wrap'}]).fullMaterial,'data.png');
 });
 test('Cartridge artwork prioritizes labels over photos regardless of their order',async()=>{
   const {chooseArtwork}=await import('../src/three-box-artwork.js');

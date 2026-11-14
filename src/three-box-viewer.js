@@ -8,6 +8,7 @@ import { createDiscMaterial, prepareDiscReverse } from './three-disc-material.js
 import { loadPreparedModel } from './three-prepared-model.js';
 import { createDiscInteraction, discFinish, applyDiscFinish } from './three-disc-interaction.js';
 import { createBoxPoster } from './three-poster.js';
+import { createCoverFinish } from './three-cover-material.js';
 import './box-camera-pan.js';
 import './spine-template.js';
 
@@ -89,6 +90,8 @@ export async function createViewer(host, options={}) {
   let frame=null,opened=0,openTarget=false,animation=null,zoom=1,side='front',rotationLock='free',rotation=initialRotation(),drag=null;
   let distance=400,viewportWidth=0,viewportHeight=0,surfaceScale=1,layoutDirty=true,menu=null,framingBounds=null;
   const textures=new Set(),manualTextures=new Set(),listeners=[];
+  const coverFinish=createCoverFinish({meshes,imageSource,schedule,flipY:true,environment:()=>scene.environment,
+    surfaces:()=>['cover','back_cover','spine_left','spine_right'].map(kind=>({material:materials[kind],enabled:!!materials[kind].map?.userData.coverFull}))});
   const retiredTextures=[],blankTextures=new Map();
   let insertTheme='black';
   const insertTextures={};
@@ -183,7 +186,7 @@ export async function createViewer(host, options={}) {
       else context.drawImage(image,0,0,output.width,output.height);
       source=output;
     }
-    const texture=new THREE.Texture(source);texture.colorSpace=THREE.SRGBColorSpace;
+    const texture=new THREE.Texture(source);texture.colorSpace=THREE.SRGBColorSpace;texture.userData.coverFull=full;
     texture.anisotropy=Math.min(8,renderer.capabilities.getMaxAnisotropy());
     const window=region||artworkWindow(kind,{full,width:profile.width,depth:profile.depth});
     texture.offset.fromArray(window.offset);texture.repeat.fromArray(window.repeat);texture.needsUpdate=true;return texture;
@@ -201,12 +204,12 @@ export async function createViewer(host, options={}) {
       if(!renderLease?.lost&&!renderLease?.paused)renderer.initTexture(next);material.map=next;material.color.set(texture?0xffffff:0xe7e4db);
       if(!previous)material.needsUpdate=true;
       if(previous!==next&&textures.delete(previous))retiredTextures.push(previous);
-      schedule();return;
+      coverFinish.refresh();schedule();return;
     }
     if(previous!==texture && textures.delete(previous))previous.dispose();
     material.map=texture;material.color.set(texture?0xffffff:0xe7e4db);
     if(kind==='insert')fitInsert(texture);
-    if(!!previous!==!!texture)material.needsUpdate=true;schedule();
+    if(!!previous!==!!texture)material.needsUpdate=true;coverFinish.refresh();schedule();
   }
   function fitInsert(texture) {
     const image=texture?.image,width=image?.naturalWidth||image?.width,height=image?.naturalHeight||image?.height;
@@ -390,7 +393,8 @@ export async function createViewer(host, options={}) {
     const otherTask=(art.cover&&!options.carousel?source(art.cover).catch(()=>{}):Promise.resolve()).then(()=>{
       if(current())return Promise.all([applyRear(),applyDisc()]);
     });
-    await Promise.all([coverTask,inlayTask,otherTask]);
+    const finishTask=otherTask.then(()=>{if(current())return coverFinish.load(art.fullMaterial);});
+    await Promise.all([coverTask,inlayTask,otherTask,finishTask]);
   }
   function clearManual() {
     discInteraction.resetManual();
@@ -537,7 +541,7 @@ export async function createViewer(host, options={}) {
     suspend(release=false){cameraPan.stop();stopDrag();renderLease.suspend(release);if(frame!==null){cancelAnimationFrame(frame);frame=null;}},
     resume(){if(!disposed)renderLease.resume();},
     clearArtwork() {
-      discInteraction.reset();poster.clear();revision++;artController?.abort();clearManual();key=null;
+      discInteraction.reset();coverFinish.clear();poster.clear();revision++;artController?.abort();clearManual();key=null;
       insertMesh.visible=true;
       for(const kind of ['cover','back_cover','spine_left','spine_right','disc','paper','paper_spine_left','paper_spine_right'])assign(kind,null);
       if(!options.carousel){textures.forEach(texture=>texture.dispose());textures.clear();}selectInsert();schedule();
@@ -593,7 +597,7 @@ export async function createViewer(host, options={}) {
     get hasPoster(){return poster.available;},get posters(){return discInteraction.posters;},get isPosterRemoved(){return discInteraction.posterRemoved;},get canRemovePoster(){return discInteraction.canRemovePoster&&(!manual||manualExtracted||discInteraction.manualRemoved);},
     removePoster:id=>discInteraction.removePoster(id),putPosterBack:id=>discInteraction.returnPoster(id),examinePoster:id=>discInteraction.examinePoster(id),togglePoster:id=>discInteraction.togglePoster(id),get isPosterUnfolded(){return discInteraction.posterUnfolded;},
     refreshManual(){if(!game)return;revision++;artController?.abort();artController=new AbortController();clearManual();loadGameArtwork(JSON.parse(key)[2]);},
-    clear(){cameraPan.reset();discInteraction.reset();poster.clear();revision++;stopDrag();closeMenu();artController?.abort();artController=null;clearManual();
+    clear(){cameraPan.reset();discInteraction.reset();coverFinish.clear();poster.clear();revision++;stopDrag();closeMenu();artController?.abort();artController=null;clearManual();
       for(const kind of ['cover','back_cover','spine_left','spine_right','disc','paper','paper_spine_left','paper_spine_right'])assign(kind,null);
       meshes.find(mesh=>mesh.name==='dreamcast-insert').visible=true;selectInsert();
       if(!options.carousel){textures.forEach(texture=>texture.dispose());textures.clear();}game=null;key=null;
@@ -607,13 +611,13 @@ export async function createViewer(host, options={}) {
   };
   renderLease=createRenderLease(renderer,options.renderGroup,restored=>{
     if(restored){const room=new RoomEnvironment(),generator=new THREE.PMREMGenerator(renderer);
-      environmentTarget=generator.fromScene(room,.04,1,100);scene.environment=environmentTarget.texture;room.dispose();generator.dispose();relief.reset();}
+      environmentTarget=generator.fromScene(room,.04,1,100);scene.environment=environmentTarget.texture;room.dispose();generator.dispose();relief.reset();coverFinish.refresh();}
     schedule();
   },()=>{
     releaseSceneGpu(scene);environmentTarget?.dispose();environmentTarget=null;scene.environment=null;
     new Set([...textures,...manualTextures,...retiredTextures,...blankTextures.values(),...Object.values(insertTextures),ribsTexture]).forEach(texture=>texture.dispose());
     keyLight.shadow.dispose();keyLight.shadow.map=null;keyLight.shadow.mapPass=null;
   },()=>{if(game&&renderer.info.render.calls)frameHold.capture();});
-  options.debug?.({scene,renderer,camera,materials,meshes,root,lid,relief,discInteraction,poster,render:()=>schedule()});
+  options.debug?.({scene,renderer,camera,materials,meshes,root,lid,relief,discInteraction,poster,coverFinish,render:()=>schedule()});
   return api;
 }

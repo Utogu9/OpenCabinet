@@ -28,6 +28,7 @@
     "platform.metadata.query": "Platform search name",
     "platform.images.help": "Add local images or download them from the catalog. Review their types and choose the default image with the star. Changes take effect when you save.",
     "poster.title": "Posters",
+    "image.kind.coverFullMaterial": "Full cover material (relief and reflections)",
     "poster.choose": "Choose poster",
     "poster.numbered": "Poster {0}",
     "poster.new": "Add poster",
