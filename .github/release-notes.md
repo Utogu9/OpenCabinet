@@ -1,20 +1,24 @@
-## What's new in v0.6.2
+## What's new in v0.7.0
 
-- Preserve and display manual uploaders and source links alongside PDF and CBZ files.
-- Add a foreground view for extracted discs, with click-to-focus transitions between the disc and case and an optional side-by-side layout.
-- Use the main front/back control to flip the selected disc.
-- Improve Couch Mode navigation by using cached manual thumbnails on closed cases and pausing background manual preparation during rapid navigation.
-- Fix stale page layers when returning to a manual's cover, duplicate scrolling in Library Report, and inconsistent Switch 2 retaining tab transparency.
-- Localize RetroArch download and preparation progress messages.
+- Take manuals out of 3D cases, inspect them independently, and open the reader with a click.
+- Add multiple configurable Extras per game: folded posters, leaflets and cards, with front/back artwork, folding controls and independent inspection.
+- Pan 3D views with the middle mouse button and preserve background case shadows while examining extracted objects.
+- Use console spine templates with configurable title placement when a game has no spine or full-cover image.
+- Support packed full-cover material maps for varying surface relief, roughness and reflections, plus reversible covers through the viewer's context menu.
+- Configure disc finishes per game, with console defaults and a more realistic black PlayStation disc surface.
+- Add hinged two-disc trays for PS2 games: disc 1 on the swinging tray and disc 2 in the case, with separate artwork and inspection controls.
+- Align console metadata and image editors with game editors, including source credits and metadata lookup.
 
-## Novedades de v0.6.2
+## Novedades de v0.7.0
 
-- Créditos del uploader y enlaces de origen junto a los manuales PDF y CBZ, conservados al guardar y recuperar colecciones.
-- Nueva vista en primer plano para discos extraídos, con transiciones al seleccionar la caja o el disco y una vista opcional lado a lado.
-- El control principal de frente/dorso permite girar el disco seleccionado.
-- Navegación más fluida en Couch Mode mediante miniaturas de manuales en cajas cerradas y pausa de su preparación durante la navegación rápida.
-- Correcciones de rastros de páginas al volver a la portada del manual, doble scroll en el informe de biblioteca y transparencia desigual en las pestañas de Switch 2.
-- Traducción de los mensajes de progreso al descargar y preparar RetroArch.
+- Extraé los manuales de las cajas 3D, inspeccionalos por separado y abrí el lector con un clic.
+- Agregá varios Extras por juego: pósteres doblados, folletos y tarjetas, con imágenes de frente/dorso, controles de plegado e inspección independiente.
+- Desplazá la vista 3D con el botón central del mouse y conservá las sombras de la caja al examinar objetos extraídos.
+- Usá plantillas de lomo de consola con posición de título configurable cuando el juego no tenga imagen de lomo ni cubierta completa.
+- Soporte de mapas de material para cubiertas completas, con relieve, rugosidad y reflejos variables, además de carátulas reversibles desde el menú contextual del visor.
+- Acabados de disco configurables por juego, con valores predeterminados por consola y una superficie negra más realista para los discos de PlayStation.
+- Bandejas articuladas para juegos de PS2 con dos discos: disco 1 en la bandeja móvil y disco 2 en la caja, con imágenes y controles de inspección independientes.
+- Editores de metadatos e imágenes de consolas unificados con los de juegos, con créditos de origen y búsqueda de metadatos.
 
 ## Downloads / Descargas
 
