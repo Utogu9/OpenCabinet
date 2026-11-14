@@ -94,6 +94,7 @@ export function createDiscInteraction({host,reference,root,scene,camera,meshes,g
   function posters(){syncPosters();return entries.filter(entry=>entry.type==='poster');}
   const available=entry=>!!entry&&!!getGame()&&(entry.type==='disc'?(entry.sourceMeshes||media).length>0:entry===manual?hasManual()&&getManualMeshes().length>0:print(entry).available&&print(entry).meshes.length>0);
   const sourcesFor=entry=>entry.type==='disc'?entry.sourceMeshes||media:entry===manual?getManualMeshes():print(entry).meshes;
+  const alignFront=entry=>entry!==disc||entry.discId!=null;
   function chosenPoster(id,removed=false){const list=posters();return id!=null?list.find(entry=>entry.posterId===id||entry.kind===id):list.find(entry=>entry.kind===focused&&entry.removed===removed)||list.find(entry=>removed?entry.removed:print(entry).visible&&!entry.removed);}
   const visible=mesh=>{for(let node=mesh;node;node=node.parent)if(!node.visible)return false;return true;};
   function button(key,action){
@@ -169,11 +170,12 @@ export function createDiscInteraction({host,reference,root,scene,camera,meshes,g
     if(!available(entry)||!isOpen()||entry.removed)return false;
     const alreadyOut=out().length;reference.updateWorldMatrix(true,true);
     const inverse=reference.matrixWorld.clone().invert(),sources=sourcesFor(entry),front=entry.type==='poster'?print(entry).front:entry.type==='disc'?sources.find(mesh=>/Label/.test(mesh.material?.name)):getManualFront();
+    entry.front.identity();
     if(entry.type==='disc'&&sources[0]?.parent){entry.mountParent=sources[0].parent;entry.mountInverse=inverse.clone().multiply(entry.mountParent.matrixWorld).invert();}
     for(const source of sources){
       const copy=new THREE.Mesh(source.geometry,source.material);copy.matrix.copy(inverse).multiply(source.matrixWorld);copy.matrixAutoUpdate=false;copy.frustumCulled=false;
       entry.centered.add(copy);entry.original.set(source,source.visible);source.visible=false;
-      if(entry!==disc&&source===front&&source.geometry.attributes.normal){
+      if(alignFront(entry)&&source===front&&source.geometry.attributes.normal){
         const normal=new THREE.Vector3().fromBufferAttribute(source.geometry.attributes.normal,0).applyNormalMatrix(new THREE.Matrix3().getNormalMatrix(copy.matrix));
         entry.front.setFromUnitVectors(normal.normalize(),new THREE.Vector3(0,0,1));
       }
@@ -292,7 +294,7 @@ export function createDiscInteraction({host,reference,root,scene,camera,meshes,g
       for(const entry of out())if(entry.transition){
         entry.transition.start??=time;const t=Math.min(1,(time-entry.transition.start)/760);entry.amount=THREE.MathUtils.lerp(entry.transition.from,entry.transition.to,t);
         if(t===1&&entry.transition.to===0){restoreEntry(entry);refresh();}
-        else if(t===1){if(entry!==disc)entry.group.quaternion.copy(entry.front);entry.transition=null;}else schedule();
+        else if(t===1){if(alignFront(entry))entry.group.quaternion.copy(entry.front);entry.transition=null;}else schedule();
       }
       for(const poster of posters())if(poster.removed&&poster.posterRevision!==print(poster).revision){
         reference.updateWorldMatrix(true,true);const mount=print(poster).root;mount?.updateWorldMatrix(true,true);
@@ -325,7 +327,7 @@ export function createDiscInteraction({host,reference,root,scene,camera,meshes,g
         if(returning){entry.group.quaternion.copy(returnOrientation(entry)).slerp(entry.returnRotation,entry.amount);entry.group.scale.copy(root.scale).lerp(entry.returnScale,e);}
         else {
           entry.group.scale.copy(baseScale).multiplyScalar(THREE.MathUtils.lerp(boxFactor,factor,e));
-          if(entry.transition&&entry!==disc)entry.group.quaternion.copy(entry.startRotation).slerp(entry.front,e);
+          if(entry.transition&&alignFront(entry))entry.group.quaternion.copy(entry.startRotation).slerp(entry.front,e);
         }
         frames.push({radius:entry.radius*Math.max(...entry.group.scale.toArray().map(Math.abs)),position:entry.group.position});
       }

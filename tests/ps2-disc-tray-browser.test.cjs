@@ -22,9 +22,10 @@ test('PS2 two-disc cases use a hinged GLB tray and independently removable discs
     window.game={id:20,title:'Two disc game',platform:'Sony PlayStation 2',rom_path:'Game (USA) (Disc 1).iso',discs:[{id:101,label:'Disc 1',rom_path:'Game (USA) (Disc 1).iso'},{id:102,label:'Disc 2',rom_path:'Game (USA) (Disc 2).iso'}]};
     const canvas=document.createElement('canvas');canvas.width=canvas.height=256;canvas.getContext('2d').fillStyle='#168c49';canvas.getContext('2d').fillRect(0,0,256,256);art.push({kind:'disc',path:canvas.toDataURL()});viewer.update(game,art);
   });
-  await page.waitForFunction(()=>viewer.hasDiscTray&&viewer.discs.length===2&&debug.materials.get('Disc 2 Label')?.map);
+  await page.waitForFunction(()=>viewer.hasDiscTray&&viewer.discs.length===2&&debug.materials.get('Carrier Disc Label')?.map?.image.src===art.find(image=>image.kind==='disc').path&&debug.materials.get('UMD Label')?.map?.image.src===art.at(-1).path);
   assert.equal(await page.evaluate(()=>viewer.discs.map(disc=>disc.id).join(',')),'101,102');
-  assert.equal(await page.evaluate(()=>debug.materials.get('Disc 2 Label').map.image.src===art.at(-1).path),true,'secondary disc uses the second selected edition scan');
+  assert.equal(await page.evaluate(()=>debug.materials.get('Carrier Disc Label').map.image.src===art.find(image=>image.kind==='disc').path),true,'the first disc scan belongs on the hinged carrier');
+  assert.equal(await page.evaluate(()=>debug.materials.get('UMD Label').map.image.src===art.at(-1).path),true,'the second disc scan belongs in the fixed case');
   const clearances=await page.evaluate(async()=>{
     const THREE=await import('/src/vendor/three/three.module.js'),secondary=debug.discTray.secondary[0],box=secondary.geometry.boundingBox;
     const center=box.getCenter(new THREE.Vector3()),radius=(box.max.x-box.min.x)/2;
@@ -53,13 +54,13 @@ test('PS2 two-disc cases use a hinged GLB tray and independently removable discs
     return {offset:b.x-a.x,hinge:hinge.toArray(),lowerVisible:first===primary,gaps,rim};
   });
   assert.ok(fit.offset< -10&&fit.offset> -25,JSON.stringify(fit));assert.ok(Math.abs(fit.hinge[2])<.01,'hinge mounts at the depth midpoint of the spine, not the rear fold');
-  assert.ok(fit.rim.every(hit=>hit.name==='PS2 Second UMD Label'),'the upper disc edge remains visible inside the carrier, without plastic crossing its label');
+  assert.ok(fit.rim.every(hit=>hit.name==='PS2 Carrier UMD Label'),'the upper disc edge remains visible inside the carrier, without plastic crossing its label');
   assert.equal(fit.lowerVisible,true,'the original disc remains visible to the right of the offset upper disc');assert.deepEqual(fit.gaps,[],'solid plastic connects the hinge rail to the dish on both sides');
   await page.screenshot({path:'target/ps2-disc-tray-right.png'});
   const click=await page.evaluate(()=>{const mesh=debug.discTray.secondary[0],p=mesh.geometry.boundingBox.getCenter(debug.root.position.clone());p.x+=20;p.y+=20;mesh.localToWorld(p).project(debug.camera);const rect=debug.renderer.domElement.getBoundingClientRect();return {x:rect.left+(p.x+1)*rect.width/2,y:rect.top+(1-p.y)*rect.height/2};});
-  await page.mouse.click(click.x,click.y);await page.waitForFunction(()=>viewer.discs.find(disc=>disc.id==='102')?.removed&&document.getElementById('stage').dataset.discAnimation==='ready');
-  assert.equal(await page.evaluate(()=>viewer.discs.find(disc=>disc.id==='101').removed),false,'clicking the upper label selects only that physical disc');
-  await page.evaluate(()=>viewer.returnDisc('102'));await page.waitForFunction(()=>!viewer.isDiscRemoved);
+  await page.mouse.click(click.x,click.y);await page.waitForFunction(()=>viewer.discs.find(disc=>disc.id==='101')?.removed&&document.getElementById('stage').dataset.discAnimation==='ready');
+  assert.equal(await page.evaluate(()=>viewer.discs.find(disc=>disc.id==='102').removed),false,'clicking the upper label removes disc 1 while disc 2 remains in the fixed case');
+  await page.evaluate(()=>viewer.returnDisc('101'));await page.waitForFunction(()=>!viewer.isDiscRemoved);
   const start=await page.evaluate(()=>{
     window.points=()=>{const mesh=debug.discTray.secondary[0];mesh.geometry.computeBoundingBox();const point=mesh.geometry.boundingBox.getCenter(debug.root.position.clone());return mesh.localToWorld(point).toArray();};
     window.hinge=()=>debug.model.worldToLocal(debug.discTray.object.getWorldPosition(debug.root.position.clone())).toArray();return {hinge:hinge(),disc:points(),manual:viewer.hasManual,calls:debug.renderer.info.render.calls};
@@ -72,6 +73,8 @@ test('PS2 two-disc cases use a hinged GLB tray and independently removable discs
   assert.ok(Math.abs(turned.angle+170*Math.PI/180)<.001,'the carrier rests above the opened lid instead of passing beneath the booklet');
   await page.screenshot({path:'target/ps2-disc-tray-left.png'});
   await page.evaluate(()=>viewer.removeDisc('101'));await page.waitForFunction(()=>viewer.discs.find(disc=>disc.id==='101')?.removed&&document.getElementById('stage').dataset.discAnimation==='ready');
+  const facing=await page.evaluate(async()=>{const THREE=await import('/src/vendor/three/three.module.js'),group=viewer.discs.find(disc=>disc.id==='101').object;group.updateWorldMatrix(true,true);const mesh=group.children[0].children.find(mesh=>mesh.material.name==='Carrier Disc Label');return new THREE.Vector3().fromBufferAttribute(mesh.geometry.attributes.normal,0).applyNormalMatrix(new THREE.Matrix3().getNormalMatrix(mesh.matrixWorld)).z;});
+  assert.ok(facing>.99,'disc 1 faces forward when extracted from the carrier after turning it');
   await page.evaluate(()=>viewer.removeDisc('102'));await page.waitForFunction(()=>viewer.discs.every(disc=>disc.removed)&&document.getElementById('stage').dataset.discAnimation==='ready');
   assert.equal(await page.evaluate(()=>debug.discTray.secondary.every(mesh=>!mesh.visible)),true);
   await page.evaluate(async()=>{viewer.examineDisc('101');viewer.rotate(20,10);await settle();window.firstOrientation=viewer.discs[0].object.quaternion.toArray();viewer.examineDisc('102');viewer.rotate(-30,-10);await settle();});
@@ -81,6 +84,9 @@ test('PS2 two-disc cases use a hinged GLB tray and independently removable discs
   assert.equal(await page.evaluate(()=>debug.discTray.secondary.every(mesh=>mesh.visible)),true);
   await page.evaluate(async()=>{viewer.setOpen(false,false);viewer.zoom(1);await settle();});
   assert.equal(await page.evaluate(()=>debug.renderer.getContext().getError()),0);
+  await page.evaluate(()=>{art=art.filter((image,index)=>image.kind!=='disc'||index===art.findIndex(image=>image.kind==='disc'));viewer.update(game,art);});
+  await page.waitForFunction(()=>viewer.hasDiscTray&&debug.materials.get('Carrier Disc Label')?.map?.image.src===art.find(image=>image.kind==='disc').path);
+  assert.equal(await page.evaluate(()=>debug.materials.get('UMD Label').map.image.tagName), 'CANVAS','without a second scan, disc 2 uses its placeholder rather than borrowing disc 1 artwork');
   await page.evaluate(()=>{viewer.update({...game,discs:[game.discs[0]],default_region_id:1,regions:[{game:{id:1,platform:game.platform,discs:[game.discs[0]]}},{game:{id:2,platform:game.platform,discs:[game.discs[1]]}}]},art);});
   await page.evaluate(()=>settle());assert.equal(await page.evaluate(()=>viewer.hasDiscTray),false,'two regions do not create a two-disc case');assert.equal(await page.evaluate(()=>viewer.discs.length),1);
   await page.evaluate(()=>{viewer.update(game,art);});await page.waitForFunction(()=>viewer.hasDiscTray);assert.equal(await page.evaluate(()=>debug.meshes.filter(mesh=>mesh.name==='PS2 Swing Tray').length),1,'reselecting reuses one carrier');

@@ -389,13 +389,15 @@ export async function createModelViewer(host,options={},definition) {
       }
       assign('Cover Reverse',image||null);
     }
-    if(materials.has('UMD Label')&&changed('disc',[pictures.disc])) {
-      if(pictures.disc)assign('UMD Label',pictures.disc);
-      else {const disc=document.createElement('canvas');disc.width=512;disc.height=512;label(disc.getContext('2d'),game.title,0,0,512,512);assign('UMD Label',disc);}
+    const twoDiscs=!!discTray?.wantsSecond,fixedDisc=twoDiscs?pictures.disc2:pictures.disc;
+    const fixedCaption=twoDiscs?`${game.title}\n${game.discs?.[1]?.label||globalThis.OpenCabinetI18n.t('disc.numbered',2)}`:game.title;
+    if(materials.has('UMD Label')&&changed('disc',[fixedDisc,twoDiscs,fixedCaption])) {
+      if(fixedDisc)assign('UMD Label',fixedDisc);
+      else {const disc=document.createElement('canvas');disc.width=512;disc.height=512;label(disc.getContext('2d'),fixedCaption,0,0,512,512);assign('UMD Label',disc);}
     }
-    if(discTray?.ready&&changed('disc2',[pictures.disc2,game.discs?.[1]?.label,game.title])){
-      if(pictures.disc2)assign('Disc 2 Label',pictures.disc2);
-      else {const disc=document.createElement('canvas');disc.width=disc.height=512;label(disc.getContext('2d'),`${game.title}\n${game.discs?.[1]?.label||globalThis.OpenCabinetI18n.t('disc.numbered',2)}`,0,0,512,512);assign('Disc 2 Label',disc);}
+    if(discTray?.ready&&changed('disc2',[pictures.disc,game.discs?.[0]?.label,game.title])){
+      if(pictures.disc)assign('Carrier Disc Label',pictures.disc);
+      else {const disc=document.createElement('canvas');disc.width=disc.height=512;label(disc.getContext('2d'),`${game.title}\n${game.discs?.[0]?.label||globalThis.OpenCabinetI18n.t('disc.numbered',1)}`,0,0,512,512);assign('Carrier Disc Label',disc);}
     }
     if(materials.has('Cartridge Cover')&&changed('cartridge',[pictures.cartridge])) {
       if(pictures.cartridge)assign('Cartridge Cover',pictures.cartridge);
@@ -530,7 +532,7 @@ export async function createModelViewer(host,options={},definition) {
     resume(){if(!disposed)renderLease.resume();},
     clearArtwork(){reversible.reset();discInteraction.reset();discTray?.clear();coverFinish.clear();poster.clear();revision++;controller?.abort();key=null;clearManual();composed.clear();
       if(!options.carousel){dynamicTextures.forEach(texture=>texture.dispose());dynamicTextures.clear();}for(const kind of Object.keys(pictures))delete pictures[kind];
-      for(const name of ['Cover Outside','Cover Inside','Cover Reverse','Cartridge Cover','UMD Label','Disc 2 Label'])assign(name,null);
+      for(const name of ['Cover Outside','Cover Inside','Cover Reverse','Cartridge Cover','UMD Label','Carrier Disc Label'])assign(name,null);
       schedule();},
     update(next,images,settings=null) {
       const nextProfile=globalThis.OpenCabinet3D.profileFor(next.platform,null,next.rom_path,globalThis.OpenCabinet3D.resolveSettings(settings,next.box_3d));
@@ -597,7 +599,7 @@ export async function createModelViewer(host,options={},definition) {
     clear(){reversible.reset();cameraPan.reset();discInteraction.reset();discTray?.clear();coverFinish.clear();poster.clear();revision++;controller?.abort();controller=null;stopDrag();closeMenu();key=null;game=null;composed.clear();
       clearManual();
       if(!options.carousel){dynamicTextures.forEach(texture=>texture.dispose());dynamicTextures.clear();}for(const kind of Object.keys(pictures))delete pictures[kind];
-      for(const name of ['Cover Outside','Cover Inside','Cover Reverse','Cartridge Cover','UMD Label','Disc 2 Label']){const material=materials.get(name);if(material){if(options.carousel)assign(name,null);else {material.map=options.useModelArtwork?[...originalMaterials].find(value=>value.name===name)?.map||null:null;material.needsUpdate=true;}}}
+      for(const name of ['Cover Outside','Cover Inside','Cover Reverse','Cartridge Cover','UMD Label','Carrier Disc Label']){const material=materials.get(name);if(material){if(options.carousel)assign(name,null);else {material.map=options.useModelArtwork?[...originalMaterials].find(value=>value.name===name)?.map||null:null;material.needsUpdate=true;}}}
       if(frame!==null){cancelAnimationFrame(frame);frame=null;}if(!renderLease?.lost&&!renderLease?.paused)renderer.clear();notify();},
     dispose(){if(disposed)return;api.clear();cameraPan.dispose();discInteraction.dispose();poster.dispose();disposed=true;resize.disconnect();listeners.forEach(([target,name,callback,config])=>target.removeEventListener(name,callback,config));
       dynamicTextures.forEach(texture=>texture.dispose());dynamicTextures.clear();

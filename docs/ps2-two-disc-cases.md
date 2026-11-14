@@ -30,8 +30,10 @@ carrier has changed sides. This also works in fullscreen and couch mode.
 Closing the case returns the carrier to its closed position. Nothing changes
 ROM associations, launch choices, statistics or the original artwork files.
 
-The first preferred `disc` image supplies the original disc. The next distinct
-`disc` image in that edition's ordered image list supplies the carrier disc.
+Disc 1 sits on the hinged carrier; disc 2 sits in the fixed case underneath it.
+Source IDs, labels, extraction and reinsertion follow those physical positions.
+The first preferred `disc` image supplies disc 1 on the carrier. The next distinct
+`disc` image in that edition's ordered image list supplies disc 2 in the fixed case.
 If a second scan is unavailable, a placeholder shows the game and disc label;
 the first scan is not duplicated. There is no inference that an alternate scan
 represents a particular physical disc: order the images accordingly.

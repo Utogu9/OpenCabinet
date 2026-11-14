@@ -16,9 +16,9 @@ export function createPS2DiscTray({model,parts,meshes,materials,schedule,onReady
   const main=meshes.filter(mesh=>['UMD Label','Disc Silver'].includes(mesh.material?.name));
   let sources=[],entries=null,loading=null,disposed=false,loaded=false,target=false,amount=0,animation=null;
   let anchor=null,compensator=null,axis=null,swing=null,carrier=[],secondary=[],owned=[];
-  const label=createDiscMaterial(),silver=createDiscMaterial({silver:true});label.name='Disc 2 Label';silver.name='Disc 2 Silver';
+  const label=createDiscMaterial(),silver=createDiscMaterial({silver:true});label.name='Carrier Disc Label';silver.name='Carrier Disc Silver';
   const worldInverse=new THREE.Matrix4(),toModel=new THREE.Matrix4();
-  function configureEntries(){entries=loaded&&sources.length===2?sources.map((source,i)=>({id:String(source.id??source.rom_path),label:source.label||globalThis.OpenCabinetI18n.t('disc.numbered',i+1),meshes:i?secondary:main})):null;}
+  function configureEntries(){entries=loaded&&sources.length===2?sources.map((source,i)=>({id:String(source.id??source.rom_path),label:source.label||globalThis.OpenCabinetI18n.t('disc.numbered',i+1),meshes:i?main:secondary})):null;}
   async function ensure(){
     if(loaded)return;
     if(!loading)loading=loadPreparedModel('ps2-disc-tray').then(asset=>{
@@ -32,7 +32,7 @@ export function createPS2DiscTray({model,parts,meshes,materials,schedule,onReady
       const firstLabel=main.find(mesh=>mesh.material.name==='UMD Label');firstLabel.geometry.computeBoundingBox();
       const shift=new THREE.Vector3(...asset.manifest.discCenter).sub(firstLabel.geometry.boundingBox.getCenter(new THREE.Vector3()));
       for(const source of main){const geometry=source.geometry.clone();geometry.translate(...shift.toArray());
-        const mesh=new THREE.Mesh(geometry,source.material.name==='UMD Label'?label:silver);mesh.name='PS2 Second '+source.material.name;
+        const mesh=new THREE.Mesh(geometry,source.material.name==='UMD Label'?label:silver);mesh.name='PS2 Carrier '+source.material.name;
         mesh.castShadow=mesh.receiveShadow=true;swing.add(mesh);secondary.push(mesh);owned.push(mesh);
       }
       meshes.push(...owned);materials.set(label.name,label);materials.set(silver.name,silver);loaded=true;
