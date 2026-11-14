@@ -1,9 +1,13 @@
-# Pósteres de un juego
+# Extras de un juego
 
-**Editar juego → Pósteres** permite asociar varias imágenes de frente y dorso
-en pósteres independientes. El selector elige cuál editar; **Agregar póster**
+**Editar juego → Extras** permite asociar varias imágenes de frente y dorso
+en pósteres, mapas, tarjetas o folletos independientes. El selector elige cuál editar; **Agregar extra**
 crea otro par. Cada uno admite un nombre opcional y sus propios dobleces,
 orientación, esquina de apertura y cara exterior.
+
+Una distribución de **1 columna × 1 fila** representa una pieza sin dobleces.
+Los tipos de imagen siguen siendo `poster_front` y `poster_back` para todos
+estos extras; los archivos, asociaciones y configuraciones anteriores se conservan.
 
 **Subir** y **Bajar** ordenan la pila de arriba hacia abajo. **Quitar asociación**
 retira ese póster de la caja sin borrar sus imágenes. Estas siguen disponibles

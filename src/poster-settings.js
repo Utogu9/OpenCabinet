@@ -73,7 +73,7 @@
       for(const side of ['front','back']){
         const available=images.filter(image=>sideOf(image)===side),preview=get('image-'+side),pick=get('image-select-'+side);
         preview.replaceChildren();pick.replaceChildren();const none=document.createElement('option');none.value='';none.textContent=t('poster.noImage');pick.appendChild(none);
-        const path=entry?.[side];if(path){const img=document.createElement('img');img.src=imageSource(path);img.alt=t(side==='front'?'image.kind.posterFront':'image.kind.posterBack');img.decoding='async';preview.appendChild(img);}else preview.textContent=t('poster.noImage');
+        const path=entry?.[side];if(path){const img=document.createElement('img');img.src=imageSource(path);img.alt=t(side==='front'?'poster.front':'poster.back');img.decoding='async';preview.appendChild(img);}else preview.textContent=t('poster.noImage');
         for(const image of available){const option=document.createElement('option');option.value=image.path;option.textContent=pathKey(image.path).split('/').pop();pick.appendChild(option);}pick.value=path||'';
         pick.onchange=()=>{read();if(current())current()[side]=pick.value||null;render();};
       }
