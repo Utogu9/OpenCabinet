@@ -26,14 +26,15 @@ test('The OST player plays and seeks real audio, survives rapid selection, and r
    if(command==='prepare_ost_track'){if(trackDelay)await new Promise(r=>setTimeout(r,120));if(m4aMode)return {path:origin+'/tests/fixtures/soundtrack.m4a',start:0,end:null};return {path:origin+'/song.wav',start:args.index?1:0,end:args.index?3:1};}
   }});OpenCabinetI18n.translateDOM();
  },origin);
+ await page.evaluate(()=>{document.querySelector('#details-placeholder').classList.add('hidden');document.querySelector('#details-content').classList.remove('hidden');});
  await page.evaluate(()=>player.open({id:1,title:'Game'}));
  assert.equal(await page.locator('#ost-sidebar').isVisible(),true);
  assert.equal(await page.locator('#ost-player').isVisible(),false,'opening music uses the sidebar without a popup');
  assert.equal(await page.locator('#ost-mini').isVisible(),false);
  const placement=await page.locator('#ost-sidebar').evaluate(node=>{
-  const sidebar=node.parentElement,spacer=document.createElement('div');spacer.style.flex='0 0 1400px';sidebar.insertBefore(spacer,node);
+  const sidebar=document.querySelector('#game-details-panel'),content=node.parentElement,spacer=document.createElement('div');spacer.style.flex='0 0 1400px';content.insertBefore(spacer,node);
   sidebar.scrollTop=0;const before=node.getBoundingClientRect().top;sidebar.scrollTop=180;const after=node.getBoundingClientRect().top;
-  const result={last:sidebar.lastElementChild===node,movement:before-after,position:getComputedStyle(node).position};spacer.remove();sidebar.scrollTop=0;return result;
+  const result={last:content.lastElementChild===node,movement:before-after,position:getComputedStyle(node).position};spacer.remove();sidebar.scrollTop=0;return result;
  });
  assert.equal(placement.last,true,'the music controls follow all sidebar details');assert.equal(placement.position,'static');
  assert.ok(Math.abs(placement.movement-180)<1,'music controls scroll with the content instead of staying pinned');
@@ -42,6 +43,10 @@ test('The OST player plays and seeks real audio, survives rapid selection, and r
  assert.equal(await page.locator('#ost-sidebar').evaluate(node=>node.scrollWidth<=node.clientWidth+1),true,'compact controls fit a narrow themed sidebar');
  await page.evaluate(()=>document.querySelector('#game-details-panel').style.width='420px');
  await page.locator('#ost-sidebar-toggle').click();await page.waitForFunction(()=>fixtureAudio.currentTime>0&&!fixtureAudio.paused);
+ await page.evaluate(()=>document.documentElement.dataset.themeMusicPlayer='hidden');assert.equal(await page.locator('#ost-sidebar').isVisible(),false);
+ assert.equal(await page.evaluate(()=>fixtureAudio.paused),false,'theme visibility does not stop music');
+ await page.evaluate(()=>player.open({id:1,title:'Game'},{expandPlaying:true}));assert.equal(await page.locator('#ost-player').isVisible(),true);
+ await page.locator('#ost-close').click();await page.locator('#ost-player').waitFor({state:'hidden'});await page.evaluate(()=>document.documentElement.dataset.themeMusicPlayer='visible');
  await page.evaluate(()=>player.open({id:1,title:'Game'}));assert.equal(await page.evaluate(()=>fixtureAudio.paused),false,'opening the same soundtrack keeps playback running');
  const requestCount=await page.evaluate(()=>calls.filter(c=>c.command==='prepare_ost_track').length);
  await page.evaluate(()=>player.open({id:1,title:'Game'},{expandPlaying:true}));assert.equal(await page.locator('#ost-player').isVisible(),true);

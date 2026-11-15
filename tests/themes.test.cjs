@@ -16,7 +16,7 @@ function environment() {
   const node=selector=>{const n=new Node(selector);nodes.set(selector,n);return n;};
   const main=node('main'),content=node('#details-content'),root=node('root');
   for(const selector of ['.library-sidebar','#catalog-scroll','#game-details-panel','#details-resizer'])main.appendChild(node(selector));
-  for(const selector of ['#details-logo-container','#details-title','#details-platform','#details-gallery','#btn-play-game','.platform-play-actions','.details-meta-grid','#game-information','.details-info-box.platform-only','#game-description'])content.appendChild(node(selector));
+  for(const selector of ['#details-logo-container','#details-title','#details-platform','#details-gallery','#btn-play-game','.platform-play-actions','.details-meta-grid','#game-information','.details-info-box.platform-only','#game-description','#ost-sidebar'])content.appendChild(node(selector));
   const field=node('#details-genre'),row=new Node('genre-row');row.appendChild(field);
   document={documentElement:root,querySelector:s=>nodes.get(s)||null,getElementById:id=>nodes.get('#'+id)||null,activeElement:null};
   const window={CustomEvent:class{constructor(type,args){this.type=type;this.detail=args.detail;}},dispatchEvent:e=>events.push(e),localStorage:{getItem:()=>null,setItem(){}},crypto:{randomUUID:()=> 'test'}};
@@ -52,6 +52,28 @@ test('Sidebar media choices round-trip and older themes retain both viewers',()=
   e.api.apply(old,{document:e.document,window:e.window});assert.equal(e.root.dataset.themeMedia,'both');
   old.layout.mediaMode='anything';assert.throws(()=>e.api.validate(old));
 });
+test('Sidebar music visibility defaults on for old themes and survives export, import and live changes',()=>{
+  const e=environment(),old=JSON.parse(JSON.stringify(e.api.builtins[0]));delete old.layout.showMusicPlayer;
+  old.layout.sections=old.layout.sections.filter(s=>s.id!=='music');
+  assert.equal(e.api.validate(old).layout.showMusicPlayer,true);
+  for(const visible of [false,true]){
+    const theme={...old,layout:{...old.layout,showMusicPlayer:visible}};
+    const saved=JSON.parse(JSON.stringify(e.api.validate(theme)));assert.equal(saved.layout.showMusicPlayer,visible);
+    e.api.apply(saved,{document:e.document,window:e.window});assert.equal(e.root.dataset.themeMusicPlayer,visible?'visible':'hidden');
+  }
+  for(const value of ['false',0,null])assert.throws(()=>e.api.validate({...old,layout:{...old.layout,showMusicPlayer:value}}));
+});
+
+test('Music is a normal theme section: order and visibility round-trip and move the existing player',()=>{
+  const e=environment(),theme=JSON.parse(JSON.stringify(e.api.builtins[0])),music=theme.layout.sections.pop();
+  assert.equal(music.id,'music');theme.layout.sections.unshift({...music,visible:false});
+  const saved=JSON.parse(JSON.stringify(e.api.validate(theme)));assert.equal(saved.layout.sections[0].id,'music');assert.equal(saved.layout.showMusicPlayer,false);
+  e.api.apply(saved,{document:e.document,window:e.window});assert.equal(e.content.children[0].id,'#ost-sidebar');assert.equal(e.nodes.get('#ost-sidebar').attrs['data-theme-hidden'],'true');
+  saved.layout.sections.splice(3,0,saved.layout.sections.shift());saved.layout.sections[3].visible=true;
+  const restored=JSON.parse(JSON.stringify(e.api.validate(saved)));assert.equal(restored.layout.sections[3].id,'music');assert.equal(restored.layout.showMusicPlayer,true);
+  e.api.apply(restored,{document:e.document,window:e.window});assert.equal(e.content.children[4].id,'#ost-sidebar');
+});
+
 test('Applying layouts moves existing panels, preserves their focus and toggles fields independently',()=>{
   const e=environment(),theme=JSON.parse(JSON.stringify(e.api.builtins[0]));
   theme.layout.panels=['details','catalog','library'];theme.layout.hiddenFields=['genre'];theme.layout.sections[0].visible=false;

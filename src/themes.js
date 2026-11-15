@@ -7,7 +7,7 @@
     text:'--text-main', muted:'--text-muted', border:'--border-color', danger:'--danger-color',
     dangerHover:'--danger-hover', success:'--success-color', warning:'--warning-text', buttonText:'--button-text',
   };
-  const SECTIONS = ['logo','identity','media','play','summary','information','description'];
+  const SECTIONS = ['logo','identity','media','play','summary','information','description','music'];
   const FIELDS = ['release','developer','publisher','playtime','genre','mode','file','lastPlayed','players',
     'totalGames','emulator','lastGame','sessions','totalTime','mostPlayed'];
   const PANELS = ['library','catalog','details'];
@@ -18,7 +18,7 @@
     colors:{background:'#0f1115',surface:'#181c24',hover:'#222733',dialog:'#151820',sidebar:'#13161c',titlebar:'#0b0d11',
       accent:'#3b82f6',accentHover:'#2563eb',text:'#f3f4f6',muted:'#9ca3af',border:'#292d35',danger:'#ef4444',dangerHover:'#dc2626',success:'#10b981',warning:'#f59e0b',buttonText:'#ffffff'},
     layout:{panels:[...PANELS],libraryWidth:220,detailsWidth:420,coverSize:160,gap:20,radius:8,
-      sections:SECTIONS.map(id=>({id,visible:true})),hiddenFields:[],mediaMode:'both'},
+      sections:SECTIONS.map(id=>({id,visible:true})),hiddenFields:[],mediaMode:'both',showMusicPlayer:true},
   };
   const builtins = [defaults,
     {...copy(defaults),id:'builtin-light',name:'Paper',colors:{...defaults.colors,background:'#eef1f5',surface:'#ffffff',hover:'#e1e7ef',dialog:'#ffffff',sidebar:'#f7f8fa',titlebar:'#e7ebf0',text:'#192332',muted:'#536174',border:'#ced5df',accent:'#2463c5',accentHover:'#194e9e'}},
@@ -26,11 +26,11 @@
     {...copy(defaults),id:'builtin-spotlight',name:'Spotlight',
       colors:{...defaults.colors,background:'#171410',surface:'#231f1a',hover:'#343027',dialog:'#1d1914',sidebar:'#1d1914',titlebar:'#110f0c',accent:'#d9a24b',accentHover:'#b98536',text:'#faf2e3',muted:'#baa98e',border:'#41392d'},
       layout:{...copy(defaults.layout),panels:['details','catalog','library'],libraryWidth:200,detailsWidth:440,coverSize:180,gap:24,
-        sections:['identity','play','media','summary','information','description','logo'].map(id=>({id,visible:id!=='logo'}))}},
+        sections:['identity','play','media','summary','information','description','logo','music'].map(id=>({id,visible:id!=='logo'}))}},
     {...copy(defaults),id:'builtin-gallery',name:'Gallery',
       colors:{...defaults.colors,background:'#10151e',surface:'#182231',hover:'#243249',dialog:'#141e2b',sidebar:'#121b27',titlebar:'#0b1119',accent:'#54c5d0',accentHover:'#389ca5',text:'#eef5fb',muted:'#a2b4c6',border:'#2a3a4f'},
       layout:{...copy(defaults.layout),panels:['catalog','details','library'],libraryWidth:200,detailsWidth:360,coverSize:210,gap:28,radius:12,
-        sections:['media','identity','play','summary','logo','description','information'].map(id=>({id,visible:!['logo','information','description'].includes(id)})),hiddenFields:['developer','publisher']}},
+        sections:['media','identity','play','summary','logo','description','information','music'].map(id=>({id,visible:!['logo','information','description'].includes(id)})),hiddenFields:['developer','publisher']}},
   ];
   const invalid = () => new Error(t('themes.invalid'));
   function keys(value, names) { return value && typeof value==='object' && !Array.isArray(value)
@@ -44,14 +44,16 @@
       || typeof value.author!=='string' || [...value.author].length>100 || !keys(value.colors,Object.keys(COLORS))
       || Object.values(value.colors).some(color=>typeof color!=='string'||!/^#[0-9a-f]{6}$/i.test(color))) throw invalid();
     const l=value.layout;
-    if(!keys(l,['panels','libraryWidth','detailsWidth','coverSize','gap','radius','sections','hiddenFields',...(Object.prototype.hasOwnProperty.call(l||{},'mediaMode')?['mediaMode']:[])])
+    if(!keys(l,['panels','libraryWidth','detailsWidth','coverSize','gap','radius','sections','hiddenFields',...['mediaMode','showMusicPlayer'].filter(key=>Object.prototype.hasOwnProperty.call(l||{},key))])
       || (l.mediaMode!==undefined&&!['both','photos','box'].includes(l.mediaMode))
-      || !permutation(l.panels,PANELS) || !Array.isArray(l.sections) || !permutation(l.sections.map(s=>s?.id),SECTIONS)
+      || (Object.prototype.hasOwnProperty.call(l,'showMusicPlayer')&&typeof l.showMusicPlayer!=='boolean')
+      || !permutation(l.panels,PANELS) || !Array.isArray(l.sections) || ![SECTIONS,SECTIONS.filter(id=>id!=='music')].some(ids=>permutation(l.sections.map(s=>s?.id),ids))
       || l.sections.some(s=>!keys(s,['id','visible'])||typeof s.visible!=='boolean')
       || !Array.isArray(l.hiddenFields) || new Set(l.hiddenFields).size!==l.hiddenFields.length || l.hiddenFields.some(f=>!FIELDS.includes(f))) throw invalid();
     for(const [key,min,max] of [['libraryWidth',160,420],['detailsWidth',260,800],['coverSize',100,320],['gap',0,48],['radius',0,24]])
       if(!Number.isInteger(l[key])||l[key]<min||l[key]>max) throw invalid();
-    return copy(value);
+    const sections=l.sections.some(s=>s.id==='music')?l.sections:[...l.sections,{id:'music',visible:l.showMusicPlayer??true}];
+    return copy({...value,layout:{...l,sections,showMusicPlayer:sections.find(s=>s.id==='music').visible}});
   }
   function validateLibrary(value) {
     if(!keys(value,['format','version','active','themes'])||value.format!=='OpenCabinet Themes'||value.version!==1||!Array.isArray(value.themes)||value.themes.length>100) throw invalid();
@@ -63,7 +65,7 @@
   const sectionSelectors = {
     logo:['#details-logo-container'],identity:['#details-title','#details-platform'],media:['#details-gallery'],
     play:['#btn-play-game','.platform-play-actions'],summary:['.details-meta-grid'],
-    information:['#game-information','.details-info-box.platform-only','#personal-game-information'],description:['#game-description'],
+    information:['#game-information','.details-info-box.platform-only','#personal-game-information'],description:['#game-description'],music:['#ost-sidebar'],
   };
   const fieldIds = ['details-release-date','details-developer','details-publisher','details-play-time','details-genre','details-game-mode','details-rom-file','details-last-played','details-max-players',
     'platform-total-games','platform-default-emulator','platform-last-game','platform-sessions','platform-total-time','platform-most-game'];
@@ -79,6 +81,7 @@
     root.style.colorScheme=(rgb[0]*.299+rgb[1]*.587+rgb[2]*.114)>160?'light':'dark';
     root.dataset.theme=theme.id;
     root.dataset.themeMedia=l.mediaMode||'both';
+    root.dataset.themeMusicPlayer=l.showMusicPlayer===false?'hidden':'visible';
     const previous=applied.get(document), main=document.querySelector('main');
     const panelNodes={library:document.querySelector('.library-sidebar'),catalog:document.getElementById('catalog-scroll'),details:document.getElementById('game-details-panel')};
     const resizer=document.getElementById('details-resizer'),left=l.panels.indexOf('details')<l.panels.indexOf('catalog');
@@ -163,7 +166,7 @@
       host.replaceChildren();values.forEach((value,index)=>{
         const row=document.createElement('div');row.className='theme-order-row';
         const name=document.createElement('span');name.textContent=label(value);row.appendChild(name);
-        if(visibility){const input=document.createElement('input');input.type='checkbox';input.checked=value.visible;input.setAttribute('aria-label',t('themes.show',label(value)));input.onchange=()=>{value.visible=input.checked;preview();};row.appendChild(input);}
+        if(visibility){const input=document.createElement('input');if(value.id==='music')input.id='theme-music-player';input.type='checkbox';input.checked=value.visible;input.setAttribute('aria-label',t('themes.show',label(value)));input.onchange=()=>{value.visible=input.checked;preview();};row.appendChild(input);}
         for(const [delta,symbol,key]of [[-1,'↑','themes.up'],[1,'↓','themes.down']]){
           const control=button(symbol,()=>{
             onMove(index,index+delta);renderLayout();preview();
@@ -177,6 +180,7 @@
     function renderLayout() {
       orderedList(get('theme-panel-order'),draft.layout.panels,id=>t('themes.panel.'+id),(from,to)=>{const values=draft.layout.panels;values.splice(to,0,values.splice(from,1)[0]);});
       orderedList(get('theme-section-order'),draft.layout.sections,s=>t('themes.section.'+s.id),(from,to)=>{const values=draft.layout.sections;values.splice(to,0,values.splice(from,1)[0]);},true);
+
     }
     function edit(theme=null) {
       if(busy||!loaded)return;

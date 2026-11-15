@@ -3171,7 +3171,8 @@ html[data-i18n-pending] body { visibility: hidden; }
 #game-ost-editor > div > div:nth-last-child(2) {display:flex;flex-direction:column;gap:8px;}
 .ost-mini {width:330px;z-index:1300;padding:0;}
 .ost-sidebar .ost-compact-header {cursor:default;}
-.ost-sidebar {flex-shrink:0;margin-top:auto;border:1px solid var(--border-color);border-radius:10px;background:var(--sidebar-bg);box-shadow:0 4px 16px #0002;}
+.ost-sidebar {flex-shrink:0;border:1px solid var(--border-color);border-radius:10px;background:var(--sidebar-bg);box-shadow:0 4px 16px #0002;}
+html[data-theme-music-player="hidden"] #ost-sidebar {display:none!important;}
 .ost-compact .ost-compact-header {display:flex;gap:5px;align-items:center;padding:10px 10px 0;}
 .ost-compact-header strong {flex:1;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;min-width:0;font-size:.84rem;}
 .ost-compact .ost-header-action {width:24px;height:24px;padding:0;border-color:transparent;background:transparent;border-radius:5px;}

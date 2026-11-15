@@ -19,10 +19,13 @@ Available settings:
 - Order of the library, game list and details panels, plus sidebar widths.
 - Cover size, spacing between games and corner radius.
 - Order and visibility of logo, title/platform, media, launch actions, main details,
-  information and description.
+  information, description and the music player.
 - Visibility of individual game and platform metadata fields.
 - Sidebar media: both viewers, Photos only, or 3D case only. A single-viewer
   theme hides the view switch; Photos-only themes do not prepare a hidden 3D case.
+- Move or hide the music player using the same section controls. Changes preview
+  live without stopping playback; explicit soundtrack actions can still open the
+  expanded player.
 
 The details divider continues working on either side of the game list. Dragging
 it adjusts the current view; the theme's saved width is edited in its settings.
@@ -48,6 +51,12 @@ include custom CSS, scripts or external resources.
 The optional `layout.mediaMode` accepts `both`, `photos` or `box`. Older theme
 files default to `both`. Platform details continue displaying photos because
 platforms do not have a game case.
+
+The `music` entry in `layout.sections` stores the music player's order and
+visibility like any other section. Older themes without this entry append it at
+the end, preserving the optional `layout.showMusicPlayer` flag (visible by
+default). Exports synchronize that compatibility flag from the section's
+visibility. Hiding this section does not hide the floating or expanded player.
 
 Native saves use a temporary file and atomic replacement. Startup reconciles an
 interrupted write without replacing an already valid library with partial data.

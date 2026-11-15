@@ -188,6 +188,7 @@
     "themes.mediaBox": "3D case only",
     "themes.mediaPhotos": "Photos only",
     "themes.mediaBoth": "3D case and Photos",
+    "themes.section.music": "Music player",
     "themes.mediaMode": "Sidebar media",
     "platform.images.other": "Other images and alternate logos",
     "msg.aec7dea121": "{0} · {1} × {2} × {3} mm approx. · Drag to rotate",

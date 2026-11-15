@@ -126,10 +126,12 @@
       status.textContent=result.warnings.join('\n')||(!albums.length&&explicitOpen?t('ost.empty'):'');render();return true;
     }
     async function open(gameValue,{expandPlaying=false}={}){cancelSelection();const token=selection;presentation='sidebar';explicitOpen=true;
+      const hiddenByTheme=document.documentElement.dataset.themeMusicPlayer==='hidden';
       const sameGame=game?.id===gameValue.id||(expandPlaying&&gameValue.regions?.some(region=>region.game.id===game?.id));
-      if(sameGame&&index>=0){if(expandPlaying&&!audio.paused&&!modal.open)modal.showModal();state();return true;}
+      if(sameGame&&index>=0){if((hiddenByTheme||expandPlaying&&!audio.paused)&&!modal.open)modal.showModal();state();return true;}
       stop(true);game=gameValue;render();
       get('ost-player-title').textContent=`${t('ost.title')} · ${game.title}`;status.textContent=t('ost.loading');
+      if(hiddenByTheme&&!modal.open)modal.showModal();
       try{return await load(gameValue,{token});}
       catch(error){status.textContent=String(error);onError(error);return false;}}
     async function launch(gameValue,path){

@@ -59,12 +59,13 @@ media framework, but unusual local codec configurations can still affect playbac
 
 The player supports a track list, seeking within each track, previous/next,
 pause/stop, volume, shuffle and album repeat, using the application's white
-outline icons. A compact player at the end of the details sidebar is available whenever the
+outline icons. A compact player, by default at the end of the details sidebar, is available whenever the
 selected game has an OST, even when automatic playback is disabled. It includes
 the song title, elapsed/total time, seeking and all playback controls. Its header
 can expand the player or detach the same controls into a draggable floating
 player; the floating player's dock button returns it to the sidebar. All views
 share one audio element and retain the track, position, volume and playback state.
+Themes can reorder or hide this player like the other detail sections.
 The sidebar player scrolls with the rest of the details. The expand button opens
 the larger player; **Listen to soundtrack** also expands it when that game's OST
 is already playing, without restarting the track. This includes merged editions.

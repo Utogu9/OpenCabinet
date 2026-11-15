@@ -37,6 +37,7 @@ const SECTIONS: &[&str] = &[
     "summary",
     "information",
     "description",
+    "music",
 ];
 const FIELDS: &[&str] = &[
     "release",
@@ -81,8 +82,11 @@ pub struct Layout {
     hidden_fields: Vec<String>,
     #[serde(default = "default_media_mode")]
     media_mode: String,
+    #[serde(default = "default_show_music_player")]
+    show_music_player: bool,
 }
 fn default_media_mode() -> String { "both".into() }
+fn default_show_music_player() -> bool { true }
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Theme {
@@ -144,10 +148,13 @@ fn validate(theme: &Theme) -> Result<()> {
         || l.gap > 48
         || l.radius > 24
         || !["both", "photos", "box"].contains(&l.media_mode.as_str())
-        || !permutation(
+        || !(permutation(
             &l.sections.iter().map(|s| s.id.clone()).collect::<Vec<_>>(),
             SECTIONS,
-        )
+        ) || permutation(
+            &l.sections.iter().map(|s| s.id.clone()).collect::<Vec<_>>(),
+            &SECTIONS[..SECTIONS.len()-1],
+        ))
         || l.hidden_fields.len() > FIELDS.len()
         || l.hidden_fields
             .iter()
@@ -306,6 +313,7 @@ mod tests {
                     .collect(),
                 hidden_fields: vec!["genre".into()],
                 media_mode: default_media_mode(),
+                show_music_player: true,
             },
         }
     }
@@ -315,6 +323,12 @@ mod tests {
         let example: Theme = serde_json::from_str(text).unwrap();
         validate(&example).unwrap();
         assert_eq!(example.layout.media_mode,"both");
+        assert!(example.layout.show_music_player);
+        for visible in [false,true] {
+            let mut updated=example.clone();updated.layout.show_music_player=visible;validate(&updated).unwrap();
+            let saved=serde_json::to_string(&updated).unwrap();let loaded:Theme=serde_json::from_str(&saved).unwrap();
+            assert_eq!(loaded.layout.show_music_player,visible);
+        }
         for mode in ["both","photos","box"] {
             let mut updated=example.clone();updated.layout.media_mode=mode.into();validate(&updated).unwrap();
             let saved=serde_json::to_string(&updated).unwrap();let loaded:Theme=serde_json::from_str(&saved).unwrap();
@@ -323,6 +337,14 @@ mod tests {
         let mut value: serde_json::Value = serde_json::from_str(text).unwrap();
         value["css"] = "body { display: none; }".into();
         assert!(serde_json::from_value::<Theme>(value).is_err());
+    }
+    #[test]
+    fn music_section_order_and_visibility_survive_native_storage() {
+        let mut updated=theme();let music=updated.layout.sections.pop().unwrap();assert_eq!(music.id,"music");
+        updated.layout.sections.insert(0,Section{id:"music".into(),visible:false});updated.layout.show_music_player=false;
+        validate(&updated).unwrap();let saved=serde_json::to_string(&updated).unwrap();let mut loaded:Theme=serde_json::from_str(&saved).unwrap();
+        assert_eq!(loaded.layout.sections[0].id,"music");assert!(!loaded.layout.sections[0].visible);
+        let music=loaded.layout.sections.remove(0);loaded.layout.sections.insert(3,music);validate(&loaded).unwrap();assert_eq!(loaded.layout.sections[3].id,"music");
     }
     #[test]
     fn invalid_layouts_versions_colors_and_duplicate_ids_cannot_replace_a_library() {
