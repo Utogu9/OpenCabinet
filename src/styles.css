@@ -3140,4 +3140,7 @@ html[data-i18n-pending] body { visibility: hidden; }
 .controller-binding.listening {border-color:var(--accent-color);background:var(--accent-soft);}
 .controller-capture-status {grid-column:1/-1;margin:0;}
 .controller-capture-status:empty {display:none;}
+.reset-scope-actions {display:flex;flex-direction:column;gap:12px;margin:20px 0;}
+.reset-scope-actions button {text-align:left;white-space:normal;}
+.reset-scope-actions .preference-help {margin:0;}
 .active-profile-name {opacity:.65;max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}

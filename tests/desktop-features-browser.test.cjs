@@ -22,16 +22,20 @@ test('Controller preferences, profile switching, per-game startup and transparen
    commands.push({command,args});
    if(command==='get_data_location')return {active_directory:'C:/Library/data',default_directory:'C:/Library/data',pending_directory:null};
    if(command==='get_user_profiles')return profileData;
+   if(command==='get_theme_library')return window.themeLibrary||={format:'OpenCabinet Themes',version:1,active:OpenCabinetThemes.builtins[0].id,themes:[]};
+   if(command==='save_theme_library'){window.themeLibrary=args.library;return args.library;}
    if(command==='switch_user_profile'){profileData.active=args.id;return profileData;}
    if(command==='save_user_profile'){if(args.id)profileData.profiles.find(p=>p.id===args.id).name=args.name;else profileData.profiles.push({id:3,name:args.name});return profileData;}
   }}};
  },Object.fromEntries(['en-US','es-AR'].map(locale=>[locale,JSON.parse(fs.readFileSync('src/locales/'+locale+'.json','utf8'))])));
- for(const file of ['ui-icons.js','i18n.js','launch-screen.js','controller-settings.js','user-profiles.js','game-shortcuts.js'])await page.addScriptTag({url:origin+'/src/'+file});
+ for(const file of ['ui-icons.js','i18n.js','themes.js','launch-screen.js','controller-settings.js','user-profiles.js','game-shortcuts.js'])await page.addScriptTag({url:origin+'/src/'+file});
  await page.addScriptTag({content:fs.readFileSync('src/main.js','utf8')+`
    allGames=[];libraryLoading=false;showToast=()=>{};applyLibraryFilters=()=>{};loadGames=async()=>{};showGameDetails=()=>{};
-   setupPreferences();window.gameStartup=OpenCabinetLaunchScreen.gameEditor(document.querySelector('#game-startup-screen'),document,()=>preferences);
-   gameStartup.load(null);window.readControls=()=>preferences.couchControls;
+   appThemes=OpenCabinetThemes.create({document,window,invoke,confirm:async()=>true});
+   appThemes.load().then(()=>{setupPreferences();window.gameStartup=OpenCabinetLaunchScreen.gameEditor(document.querySelector('#game-startup-screen'),document,()=>preferences);
+     gameStartup.load(null);window.readControls=()=>preferences.couchControls;window.fixtureReady=true;});
  `});
+ await page.waitForFunction(()=>window.fixtureReady);
  await page.evaluate(()=>OpenCabinetI18n.translateDOM());
  await page.locator('#btn-open-preferences').evaluate(node=>node.click());
  await page.waitForFunction(()=>!document.querySelector('#btn-save-preferences').disabled);
@@ -55,10 +59,37 @@ test('Controller preferences, profile switching, per-game startup and transparen
  await page.screenshot({path:'target/controller-preferences.png'});
  await page.locator('#btn-save-preferences').click();await page.waitForFunction(()=>!document.querySelector('#preferences-dialog').open);
  const saved=await page.evaluate(()=>readControls());assert.equal(saved.bindings.accept,1);assert.equal(saved.bindings.back,0);assert.equal(saved.rotationSensitivity,2.2);
+ await page.locator('#btn-open-preferences').evaluate(node=>node.click());await page.locator('#preferences-tab-controller').click();
+ await page.locator('#btn-reset-preferences').click();
+ await page.screenshot({path:'target/preferences-reset-scope.png'});
+ await page.locator('#preferences-reset-section').click();
+ await page.locator('#preferences-reset-confirm').waitFor({state:'visible'});
+ assert.equal(await page.locator('#preferences-reset-confirm').isVisible(),true);
+ assert.equal((await page.evaluate(()=>readControls())).rotationSensitivity,2.2,'choosing a section alone changes nothing');
+ await page.locator('#preferences-reset-confirm button[value="cancel"]').click();
+ assert.equal((await page.evaluate(()=>readControls())).rotationSensitivity,2.2);
+ await page.locator('#btn-reset-preferences').click();await page.locator('#preferences-reset-section').click();
+ await page.locator('#preferences-reset-confirm').waitFor({state:'visible'});
+ await page.screenshot({path:'target/preferences-reset-confirm.png'});
+ await page.locator('#preferences-reset-confirm button[value="reset"]').click();
+ await page.waitForFunction(()=>readControls().rotationSensitivity===1);
+ assert.equal(await page.locator('#preferences-dialog').evaluate(node=>node.open),true);
+ assert.equal(await page.locator('#controller-accept').getAttribute('data-button'),'0');
+ await page.locator('#preferences-tab-themes').click();await page.locator('#btn-new-theme').click();
+ await page.locator('#theme-name').fill('Draft identity');
+ await page.locator('#theme-colors input').first().evaluate(node=>{node.value='#ff0000';node.dispatchEvent(new Event('input'));});
+ await page.locator('#btn-reset-preferences').click();await page.locator('#preferences-reset-section').click();
+ await page.locator('#preferences-reset-confirm button[value="reset"]').click();
+ await page.waitForFunction(()=>document.querySelector('#theme-colors input').value===OpenCabinetThemes.builtins[0].colors.background);
+ assert.equal(await page.locator('#theme-name').inputValue(),'Draft identity');
+ assert.equal(await page.evaluate(()=>themeLibrary.themes.length),0,'resetting the draft does not save or replace custom themes');
+ await page.locator('#btn-cancel-theme').click();await page.locator('#btn-close-preferences').click();
  await page.locator('#btn-open-profiles').evaluate(node=>node.click());await page.waitForSelector('.user-profile-list .user-profile-row');
  await page.locator('.user-profile-list .user-profile-row').nth(1).getByRole('button',{name:'Switch',exact:true}).click();
  await page.waitForFunction(()=>document.querySelector('#active-user-profile').textContent.includes('Second'));
  assert.equal(await page.locator('#btn-save-preferences').isVisible(),false);
+ await page.locator('#btn-reset-preferences').click();assert.equal(await page.locator('#preferences-reset-section').isDisabled(),true);
+ await page.locator('#preferences-reset-scope button[value="cancel"]').click();
  await page.screenshot({path:'target/user-profiles-preferences.png'});
  await page.locator('#btn-close-preferences').click();
  const gameConfig=await page.evaluate(()=>{

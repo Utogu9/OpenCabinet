@@ -216,7 +216,6 @@ function setupPreferences() {
   const launchScreenEditor=globalThis.OpenCabinetLaunchScreen?.editor(document);
   const controllerEditor=globalThis.OpenCabinetController?.editor(document.getElementById('controller-settings'),document);
   let profilesPanel=null;
-  let resettingDefaults=false;
   const directory = document.getElementById("preference-data-directory");
   const browse = document.getElementById("btn-browse-data-directory");
   const reset = document.getElementById("btn-reset-data-directory");
@@ -373,7 +372,6 @@ function setupPreferences() {
     defaultRegion.value=preferences.defaultRegion;
     launchScreenEditor?.load(preferences.launchScreen);
     controllerEditor?.load(preferences.couchControls);
-    resettingDefaults=false;
     error.classList.add("hidden");
     location = null;
     draftDirectory = "";
@@ -434,20 +432,50 @@ function setupPreferences() {
   });
   metadataReset.addEventListener('click',()=>{if(!saving&&!choosing){draftCatalog=null;update();}});
   cacheReset.addEventListener("click", () => { draftCacheDirectory = ""; update(); });
-  restoreDefaults.addEventListener("click",async()=>{
-    if(saving||choosing||backupsPanel?.busy||themesPanel?.busy||!location)return;
-    const confirm=document.getElementById("preferences-reset-confirm");
-    const accepted=await new Promise(resolve=>{confirm.returnValue="cancel";confirm.addEventListener("close",()=>resolve(confirm.returnValue==="reset"),{once:true});confirm.showModal();});
-    if(!accepted||!dialog.open)return;
-    input.value=String(DEFAULT_PREFERENCES.maxCachedCovers);cacheMode.value=DEFAULT_PREFERENCES.cacheMode;draftCacheDirectory="";
-    startMaximized.checked=DEFAULT_PREFERENCES.startMaximized;coversOnly.checked=DEFAULT_PREFERENCES.coversOnly;languageSelect.value=DEFAULT_PREFERENCES.language;
-    combineRegions.checked=DEFAULT_PREFERENCES.combineRegionStatistics;catalogTitles.checked=DEFAULT_PREFERENCES.useCatalogTitles;
-    timeFormat.value=DEFAULT_PREFERENCES.timeFormat;releaseDateFormat.value=DEFAULT_PREFERENCES.releaseDateFormat;autoUpdateCatalog.checked=DEFAULT_PREFERENCES.autoUpdateCatalog;defaultRegion.value=DEFAULT_PREFERENCES.defaultRegion;
-    launchScreenEditor?.load(DEFAULT_PREFERENCES.launchScreen);
-    controllerEditor?.load(DEFAULT_PREFERENCES.couchControls);
-    draftCatalog=null;draftDirectory=location.active_directory;selection=null;resettingDefaults=true;
-    showCategory("startup");update();
-    document.getElementById("preferences-form").requestSubmit();
+  const resetKeys={startup:['language','startMaximized'],library:['coversOnly','combineRegionStatistics','timeFormat','releaseDateFormat'],
+    launch:['launchScreen'],controller:['couchControls'],metadata:['useCatalogTitles','autoUpdateCatalog','defaultRegion'],
+    data:['maxCachedCovers','cacheMode','cacheDirectory']};
+  const sectionTitles={startup:'msg.58fcc9468f',library:'msg.c9169c12cb',launch:'launchScreen.title',controller:'controller.title',metadata:'source.title',
+    data:'msg.cf6371762e',backups:'backup.title',themes:'themes.title','theme-editor':'themes.editor',profiles:'profiles.title',storage:'maintenance.storage'};
+  function resetFields(scope){
+    const keys=scope==='all'?Object.values(resetKeys).flat():resetKeys[scope]||[];
+    const fields={language:languageSelect,startMaximized,coversOnly,combineRegionStatistics:combineRegions,timeFormat,releaseDateFormat,
+      useCatalogTitles:catalogTitles,autoUpdateCatalog,defaultRegion,maxCachedCovers:input,cacheMode};
+    for(const key of keys){
+      if(key==='launchScreen')launchScreenEditor?.load(DEFAULT_PREFERENCES.launchScreen);
+      else if(key==='couchControls')controllerEditor?.load(DEFAULT_PREFERENCES.couchControls);
+      else if(key==='cacheDirectory')draftCacheDirectory=DEFAULT_PREFERENCES.cacheDirectory;
+      else if(typeof DEFAULT_PREFERENCES[key]==='boolean')fields[key].checked=DEFAULT_PREFERENCES[key];
+      else fields[key].value=String(DEFAULT_PREFERENCES[key]);
+    }
+    if(scope==='all'||scope==='metadata')draftCatalog=null;
+    if(scope==='all'||scope==='data'){draftDirectory=location.active_directory;selection=null;}
+  }
+  function modalResult(modal){return new Promise(resolve=>{modal.returnValue='cancel';modal.addEventListener('close',()=>resolve(modal.returnValue),{once:true});modal.showModal();});}
+  restoreDefaults.addEventListener('click',async()=>{
+    if(saving||choosing||backupsPanel?.busy||themesPanel?.busy||maintenancePanel?.busy||profilesPanel?.busy||!location)return;
+    const category=preferenceCategory,name=globalThis.OpenCabinetI18n.t(sectionTitles[category]);
+    const canReset=!!resetKeys[category]||(category==='backups'&&!!backupsPanel?.resetDefaults)||(category==='themes'&&!!themesPanel?.resetDefaults)||(category==='theme-editor'&&!!themesPanel?.resetEditorDefaults);
+    const sectionButton=document.getElementById('preferences-reset-section');sectionButton.disabled=!canReset;
+    sectionButton.textContent=globalThis.OpenCabinetI18n.t('preferences.resetSection',name);
+    document.getElementById('preferences-reset-unavailable').classList.toggle('hidden',canReset);
+    choosing=true;update();
+    try{
+      const choice=await modalResult(document.getElementById('preferences-reset-scope'));
+      if(!dialog.open||!['section','all'].includes(choice)||(choice==='section'&&!canReset))return;
+      const scope=choice==='all'?'all':category;
+      const message=scope==='all'?globalThis.OpenCabinetI18n.t('preferences.resetConfirm')
+        :globalThis.OpenCabinetI18n.t(scope==='theme-editor'?'preferences.resetThemeDraft':scope==='themes'?'preferences.resetTheme':scope==='backups'?'preferences.resetBackup':'preferences.resetSectionConfirm',name);
+      document.getElementById('preferences-reset-message').textContent=message;
+      if(await modalResult(document.getElementById('preferences-reset-confirm'))!=='reset'||!dialog.open)return;
+      choosing=false;
+      if(scope==='backups'){await backupsPanel.resetDefaults();return;}
+      if(scope==='themes'){await themesPanel.resetDefaults();showToast(globalThis.OpenCabinetI18n.t('preferences.resetDone',name));return;}
+      if(scope==='theme-editor'){themesPanel.resetEditorDefaults();return;}
+      resetFields(scope);if(scope==='all')showCategory('startup');
+      await savePreferences({preventDefault(){}},scope);
+    }catch(reason){showError(reason);}
+    finally{choosing=false;update();if(dialog.open&&!document.querySelector?.('dialog[open]:not(#preferences-dialog)'))restoreDefaults.focus({preventScroll:true});}
   });
   cacheBrowse.addEventListener("click", async () => {
     if (saving || choosing) return;
@@ -459,39 +487,39 @@ function setupPreferences() {
     } catch (reason) { showError(globalThis.OpenCabinetI18n.t("msg.f54a89d7db", reason)); }
     finally { choosing = false; update(); }
   });
-  document.getElementById("preferences-form").addEventListener("submit", async (event) => {
+  async function savePreferences(event,resetScope=null) {
     event.preventDefault();
+    const scoped=resetScope&&resetScope!=='all';
     if (saving || choosing || backupsPanel?.busy || themesPanel?.busy || profilesPanel?.busy || !location) return;
     if (["profiles", "themes", "theme-editor"].includes(preferenceCategory)) return;
     if (preferenceCategory === "backups") { await backupsPanel?.saveSettings(); return; }
-    const value = Number(input.value);
+    const draft={...preferences,language:languageSelect.value,maxCachedCovers:Number(input.value),cacheMode:cacheMode.value==='ram'?'ram':'disk',cacheDirectory:draftCacheDirectory,
+      startMaximized:startMaximized.checked,coversOnly:coversOnly.checked,timeFormat:timeFormat.value,releaseDateFormat:releaseDateFormat.value,
+      autoUpdateCatalog:autoUpdateCatalog.checked,defaultRegion:canonicalImportRegion(defaultRegion.value)||DEFAULT_PREFERENCES.defaultRegion,
+      combineRegionStatistics:combineRegions.checked,useCatalogTitles:catalogTitles.checked,
+      launchScreen:launchScreenEditor?.read()||preferences.launchScreen,couchControls:controllerEditor?.read()||preferences.couchControls};
+    const next=scoped?{...preferences,...Object.fromEntries(resetKeys[resetScope].map(key=>[key,DEFAULT_PREFERENCES[key]]))}:draft;
+    const value=next.maxCachedCovers;
     if (!validCoverLimit(value)) {
       showCategory("data");
       showError(globalThis.OpenCabinetI18n.t("msg.51fff04dc7"));
       input.focus();
       return;
     }
-    if (!["12h", "24h"].includes(timeFormat.value)) {
+    if (!["12h", "24h"].includes(next.timeFormat)) {
       showCategory("library");
       showError(globalThis.OpenCabinetI18n.t("msg.ddac9839bd"));
       timeFormat.focus();
       return;
     }
-    if (!globalThis.OpenCabinetI18n.hasLocale(languageSelect.value)) {
+    if (!globalThis.OpenCabinetI18n.hasLocale(next.language)) {
       showCategory("startup"); showError(globalThis.OpenCabinetI18n.t("language.invalid")); return;
     }
-    if (!["DD-MM-YYYY","MM-DD-YYYY","YYYY-MM-DD"].includes(releaseDateFormat.value)) { showCategory("library");showError(globalThis.OpenCabinetI18n.t("preferences.invalidDateFormat"));return; }
-    const next = { ...preferences, language: languageSelect.value, maxCachedCovers: value,
-      cacheMode: cacheMode.value === "ram" ? "ram" : "disk", cacheDirectory: draftCacheDirectory,
-      startMaximized: startMaximized.checked, coversOnly: coversOnly.checked, timeFormat: timeFormat.value,
-      releaseDateFormat:releaseDateFormat.value,autoUpdateCatalog:autoUpdateCatalog.checked,
-      defaultRegion:canonicalImportRegion(defaultRegion.value)||DEFAULT_PREFERENCES.defaultRegion,
-      combineRegionStatistics: combineRegions.checked, useCatalogTitles: catalogTitles.checked,
-      launchScreen:launchScreenEditor?.read()||preferences.launchScreen, couchControls:controllerEditor?.read()||preferences.couchControls };
+    if (!["DD-MM-YYYY","MM-DD-YYYY","YYYY-MM-DD"].includes(next.releaseDateFormat)) { showCategory("library");showError(globalThis.OpenCabinetI18n.t("preferences.invalidDateFormat"));return; }
     let previous;
     saving = true; update();
     try {
-      if (next.cacheMode === "disk") await invoke("validate_cover_cache_directory", { cacheDirectory: next.cacheDirectory || null });
+      if ((!scoped||resetScope==='data')&&next.cacheMode === "disk") await invoke("validate_cover_cache_directory", { cacheDirectory: next.cacheDirectory || null });
       previous = window.localStorage.getItem(PREFERENCES_KEY);
       window.localStorage.setItem(PREFERENCES_KEY, JSON.stringify(next));
     } catch (reason) {
@@ -504,13 +532,13 @@ function setupPreferences() {
     update();
     try {
       const actionChanged = location.pending_directory && selection && selection.action !== (location.pending_action || "move");
-      if (draftDirectory !== (location.pending_directory || location.active_directory) || actionChanged) {
+      if ((!scoped||resetScope==='data')&&(draftDirectory !== (location.pending_directory || location.active_directory) || actionChanged)) {
         location = await invoke("schedule_data_directory", { directory: draftDirectory,
           directoryAction: selection?.action || location.pending_action || "move" });
       }
-      selection = null;
+      if(!scoped||resetScope==='data')selection = null;
       const languageChanged = next.language !== preferences.language;
-      if(draftCatalog!==undefined){
+      if((!scoped||resetScope==='metadata')&&draftCatalog!==undefined){
         const importStatus=document.getElementById('metadata-import-status');
         const importProgress=document.getElementById('metadata-import-progress');
         const currentRequest=request;
@@ -537,7 +565,7 @@ function setupPreferences() {
       if (next.language !== preferences.language) await invoke("save_ui_language", { language: next.language });
       const cacheChanged = preferences.cacheMode !== next.cacheMode || preferences.cacheDirectory !== next.cacheDirectory;
       const statisticsChanged = preferences.combineRegionStatistics !== next.combineRegionStatistics;
-      if(resettingDefaults){await invoke("save_backup_settings",{settings:{automatic:true,keep:7}});await themesPanel?.resetDefaults();resettingDefaults=false;}
+      if(resetScope==='all'){await invoke("save_backup_settings",{settings:{automatic:true,keep:7}});await themesPanel?.resetDefaults();}
       preferences = next;
       void invoke("save_backup_preferences", { preferences }).catch(reason => console.error(reason));
       allGames.forEach(projectRegionalStatistics);
@@ -552,8 +580,7 @@ function setupPreferences() {
       const selected=allGames.find(game=>game.id===selectedGameId);if(selected)showGameDetails(selected);
       saving = false;
       update();
-      if (!location.pending_directory) close();
-      else showCategory("data");
+      if(!scoped){if (!location.pending_directory) close();else showCategory("data");}
       showToast(!location.pending_directory ? globalThis.OpenCabinetI18n.t(languageChanged ? "language.changed" : "msg.1dacf61b0b") : location.pending_action === "use_existing"
         ? globalThis.OpenCabinetI18n.t("msg.4b41879dc5")
         : globalThis.OpenCabinetI18n.t("msg.76729405df"));
@@ -565,7 +592,8 @@ function setupPreferences() {
       } catch { /* Preserve the error from scheduling the move. */ }
       showError(globalThis.OpenCabinetI18n.t("msg.de4d0d614d", reason));
     } finally { saving = false; update(); }
-  });
+  }
+  document.getElementById("preferences-form").addEventListener("submit",savePreferences);
   restart.addEventListener("click", async () => {
     if (saving || choosing || !location?.pending_directory) return;
     if (draftDirectory !== location.pending_directory || Number(input.value) !== preferences.maxCachedCovers

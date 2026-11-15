@@ -78,3 +78,15 @@ recovering images under another profile does not import someone else's ratings
 or play totals. Legacy manifests without an owner belong to the original profile.
 
 Linux launcher quoting follows the [Desktop Entry specification](https://specifications.freedesktop.org/desktop-entry/latest/exec-variables.html).
+
+## Restoring preferences
+
+**Restore defaults** first offers the current section or all preferences, then
+asks for a second confirmation describing that scope. Restoring one section
+applies only its defaults and keeps Preferences open; saved settings and unsaved
+drafts in other sections remain untouched. Resetting the theme editor changes
+only the draft's colors/layout, preserving its name and author until **Save theme**.
+
+All-preference restoration retains the library, profiles, files, custom themes,
+existing backups and active data location. Profiles and Storage have no resettable
+settings, so their section-only option is disabled rather than removing data.

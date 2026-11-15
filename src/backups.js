@@ -21,10 +21,10 @@
       controls();return data;
     }
     async function run(action) {
-      if(busy||!loaded)return;
+      if(busy||!loaded)return false;
       busy=true;controls();status.textContent=t('backup.working');
       onBusyChange();
-      try { await action(); } catch(error){status.textContent=String(error);}
+      try { await action(); return true; } catch(error){status.textContent=String(error);return false;}
       finally {busy=false;controls();onBusyChange();}
     }
     function progress() {
@@ -68,7 +68,9 @@
       if(!canRestart())throw new Error(t('backup.finish_tasks'));
       await invoke('restart_for_data_move');
     }));
-    return { refresh, open, saveSettings, get busy() { return busy; } };
+    return { refresh, open, saveSettings,
+      resetDefaults:()=>run(async()=>{await invoke('save_backup_settings',{settings:{automatic:true,keep:7}});await refresh();get('backup-full').checked=false;status.textContent=t('backup.saved');}),
+      get busy() { return busy; } };
   }
   globalThis.OpenCabinetBackups={setup};
 })();

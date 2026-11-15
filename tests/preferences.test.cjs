@@ -117,17 +117,62 @@ test('Release date formats persist without changing stored dates and preserve pa
   const restarted=app(instance.storage);await restarted.open();assert.equal(restarted.get('preference-auto-update-catalog').checked,false);
 });
 
-test('Restoring defaults requires confirmation, resets settings and retains the active data folder',async()=>{
+async function restore(instance,scope='all',confirmation='reset'){
+  const pending=instance.get('btn-reset-preferences').handlers.click();
+  instance.get('preferences-reset-scope').returnValue=scope;instance.get('preferences-reset-scope').close();
+  await new Promise(setImmediate);
+  if(['all','section'].includes(scope)){
+    assert.equal(instance.get('preferences-reset-confirm').open,true);
+    instance.get('preferences-reset-confirm').returnValue=confirmation;instance.get('preferences-reset-confirm').close();
+  }
+  await pending;
+}
+
+test('Restoring all defaults requires scope selection and a second confirmation and retains the active data folder',async()=>{
   const storage=new Map([['opencabinet.preferences',JSON.stringify({maxCachedCovers:222,cacheMode:'ram',coversOnly:true,autoUpdateCatalog:false,releaseDateFormat:'MM-DD-YYYY'})]]);
   const instance=app(storage,false,{location:{active_directory:'D:/Library',default_directory:'C:/Default',pending_directory:null}});await instance.open();
-  let reset=instance.get('btn-reset-preferences').handlers.click();instance.get('preferences-reset-confirm').returnValue='cancel';instance.get('preferences-reset-confirm').close();await reset;
+  await restore(instance,'cancel');
   assert.equal(JSON.parse(storage.get('opencabinet.preferences')).maxCachedCovers,222);
-  reset=instance.get('btn-reset-preferences').handlers.click();instance.get('preferences-reset-confirm').returnValue='reset';instance.get('preferences-reset-confirm').close();await reset;
+  await restore(instance,'all','cancel');
+  assert.equal(JSON.parse(storage.get('opencabinet.preferences')).maxCachedCovers,222);
+  await restore(instance,'all');
   for(let i=0;i<10;i++)await new Promise(setImmediate);
   assert.deepEqual(JSON.parse(storage.get('opencabinet.preferences')),JSON.parse(instance.evaluate('JSON.stringify(DEFAULT_PREFERENCES)')));
   assert.equal(instance.calls.some(call=>call.command==='schedule_data_directory'),false);
   assert.equal(instance.calls.find(call=>call.command==='set_metadata_catalog').args.catalog,null);
   assert.deepEqual(JSON.parse(JSON.stringify(instance.calls.find(call=>call.command==='save_backup_settings').args.settings)),{automatic:true,keep:7});
+});
+
+test('Restoring one section preserves other saved preferences and unsaved drafts without applying catalog or directory changes',async()=>{
+  const storage=new Map([['opencabinet.preferences',JSON.stringify({startMaximized:true,maxCachedCovers:222,cacheMode:'ram',coversOnly:true,
+    timeFormat:'12h',autoUpdateCatalog:false,releaseDateFormat:'MM-DD-YYYY',useCatalogTitles:false})]]);
+  const instance=app(storage,false,{invoke:async(command)=>command==='choose_metadata_catalog'?'C:/custom.db':undefined});await instance.open();
+  instance.get('preference-start-maximized').checked=false;instance.get('preference-cover-limit').value='999';
+  await instance.get('btn-import-metadata-catalog').handlers.click();
+  instance.get('preferences-tab-library').handlers.click();await restore(instance,'section','cancel');
+  assert.equal(instance.get('preference-covers-only').checked,true);
+  await restore(instance,'section');
+  const saved=JSON.parse(storage.get('opencabinet.preferences'));
+  assert.equal(saved.coversOnly,false);assert.equal(saved.timeFormat,'24h');assert.equal(saved.releaseDateFormat,'DD-MM-YYYY');
+  assert.equal(saved.startMaximized,true);assert.equal(saved.maxCachedCovers,222);assert.equal(saved.cacheMode,'ram');assert.equal(saved.useCatalogTitles,false);assert.equal(saved.autoUpdateCatalog,false);
+  assert.equal(instance.get('preference-start-maximized').checked,false);assert.equal(instance.get('preference-cover-limit').value,'999');
+  assert.equal(instance.get('preference-metadata-catalog').value,'C:/custom.db');assert.equal(instance.get('preferences-dialog').open,true);
+  assert.equal(instance.calls.some(call=>['schedule_data_directory','set_metadata_catalog','save_backup_settings'].includes(call.command)),false);
+});
+
+test('Startup-screen defaults restore independently and backup-section defaults affect only automatic backup settings',async()=>{
+  const storage=new Map([['opencabinet.preferences',JSON.stringify({coversOnly:true,cacheMode:'ram',launchScreen:{enabled:false,timeoutSeconds:50}})]]);
+  let backup={automatic:false,keep:20};
+  const instance=app(storage,false,{backups:true,invoke:async(command,args)=>{
+    if(command==='get_backup_status')return {settings:backup,directory:'C:/backups',entries:[]};
+    if(command==='save_backup_settings')backup=args.settings;
+  }});await instance.open();instance.get('preferences-tab-launch').handlers.click();await restore(instance,'section');
+  let saved=JSON.parse(storage.get('opencabinet.preferences'));assert.equal(saved.launchScreen.enabled,true);assert.equal(saved.launchScreen.timeoutSeconds,5);
+  assert.equal(saved.coversOnly,true);assert.equal(saved.cacheMode,'ram');
+  const previous=storage.get('opencabinet.preferences');instance.get('preferences-tab-backups').handlers.click();await new Promise(setImmediate);
+  instance.get('backup-full').checked=true;await restore(instance,'section');
+  assert.deepEqual(JSON.parse(JSON.stringify(backup)),{automatic:true,keep:7});assert.equal(instance.get('backup-full').checked,false);
+  assert.equal(storage.get('opencabinet.preferences'),previous);assert.equal(instance.get('preferences-dialog').open,true);
 });
 
 test('User Data separates backups from folder settings and preserves drafts when switching pages',async()=>{

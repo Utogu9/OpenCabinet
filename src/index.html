@@ -1466,8 +1466,14 @@
       </form>
     </dialog>
 
-    <dialog id="preferences-reset-confirm" class="confirmation-dialog" aria-labelledby="preferences-reset-title">
-      <form method="dialog" class="modal-body"><h3 id="preferences-reset-title" data-i18n="preferences.reset"></h3><p data-i18n="preferences.resetConfirm"></p>
+    <dialog id="preferences-reset-scope" class="confirmation-dialog" aria-labelledby="preferences-reset-scope-title" aria-describedby="preferences-reset-scope-help">
+      <form method="dialog" class="modal-body"><h3 id="preferences-reset-scope-title" data-i18n="preferences.reset"></h3><p id="preferences-reset-scope-help" data-i18n="preferences.resetChoose"></p>
+        <div class="reset-scope-actions"><button type="submit" id="preferences-reset-section" value="section" class="secondary-btn"></button><p id="preferences-reset-unavailable" class="preference-help hidden" data-i18n="preferences.resetUnavailable"></p><button type="submit" value="all" class="secondary-btn" data-i18n="preferences.resetAll"></button></div>
+        <div class="form-actions"><button type="submit" value="cancel" class="secondary-btn" data-i18n="msg.bb9dbb406d" autofocus></button></div>
+      </form>
+    </dialog>
+    <dialog id="preferences-reset-confirm" class="confirmation-dialog" aria-labelledby="preferences-reset-title" aria-describedby="preferences-reset-message">
+      <form method="dialog" class="modal-body"><h3 id="preferences-reset-title" data-i18n="preferences.reset"></h3><p id="preferences-reset-message"></p>
         <div class="form-actions"><button type="submit" value="cancel" class="secondary-btn" data-i18n="msg.bb9dbb406d" autofocus></button><button type="submit" value="reset" class="primary-btn" data-i18n="preferences.reset"></button></div>
       </form>
     </dialog>

@@ -226,7 +226,11 @@
         renderList();controls();
       },
       close(){if(!busy)cancelDraft();},
-      async resetDefaults(){await this.load();const saved=validateLibrary(await invoke('get_theme_library'));draft=null;await persist({...saved,active:defaults.id});ui?.closeEditor();},
+      async resetDefaults(){await this.load();if(busy)return false;busy=true;controls();
+        try{const saved=validateLibrary(await invoke('get_theme_library'));draft=null;await persist({...saved,active:defaults.id});ui?.closeEditor();return true;}
+        finally{busy=false;controls();}},
+      resetEditorDefaults(){if(busy||!draft)return false;
+        edit({...draft,name:get('theme-name').value,author:get('theme-author').value,colors:copy(defaults.colors),layout:copy(defaults.layout)});return true;},
     };
   }
   globalThis.OpenCabinetThemes={FORMAT,COLORS,SECTIONS,FIELDS,builtins:copy(builtins),validate,validateLibrary,apply,create};
