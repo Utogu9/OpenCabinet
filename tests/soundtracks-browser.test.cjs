@@ -52,7 +52,10 @@ test('The OST player plays and seeks real audio, survives rapid selection, and r
  await page.evaluate(()=>player.open({id:1,title:'Game'},{expandPlaying:true}));assert.equal(await page.locator('#ost-player').isVisible(),true);
  assert.equal(await page.evaluate(()=>fixtureAudio.paused),false,'Listen to soundtrack expands active playback without restarting it');
  assert.equal(await page.evaluate(()=>calls.filter(c=>c.command==='prepare_ost_track').length),requestCount);
- await page.locator('#ost-close').click();await page.locator('#ost-player').waitFor({state:'hidden'});
+ await page.locator('#ost-player-title').click();assert.equal(await page.locator('#ost-player').isVisible(),true,'clicking inside keeps the expanded player open');
+ await page.mouse.click(5,5);await page.locator('#ost-player').waitFor({state:'hidden'});
+ assert.equal(await page.locator('#ost-sidebar').isVisible(),true,'clicking the backdrop minimizes to the sidebar');
+ assert.equal(await page.evaluate(()=>fixtureAudio.paused),false,'minimizing preserves playback');
  await page.evaluate(()=>player.open({id:99,title:'Merged game',regions:[{game:{id:1}}]},{expandPlaying:true}));
  assert.equal(await page.locator('#ost-player').isVisible(),true,'merged game context actions recognize their playing soundtrack edition');
  await page.locator('#ost-close').click();await page.locator('#ost-player').waitFor({state:'hidden'});
@@ -83,7 +86,7 @@ test('The OST player plays and seeks real audio, survives rapid selection, and r
  await page.locator('#ost-mute').click();assert.equal(await page.evaluate(()=>fixtureAudio.muted),true);
  assert.equal(await page.locator('#ost-sidebar-mute .ui-icon').getAttribute('data-icon'),'volume-x');
  await page.locator('#ost-mute').click();await page.screenshot({path:'target/ost-player.png'});
- await page.locator('#ost-close').click();await page.locator('#ost-mini').waitFor({state:'visible'});
+ await page.mouse.click(5,5);await page.locator('#ost-mini').waitFor({state:'visible'});
  await page.locator('#ost-mini-move').click();assert.equal(await page.locator('#ost-sidebar').isVisible(),true);
  await page.locator('#ost-sidebar-stop').click();assert.equal(await page.locator('#ost-mini').isVisible(),false);
  await page.evaluate(()=>{prefs.autoplayOST=true;player.select({id:2,title:'Slow'});});await page.waitForFunction(()=>calls.some(c=>c.command==='get_game_soundtracks'&&c.args.id===2));

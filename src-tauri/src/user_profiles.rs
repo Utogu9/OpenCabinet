@@ -30,10 +30,16 @@ pub fn init(conn:&Connection)->rusqlite::Result<()> {
             INSERT OR REPLACE INTO user_profile_games VALUES((SELECT active FROM user_profile_state),NEW.id,NEW.play_time_seconds,NEW.session_count,NEW.last_played); END;
         CREATE TRIGGER IF NOT EXISTS profile_game_update AFTER UPDATE OF play_time_seconds,session_count,last_played ON games WHEN (SELECT switching FROM user_profile_state)=0 BEGIN
             INSERT OR REPLACE INTO user_profile_games VALUES((SELECT active FROM user_profile_state),NEW.id,NEW.play_time_seconds,NEW.session_count,NEW.last_played); END;
-        CREATE TRIGGER IF NOT EXISTS profile_personal_insert AFTER INSERT ON game_personal WHEN (SELECT switching FROM user_profile_state)=0 BEGIN
-            INSERT OR REPLACE INTO user_profile_personal VALUES((SELECT active FROM user_profile_state),NEW.game_id,NEW.data); END;
-        CREATE TRIGGER IF NOT EXISTS profile_personal_update AFTER UPDATE ON game_personal WHEN (SELECT switching FROM user_profile_state)=0 BEGIN
-            INSERT OR REPLACE INTO user_profile_personal VALUES((SELECT active FROM user_profile_state),NEW.game_id,NEW.data); END;
+        -- An outer UPSERT overrides a trigger's OR REPLACE conflict policy.
+        -- Recreate these triggers to upgrade existing libraries without changing their data.
+        DROP TRIGGER IF EXISTS profile_personal_insert;
+        DROP TRIGGER IF EXISTS profile_personal_update;
+        CREATE TRIGGER profile_personal_insert AFTER INSERT ON game_personal WHEN (SELECT switching FROM user_profile_state)=0 BEGIN
+            INSERT INTO user_profile_personal VALUES((SELECT active FROM user_profile_state),NEW.game_id,NEW.data)
+            ON CONFLICT(profile_id,game_id) DO UPDATE SET data=excluded.data; END;
+        CREATE TRIGGER profile_personal_update AFTER UPDATE ON game_personal WHEN (SELECT switching FROM user_profile_state)=0 BEGIN
+            INSERT INTO user_profile_personal VALUES((SELECT active FROM user_profile_state),NEW.game_id,NEW.data)
+            ON CONFLICT(profile_id,game_id) DO UPDATE SET data=excluded.data; END;
         CREATE TRIGGER IF NOT EXISTS profile_personal_delete AFTER DELETE ON game_personal WHEN (SELECT switching FROM user_profile_state)=0 BEGIN
             DELETE FROM user_profile_personal WHERE profile_id=(SELECT active FROM user_profile_state) AND game_id=OLD.game_id; END;
         CREATE TRIGGER IF NOT EXISTS profile_session_insert AFTER INSERT ON play_sessions WHEN (SELECT switching FROM user_profile_state)=0 BEGIN
@@ -130,6 +136,38 @@ mod tests {
         init(&conn).unwrap();conn.execute("INSERT INTO user_profiles VALUES(2,'Second')",[]).unwrap();conn
     }
     fn stats(conn:&Connection)->(i64,i64){conn.query_row("SELECT play_time_seconds,session_count FROM games WHERE id=1",[],|r|Ok((r.get(0)?,r.get(1)?))).unwrap()}
+    #[test]fn repeated_personal_edits_update_the_active_profile_and_survive_switching(){
+        let mut conn=fixture();
+        let mut value=crate::library_features::read(&conn,1).unwrap();
+        for rating in [4,2,0,5]{
+            value.rating=rating;crate::library_features::save(&conn,1,&value).unwrap();
+            assert_eq!(crate::library_features::read(&conn,1).unwrap(),value);
+        }
+        switch(&mut conn,2).unwrap();
+        let mut other=crate::library_features::Personal::default();
+        for rating in [1,3]{
+            other.rating=rating;other.favorite=true;other.notes="Second profile".into();
+            crate::library_features::save(&conn,1,&other).unwrap();
+        }
+        switch(&mut conn,1).unwrap();assert_eq!(crate::library_features::read(&conn,1).unwrap(),value);
+        switch(&mut conn,2).unwrap();assert_eq!(crate::library_features::read(&conn,1).unwrap(),other);
+    }
+    #[test]fn reinitialization_replaces_legacy_personal_triggers_without_losing_data(){
+        let mut conn=fixture();
+        conn.execute_batch("DROP TRIGGER profile_personal_insert;DROP TRIGGER profile_personal_update;
+            CREATE TRIGGER profile_personal_insert AFTER INSERT ON game_personal WHEN (SELECT switching FROM user_profile_state)=0 BEGIN
+                INSERT OR REPLACE INTO user_profile_personal VALUES((SELECT active FROM user_profile_state),NEW.game_id,NEW.data); END;
+            CREATE TRIGGER profile_personal_update AFTER UPDATE ON game_personal WHEN (SELECT switching FROM user_profile_state)=0 BEGIN
+                INSERT OR REPLACE INTO user_profile_personal VALUES((SELECT active FROM user_profile_state),NEW.game_id,NEW.data); END;").unwrap();
+        let original=crate::library_features::read(&conn,1).unwrap();
+        init(&conn).unwrap();init(&conn).unwrap();
+        assert_eq!(crate::library_features::read(&conn,1).unwrap(),original);
+        let mut changed=original;changed.rating=2;
+        crate::library_features::save(&conn,1,&changed).unwrap();
+        switch(&mut conn,2).unwrap();switch(&mut conn,1).unwrap();
+        assert_eq!(crate::library_features::read(&conn,1).unwrap(),changed);
+        assert_eq!(conn.query_row("SELECT COUNT(*) FROM user_profile_personal WHERE profile_id=1 AND game_id=1",[],|r|r.get::<_,i64>(0)).unwrap(),1);
+    }
     #[test]fn migrates_existing_data_and_keeps_personal_data_history_and_totals_isolated(){
         let mut conn=fixture();assert_eq!(active(&conn),1);assert_eq!(stats(&conn),(120,2));
         switch(&mut conn,2).unwrap();assert_eq!(stats(&conn),(0,0));assert_eq!(conn.query_row("SELECT COUNT(*) FROM play_sessions",[],|r|r.get::<_,i64>(0)).unwrap(),0);

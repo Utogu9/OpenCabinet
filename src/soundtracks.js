@@ -173,6 +173,17 @@
       if(!playback){void play(index>=0?index:album.tracks.findIndex(t=>t.available));return;}
       if(audio.paused){if(playback.end!=null&&audio.currentTime>=playback.end-0.05)audio.currentTime=playback.start||0;audio.play().catch(e=>{status.textContent=t('ost.playFailed',String(e));});}else audio.pause();};
     get('ost-close').onclick=()=>modal.close();
+    let pressedBackdrop=false;
+    function outsidePlayer(event){
+      const bounds=modal.getBoundingClientRect();
+      return event.target===modal&&(event.clientX<bounds.left||event.clientX>bounds.right||event.clientY<bounds.top||event.clientY>bounds.bottom);
+    }
+    modal.addEventListener('pointerdown',event=>{pressedBackdrop=event.button===0&&outsidePlayer(event);});
+    modal.addEventListener('pointercancel',()=>{pressedBackdrop=false;});
+    modal.addEventListener('click',event=>{
+      const minimize=pressedBackdrop&&outsidePlayer(event);pressedBackdrop=false;
+      if(minimize)modal.close();
+    });
     modal.addEventListener('close',()=>{cancelSelection();state();});
     get('ost-toggle').onclick=toggle;get('ost-stop').onclick=halt;
     get('ost-prev').onclick=()=>next(-1);get('ost-next').onclick=()=>next();
