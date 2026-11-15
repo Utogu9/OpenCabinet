@@ -16,7 +16,7 @@ function environment() {
   const node=selector=>{const n=new Node(selector);nodes.set(selector,n);return n;};
   const main=node('main'),content=node('#details-content'),root=node('root');
   for(const selector of ['.library-sidebar','#catalog-scroll','#game-details-panel','#details-resizer'])main.appendChild(node(selector));
-  for(const selector of ['#details-logo-container','#details-title','#details-platform','#details-gallery','#btn-play-game','.platform-play-actions','.details-meta-grid','#game-information','.details-info-box.platform-only','#game-description','#ost-sidebar'])content.appendChild(node(selector));
+  for(const selector of ['#details-logo-container','#details-title','#details-platform','#details-gallery','#btn-play-game','.platform-play-actions','.details-meta-grid','#game-information','.details-info-box.platform-only','#ra-sidebar','#game-description','#ost-sidebar'])content.appendChild(node(selector));
   const field=node('#details-genre'),row=new Node('genre-row');row.appendChild(field);
   document={documentElement:root,querySelector:s=>nodes.get(s)||null,getElementById:id=>nodes.get('#'+id)||null,activeElement:null};
   const window={CustomEvent:class{constructor(type,args){this.type=type;this.detail=args.detail;}},dispatchEvent:e=>events.push(e),localStorage:{getItem:()=>null,setItem(){}},crypto:{randomUUID:()=> 'test'}};
@@ -72,6 +72,19 @@ test('Music is a normal theme section: order and visibility round-trip and move 
   saved.layout.sections.splice(3,0,saved.layout.sections.shift());saved.layout.sections[3].visible=true;
   const restored=JSON.parse(JSON.stringify(e.api.validate(saved)));assert.equal(restored.layout.sections[3].id,'music');assert.equal(restored.layout.showMusicPlayer,true);
   e.api.apply(restored,{document:e.document,window:e.window});assert.equal(e.content.children[4].id,'#ost-sidebar');
+});
+
+test('Achievements normalize older theme formats and remain independently reorderable and hideable',()=>{
+  const e=environment();
+  for(const missing of [['achievements'],['achievements','music'],['music']]){
+    const old=JSON.parse(JSON.stringify(e.api.builtins[0]));old.layout.sections=old.layout.sections.filter(s=>!missing.includes(s.id));
+    const restored=e.api.validate(old);assert.equal(restored.layout.sections.filter(s=>s.id==='achievements').length,1);
+    assert.equal(restored.layout.sections.filter(s=>s.id==='music').length,1);
+  }
+  const theme=JSON.parse(JSON.stringify(e.api.builtins[0])),index=theme.layout.sections.findIndex(s=>s.id==='achievements');
+  const section=theme.layout.sections.splice(index,1)[0];section.visible=false;theme.layout.sections.unshift(section);
+  const saved=e.api.validate(JSON.parse(JSON.stringify(theme)));e.api.apply(saved,{document:e.document,window:e.window});
+  assert.equal(e.content.children[0].id,'#ra-sidebar');assert.equal(e.nodes.get('#ra-sidebar').attrs['data-theme-hidden'],'true');
 });
 
 test('Applying layouts moves existing panels, preserves their focus and toggles fields independently',()=>{

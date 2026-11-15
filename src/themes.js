@@ -7,7 +7,7 @@
     text:'--text-main', muted:'--text-muted', border:'--border-color', danger:'--danger-color',
     dangerHover:'--danger-hover', success:'--success-color', warning:'--warning-text', buttonText:'--button-text',
   };
-  const SECTIONS = ['logo','identity','media','play','summary','information','description','music'];
+  const SECTIONS = ['logo','identity','media','play','summary','information','achievements','description','music'];
   const FIELDS = ['release','developer','publisher','playtime','genre','mode','file','lastPlayed','players',
     'totalGames','emulator','lastGame','sessions','totalTime','mostPlayed'];
   const PANELS = ['library','catalog','details'];
@@ -26,11 +26,11 @@
     {...copy(defaults),id:'builtin-spotlight',name:'Spotlight',
       colors:{...defaults.colors,background:'#171410',surface:'#231f1a',hover:'#343027',dialog:'#1d1914',sidebar:'#1d1914',titlebar:'#110f0c',accent:'#d9a24b',accentHover:'#b98536',text:'#faf2e3',muted:'#baa98e',border:'#41392d'},
       layout:{...copy(defaults.layout),panels:['details','catalog','library'],libraryWidth:200,detailsWidth:440,coverSize:180,gap:24,
-        sections:['identity','play','media','summary','information','description','logo','music'].map(id=>({id,visible:id!=='logo'}))}},
+        sections:['identity','play','media','summary','information','description','logo','achievements','music'].map(id=>({id,visible:id!=='logo'}))}},
     {...copy(defaults),id:'builtin-gallery',name:'Gallery',
       colors:{...defaults.colors,background:'#10151e',surface:'#182231',hover:'#243249',dialog:'#141e2b',sidebar:'#121b27',titlebar:'#0b1119',accent:'#54c5d0',accentHover:'#389ca5',text:'#eef5fb',muted:'#a2b4c6',border:'#2a3a4f'},
       layout:{...copy(defaults.layout),panels:['catalog','details','library'],libraryWidth:200,detailsWidth:360,coverSize:210,gap:28,radius:12,
-        sections:['media','identity','play','summary','logo','description','information','music'].map(id=>({id,visible:!['logo','information','description'].includes(id)})),hiddenFields:['developer','publisher']}},
+        sections:['media','identity','play','summary','logo','description','information','achievements','music'].map(id=>({id,visible:!['logo','information','description'].includes(id)})),hiddenFields:['developer','publisher']}},
   ];
   const invalid = () => new Error(t('themes.invalid'));
   function keys(value, names) { return value && typeof value==='object' && !Array.isArray(value)
@@ -47,12 +47,13 @@
     if(!keys(l,['panels','libraryWidth','detailsWidth','coverSize','gap','radius','sections','hiddenFields',...['mediaMode','showMusicPlayer'].filter(key=>Object.prototype.hasOwnProperty.call(l||{},key))])
       || (l.mediaMode!==undefined&&!['both','photos','box'].includes(l.mediaMode))
       || (Object.prototype.hasOwnProperty.call(l,'showMusicPlayer')&&typeof l.showMusicPlayer!=='boolean')
-      || !permutation(l.panels,PANELS) || !Array.isArray(l.sections) || ![SECTIONS,SECTIONS.filter(id=>id!=='music')].some(ids=>permutation(l.sections.map(s=>s?.id),ids))
+      || !permutation(l.panels,PANELS) || !Array.isArray(l.sections) || ![SECTIONS,SECTIONS.filter(id=>id!=='music'),SECTIONS.filter(id=>id!=='achievements'),SECTIONS.filter(id=>!['music','achievements'].includes(id))].some(ids=>permutation(l.sections.map(s=>s?.id),ids))
       || l.sections.some(s=>!keys(s,['id','visible'])||typeof s.visible!=='boolean')
       || !Array.isArray(l.hiddenFields) || new Set(l.hiddenFields).size!==l.hiddenFields.length || l.hiddenFields.some(f=>!FIELDS.includes(f))) throw invalid();
     for(const [key,min,max] of [['libraryWidth',160,420],['detailsWidth',260,800],['coverSize',100,320],['gap',0,48],['radius',0,24]])
       if(!Number.isInteger(l[key])||l[key]<min||l[key]>max) throw invalid();
-    const sections=l.sections.some(s=>s.id==='music')?l.sections:[...l.sections,{id:'music',visible:l.showMusicPlayer??true}];
+    const sections=l.sections.some(s=>s.id==='music')?[...l.sections]:[...l.sections,{id:'music',visible:l.showMusicPlayer??true}];
+    if(!sections.some(s=>s.id==='achievements'))sections.splice(sections.findIndex(s=>s.id==='description'),0,{id:'achievements',visible:true});
     return copy({...value,layout:{...l,sections,showMusicPlayer:sections.find(s=>s.id==='music').visible}});
   }
   function validateLibrary(value) {
@@ -65,7 +66,7 @@
   const sectionSelectors = {
     logo:['#details-logo-container'],identity:['#details-title','#details-platform'],media:['#details-gallery'],
     play:['#btn-play-game','.platform-play-actions'],summary:['.details-meta-grid'],
-    information:['#game-information','.details-info-box.platform-only','#personal-game-information'],description:['#game-description'],music:['#ost-sidebar'],
+    information:['#game-information','.details-info-box.platform-only','#personal-game-information'],description:['#game-description'],achievements:['#ra-sidebar'],music:['#ost-sidebar'],
   };
   const fieldIds = ['details-release-date','details-developer','details-publisher','details-play-time','details-genre','details-game-mode','details-rom-file','details-last-played','details-max-players',
     'platform-total-games','platform-default-emulator','platform-last-game','platform-sessions','platform-total-time','platform-most-game'];

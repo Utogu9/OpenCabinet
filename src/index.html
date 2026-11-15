@@ -235,6 +235,7 @@
             <h3 id="details-description-title"><span data-i18n="msg.ee00b96fff"></span></h3>
             <p id="details-description"><span data-i18n="msg.591e5cef97"></span></p>
           </section>
+        <section id="ra-sidebar" class="details-info-box game-only hidden" data-i18n-aria-label="ra.title"></section>
         <section id="ost-sidebar" class="ost-compact ost-sidebar hidden" data-i18n-aria-label="ost.title"></section>
         </div>
       </aside>
@@ -1259,6 +1260,7 @@
             <button id="preferences-tab-launch" type="button" role="tab" aria-controls="preferences-panel-launch" aria-selected="false" tabindex="-1" data-i18n="launchScreen.title"></button>
             <button id="preferences-tab-controller" type="button" role="tab" aria-controls="preferences-panel-controller" aria-selected="false" tabindex="-1" data-i18n="controller.title"></button>
             <button id="preferences-tab-profiles" type="button" role="tab" aria-controls="preferences-panel-profiles" aria-selected="false" tabindex="-1" data-i18n="profiles.title"></button>
+            <button id="preferences-tab-achievements" type="button" role="tab" aria-controls="preferences-panel-achievements" aria-selected="false" tabindex="-1" data-i18n="ra.service"></button>
             <button id="preferences-tab-themes" type="button" role="tab" aria-controls="preferences-panel-themes" aria-selected="false" tabindex="-1" data-i18n="themes.title"></button>
             <div id="preferences-theme-editor-row" class="preferences-subcategory-row hidden" role="presentation">
               <button id="preferences-tab-theme-editor" class="preferences-subcategory hidden" type="button" role="tab" aria-controls="preferences-panel-theme-editor" aria-selected="false" tabindex="-1" data-i18n="themes.editor"></button>
@@ -1284,6 +1286,7 @@
         </section>
         <section id="preferences-panel-controller" class="preferences-section hidden" role="tabpanel" aria-labelledby="preferences-tab-controller"><h3 data-i18n="controller.title"></h3><p class="preference-help" data-i18n="controller.help"></p><div id="controller-settings" class="controller-settings"></div></section>
         <section id="preferences-panel-profiles" class="preferences-section hidden" role="tabpanel" aria-labelledby="preferences-tab-profiles"><h3 data-i18n="profiles.title"></h3><p class="preference-help" data-i18n="profiles.help"></p><div id="user-profiles"></div></section>
+        <section id="preferences-panel-achievements" class="preferences-section hidden" role="tabpanel" aria-labelledby="preferences-tab-achievements"><h3 data-i18n="ra.service"></h3><p class="preference-help" data-i18n="ra.help"></p><div id="ra-settings"></div></section>
         <section id="preferences-panel-launch" class="preferences-section hidden" role="tabpanel" aria-labelledby="preferences-tab-launch">
           <h3 data-i18n="launchScreen.title"></h3>
           <label class="preference-toggle"><input id="launch-screen-enabled" type="checkbox"><span data-i18n="launchScreen.enabled"></span></label>
@@ -1662,6 +1665,7 @@
     </dialog>
     <aside id="ost-mini" class="import-task ost-compact ost-mini hidden" data-i18n-aria-label="ost.title"></aside>
     <script src="soundtracks.js"></script>
+    <script src="retroachievements.js"></script>
     <script src="game-regions.js"></script>
     <script src="game-order.js"></script>
     <script src="keyboard-navigation.js"></script>

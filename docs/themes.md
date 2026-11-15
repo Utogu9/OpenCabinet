@@ -60,3 +60,7 @@ visibility. Hiding this section does not hide the floating or expanded player.
 
 Native saves use a temporary file and atomic replacement. Startup reconciles an
 interrupted write without replacing an already valid library with partial data.
+
+The `achievements` section controls the RetroAchievements panel in the same way.
+Older themes acquire a visible achievements section before the description;
+existing sections keep their relative order.

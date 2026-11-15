@@ -23,7 +23,7 @@ serde_json = "1"
 rusqlite = { version = "0.40.2", features = ["bundled", "hooks", "backup"] }
 rfd = "0.15"
 reqwest = { version = "0.12", default-features = false, features = ["rustls-tls"] }
-tokio = { version = "1", features = ["sync", "macros"] }
+tokio = { version = "1", features = ["sync", "macros", "time"] }
 quick-xml = "0.38"
 zip = { version = "9", default-features = false, features = ["deflate"] }
 unicode-normalization = "0.1"
@@ -37,7 +37,7 @@ image = { version = "0.25.10", default-features = false, features = ["png", "jpe
 
 [target.'cfg(windows)'.dependencies]
 winreg = "0.56"
-windows-sys = { version = "0.61.2", features = ["Win32_Foundation", "Win32_Globalization", "Win32_System_Diagnostics_ToolHelp", "Win32_System_Threading", "Win32_UI_WindowsAndMessaging", "Win32_UI_Shell"] }
+windows-sys = { version = "0.61.2", features = ["Win32_Foundation", "Win32_Globalization", "Win32_System_Diagnostics_ToolHelp", "Win32_System_Threading", "Win32_UI_WindowsAndMessaging", "Win32_UI_Shell", "Win32_Security_Cryptography", "Win32_Storage_FileSystem"] }
 
 [profile.release]
 codegen-units = 1

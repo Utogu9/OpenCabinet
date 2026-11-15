@@ -2,6 +2,9 @@ let appFeatures = null;
 let libraryPlay = null;
 let gameShortcuts=null;
 let soundtrackPlayer=null;
+let achievementsPanel=null;
+function getAchievements(){return achievementsPanel??=globalThis.OpenCabinetAchievements?.create({document,invoke,getEdition:regionalGame,
+  onPreferences:()=>window.dispatchEvent(new Event('opencabinet:achievements-settings')),onError:error=>showToast(String(error),true)});}
 function getSoundtracks(){return soundtrackPlayer??=globalThis.OpenCabinetOST?.create({document,invoke,imageSource,getPreferences:()=>preferences,onError:error=>showToast(String(error),true)});}
 const invoke = (...args) => window.__TAURI__.core.invoke(...args).catch(error => {
   globalThis.OpenCabinetMaintenance?.record(error, `command:${args[0]}`);
@@ -258,8 +261,8 @@ function setupPreferences() {
   }
   showThemeEditorTab(false);
   const maintenancePanel = globalThis.OpenCabinetMaintenance?.setup({ document, invoke, getPreferences: () => preferences, onBusyChange: update });
-  function updateSaveVisibility() { save.classList.toggle("hidden", ["profiles", "backups", "storage", "themes", "theme-editor"].includes(preferenceCategory)); }
-  const tabs = ["startup", "library", "launch", "controller", "profiles", "themes", "theme-editor", "metadata", "data", "storage", "backups"].map(name => ({
+  function updateSaveVisibility() { save.classList.toggle("hidden", ["profiles", "achievements", "backups", "storage", "themes", "theme-editor"].includes(preferenceCategory)); }
+  const tabs = ["startup", "library", "launch", "controller", "profiles", "achievements", "themes", "theme-editor", "metadata", "data", "storage", "backups"].map(name => ({
     name, button: document.getElementById(`preferences-tab-${name}`),
     panel: document.getElementById(`preferences-panel-${name}`),
   }));
@@ -272,6 +275,8 @@ function setupPreferences() {
     if (name === "backups") void backupsPanel?.open();
     if (name === "storage") void maintenancePanel?.open();
     if (name === "profiles") void profilesPanel?.open();
+    if (name === "achievements") void getAchievements()?.openSettings();
+    else achievementsPanel?.clearSecret();
     document.getElementById("preferences-panels").scrollTop = 0;
     tabs.forEach(tab => {
       const active = tab.name === name;
@@ -298,6 +303,7 @@ function setupPreferences() {
   document.getElementById('btn-open-profiles')?.addEventListener('click',event=>{
     event.stopPropagation();openButton.click();showCategory('profiles');
   });
+  window.addEventListener('opencabinet:achievements-settings',()=>{openButton.click();showCategory('achievements');});
 
   function readLocation() {
     if (!reading) reading = invoke("get_data_location").finally(() => { reading = null; });
@@ -356,7 +362,7 @@ function setupPreferences() {
     canRestart: () => !scanInProgress && !launchingGames.size && !allGames.some(game => game.is_running) });
   profilesPanel=globalThis.OpenCabinetProfiles?.create({host:document.getElementById('user-profiles'),document,invoke,confirm:confirmDeletion,onBusyChange:update,
     canSwitch:()=>!libraryLoading&&!scanInProgress&&!launchingGames.size&&!launchPresentation?.active&&!allGames.some(game=>game.is_running)&&!deletingGames,
-    onChanged:async()=>{sofaMode?.close();selectedGameIds.clear();platformDetailsCache.clear();await loadGames();const game=allGames.find(game=>game.id===selectedGameId);if(game)showGameDetails(game);showToast(globalThis.OpenCabinetI18n.t('profiles.changed'));}});
+    onChanged:async()=>{achievementsPanel?.invalidate();sofaMode?.close();selectedGameIds.clear();platformDetailsCache.clear();await loadGames();const game=allGames.find(game=>game.id===selectedGameId);if(game)showGameDetails(game);showToast(globalThis.OpenCabinetI18n.t('profiles.changed'));}});
   function close() { if (!saving && !choosing && !backupsPanel?.busy && !themesPanel?.busy && !maintenancePanel?.busy && !profilesPanel?.busy) { controllerEditor?.cancel();themesPanel?.close(); dialog.close(); } }
   openButton.addEventListener("click", async (event) => {
     event.stopPropagation();
@@ -397,7 +403,7 @@ function setupPreferences() {
     }
     if (currentRequest === request) update();
   });
-  dialog.addEventListener("close", () => { request++; themesPanel?.close(); });
+  dialog.addEventListener("close", () => { request++; themesPanel?.close(); achievementsPanel?.clearSecret(); });
   dialog.addEventListener("cancel", (event) => { if (saving || choosing || backupsPanel?.busy || themesPanel?.busy || maintenancePanel?.busy) event.preventDefault(); });
   document.getElementById("btn-close-preferences").addEventListener("click", close);
   document.getElementById("btn-cancel-preferences").addEventListener("click", close);
@@ -440,7 +446,7 @@ function setupPreferences() {
     launch:['launchScreen'],controller:['couchControls'],metadata:['useCatalogTitles','autoUpdateCatalog','defaultRegion'],
     data:['maxCachedCovers','cacheMode','cacheDirectory']};
   const sectionTitles={startup:'msg.58fcc9468f',library:'msg.c9169c12cb',launch:'launchScreen.title',controller:'controller.title',metadata:'source.title',
-    data:'msg.cf6371762e',backups:'backup.title',themes:'themes.title','theme-editor':'themes.editor',profiles:'profiles.title',storage:'maintenance.storage'};
+    data:'msg.cf6371762e',backups:'backup.title',themes:'themes.title','theme-editor':'themes.editor',profiles:'profiles.title',achievements:'ra.service',storage:'maintenance.storage'};
   function resetFields(scope){
     const keys=scope==='all'?Object.values(resetKeys).flat():resetKeys[scope]||[];
     const fields={language:languageSelect,startMaximized,coversOnly,autoplayOST,combineRegionStatistics:combineRegions,timeFormat,releaseDateFormat,
@@ -495,7 +501,7 @@ function setupPreferences() {
     event.preventDefault();
     const scoped=resetScope&&resetScope!=='all';
     if (saving || choosing || backupsPanel?.busy || themesPanel?.busy || profilesPanel?.busy || !location) return;
-    if (["profiles", "themes", "theme-editor"].includes(preferenceCategory)) return;
+    if (["profiles", "achievements", "themes", "theme-editor"].includes(preferenceCategory)) return;
     if (preferenceCategory === "backups") { await backupsPanel?.saveSettings(); return; }
     const draft={...preferences,autoplayOST:autoplayOST.checked,language:languageSelect.value,maxCachedCovers:Number(input.value),cacheMode:cacheMode.value==='ram'?'ram':'disk',cacheDirectory:draftCacheDirectory,
       startMaximized:startMaximized.checked,coversOnly:coversOnly.checked,timeFormat:timeFormat.value,releaseDateFormat:releaseDateFormat.value,
@@ -2218,6 +2224,7 @@ function applyPlayStatistics(stats) {
   }
   if (!stats.is_running) game.finished_session = stats.session_count;
   if (selectedGameId === game.id) {
+    if(!stats.is_running)achievementsPanel?.refresh();
     updatePlayStatus(game);
     document.getElementById("details-last-played").textContent = formatLastPlayed(game.last_played);
   }
@@ -2254,6 +2261,7 @@ function formatReleaseDate(value) {
 
 function showGameDetails(game) {
   getSoundtracks()?.select(game);
+  void getAchievements()?.select(game);
   ++platformDetailsRequest;
   selectedGameId = game.id;
   const placeholder = document.getElementById("details-placeholder");
@@ -2307,6 +2315,7 @@ function showGameDetails(game) {
 
 function resetGameDetails() {
   soundtrackPlayer?.select(null);
+  void achievementsPanel?.select(null);
   ++fileAvailabilityRequest; selectedFileAvailability = null;
   selectedGameId = null;
   logoPanelKey = null;

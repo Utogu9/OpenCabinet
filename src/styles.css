@@ -472,6 +472,7 @@ body.resizing-details * {
 .details-content.platform-details #details-platform,
 .details-content.platform-details #game-information,
 .details-content.platform-details #game-description,
+.details-content.platform-details #ra-sidebar,
 .details-content.platform-details .media-view-switch,
 .details-content.platform-details #game-box-panel { display: none; }
 .details-content.platform-details #gallery-photos { display: block; }
@@ -3200,3 +3201,27 @@ html[data-theme-music-player="hidden"] #ost-sidebar {display:none!important;}
 .ui-icon[data-icon="volume-x"] { --ui-icon: url("assets/icons/volume-x.svg"); }
 .ui-icon[data-icon="picture-in-picture-2"] { --ui-icon: url("assets/icons/picture-in-picture-2.svg"); }
 .ui-icon[data-icon="panel-right"] { --ui-icon: url("assets/icons/panel-right.svg"); }
+
+/* RetroAchievements uses the same reorderable detail section as other game panels. */
+.ra-header,.ra-actions { display:flex; align-items:center; gap:8px; }
+.ra-header { justify-content:space-between; margin-bottom:12px; }
+.ra-header h3 { margin:0; }
+.ra-header .secondary-btn { padding:5px; }
+.ra-actions { flex-wrap:wrap; }
+.ra-summary { margin:0 0 8px; font-weight:600; }
+.ra-progress { width:100%; height:8px; accent-color:var(--accent-color); }
+.ra-game-link { max-width:100%; margin:0 0 12px; text-align:left; overflow-wrap:anywhere; }
+.ra-achievements > summary { cursor:pointer; padding:8px 0; }
+.ra-achievement-list { display:flex; flex-direction:column; gap:8px; max-height:360px; overflow-y:auto; margin-top:8px; }
+.ra-achievement { display:flex; align-items:flex-start; gap:10px; width:100%; padding:9px; border:1px solid var(--border-color); border-radius:var(--ui-radius); background:var(--card-bg); color:var(--text-main); text-align:left; cursor:pointer; }
+.ra-achievement:hover { background:var(--card-hover-bg); }
+.ra-achievement.earned { border-color:var(--accent-border); }
+.ra-achievement img { flex:none; width:40px; height:40px; object-fit:contain; }
+.ra-achievement > span { min-width:0; }
+.ra-achievement strong,.ra-achievement-description,.ra-achievement .preference-help { display:block; overflow-wrap:anywhere; }
+.ra-achievement-description { font-size:.85rem; margin-top:4px; color:var(--text-muted); }
+.ra-link-editor { display:grid; grid-template-columns:minmax(0,1fr) auto; gap:10px; margin-top:12px; }
+.ra-link-editor select,.ra-link-editor p,.ra-link-editor .ra-actions { grid-column:1/-1; min-width:0; max-width:100%; }
+.ra-link-editor input,.ra-link-editor select { background:var(--card-bg); color:var(--text-main); border:1px solid var(--border-color); border-radius:var(--ui-radius); padding:8px; }
+.ra-account-form { display:flex; flex-direction:column; gap:16px; margin-top:20px; }
+.ra-account-form .ra-actions,.ra-account-form .preference-help { margin:0; }

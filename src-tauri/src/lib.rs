@@ -23,6 +23,7 @@ mod session_history;
 mod library_features;
 mod launch_actions;
 mod user_profiles;
+mod retroachievements;
 mod game_shortcuts;
 mod launch_screen;
 mod launch_window_probe;
@@ -319,6 +320,7 @@ fn init_database(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     library_files::init(&conn)?;
     session_history::recover(&conn)?;
     user_profiles::init(&conn)?;
+    retroachievements::init(&conn)?;
     metadata::init_library_schema(&conn)?;
     init_game_images(&conn)?;
     media_library::init_schema(&conn)?;
@@ -2832,6 +2834,12 @@ pub fn run() {
             user_profiles::save_user_profile,
             user_profiles::switch_user_profile,
             user_profiles::delete_user_profile,
+            retroachievements::get_ra_account,
+            retroachievements::connect_ra_account,
+            retroachievements::disconnect_ra_account,
+            retroachievements::get_ra_game,
+            retroachievements::search_ra_games,
+            retroachievements::set_ra_game,
             game_shortcuts::create_game_shortcut,
             game_shortcuts::take_shortcut_requests,
             launch_actions::get_game_launch_actions,

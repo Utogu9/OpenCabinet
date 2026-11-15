@@ -37,6 +37,7 @@ const SECTIONS: &[&str] = &[
     "summary",
     "information",
     "description",
+    "achievements",
     "music",
 ];
 const FIELDS: &[&str] = &[
@@ -148,13 +149,8 @@ fn validate(theme: &Theme) -> Result<()> {
         || l.gap > 48
         || l.radius > 24
         || !["both", "photos", "box"].contains(&l.media_mode.as_str())
-        || !(permutation(
-            &l.sections.iter().map(|s| s.id.clone()).collect::<Vec<_>>(),
-            SECTIONS,
-        ) || permutation(
-            &l.sections.iter().map(|s| s.id.clone()).collect::<Vec<_>>(),
-            &SECTIONS[..SECTIONS.len()-1],
-        ))
+        || ![vec![],vec!["music"],vec!["achievements"],vec!["music","achievements"]].iter().any(|missing|
+            permutation(&l.sections.iter().map(|s|s.id.clone()).collect::<Vec<_>>(),&SECTIONS.iter().copied().filter(|s|!missing.contains(s)).collect::<Vec<_>>()))
         || l.hidden_fields.len() > FIELDS.len()
         || l.hidden_fields
             .iter()
