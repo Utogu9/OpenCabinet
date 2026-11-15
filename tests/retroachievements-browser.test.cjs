@@ -11,6 +11,7 @@ test('RetroAchievements connects per profile, reuses cached regional progress an
  const browser=await chromium.launch({executablePath:executable,headless:true});t.after(()=>browser.close());
  const page=await browser.newPage({viewport:{width:1280,height:900}}),errors=[];page.on('pageerror',e=>errors.push(e.message));
  await page.route('https://media.retroachievements.org/**',route=>route.fulfill({status:200,contentType:'image/png',body:Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Y9ZlL4AAAAASUVORK5CYII=','base64')}));
+ await page.clock.install();
  const origin='http://127.0.0.1:'+server.address().port;await page.goto(origin+'/fixture');
  await page.setContent(fs.readFileSync('src/index.html','utf8').replace(/<script\b[\s\S]*?<\/script>/gi,'').replace('<head>','<head><base href="'+origin+'/src/">'));
  await page.evaluate(catalogs=>{window.OpenCabinetLocaleCatalogs=catalogs;localStorage.setItem('opencabinet.preferences','{"language":"en-US"}');},Object.fromEntries(['en-US','es-AR'].map(l=>[l,JSON.parse(fs.readFileSync('src/locales/'+l+'.json','utf8'))])));
@@ -41,25 +42,41 @@ test('RetroAchievements connects per profile, reuses cached regional progress an
  await page.evaluate(()=>{document.querySelector('#preferences-dialog').showModal();document.querySelector('#preferences-panel-startup').classList.add('hidden');document.querySelector('#preferences-panel-achievements').classList.remove('hidden');return player.openSettings();});
  await page.locator('#ra-username').fill('First');await page.locator('#ra-apiKey').fill('test-secret');await page.locator('#ra-settings').getByRole('button',{name:'Connect account',exact:true}).click();
  await page.waitForFunction(()=>document.querySelector('#ra-settings').textContent.includes('Connected as First'));
+ // Connecting deliberately refreshes the selected game's progress, even when cached.
+ // Advance past the debounce and wait for completion before testing normal selection.
+ await page.clock.fastForward(300);
+ await page.waitForFunction(()=>calls.some(c=>c.command==='get_ra_game'&&c.args.refresh&&!c.args.cachedOnly)
+   &&!document.querySelector('#ra-sidebar button[aria-label="Refresh achievements"]').disabled);
  await page.locator('#preferences-dialog').screenshot({path:'target/ra-settings.png'});
  assert.equal(await page.locator('#ra-apiKey').inputValue(),'');assert.equal(await page.evaluate(()=>JSON.stringify(localStorage).includes('test-secret')),false);
  await page.evaluate(()=>document.querySelector('#preferences-dialog').close());await page.waitForFunction(()=>document.querySelector('#ra-sidebar').textContent.includes('1 / 2 achievements completed'));
- assert.equal(await page.evaluate(()=>calls.filter(c=>c.command==='get_ra_game'&&!c.args.cachedOnly).length),0,'fresh cached progress appears without another network fetch');
+ const connectedRequests=await page.evaluate(()=>calls.filter(c=>c.command==='get_ra_game'&&!c.args.cachedOnly).length);
+ assert.equal(connectedRequests,1,'connecting refreshes the selected game once');
+ await page.evaluate(()=>player.select({id:6,title:'Fresh cached game'}));
+ await page.clock.fastForward(300);
+ assert.ok((await page.locator('#ra-sidebar').textContent()).includes('RA Game 6'));
+ assert.equal(await page.evaluate(()=>calls.filter(c=>c.command==='get_ra_game'&&!c.args.cachedOnly).length),connectedRequests,'fresh cached progress appears without another network fetch');
+ await page.evaluate(()=>player.select({id:1,title:'Game'}));
+ await page.clock.fastForward(300);
+ assert.equal(await page.evaluate(()=>calls.filter(c=>c.command==='get_ra_game'&&!c.args.cachedOnly).length),connectedRequests,'returning to a cached game also avoids a network fetch');
  await page.locator('#ra-sidebar summary').click();assert.equal(await page.locator('.ra-achievement').count(),2);assert.equal(await page.locator('.ra-achievement.earned').count(),1);
  await page.locator('#ra-sidebar').screenshot({path:'target/ra-sidebar.png'});
  await page.locator('.ra-achievement').first().click();assert.equal(await page.evaluate(()=>calls.at(-1).args.url),'https://retroachievements.org/achievement/1');
- await page.evaluate(()=>{updated=true;player.refresh();});await page.waitForFunction(()=>document.querySelector('#ra-sidebar').textContent.includes('2 / 2 achievements completed'));
+ await page.evaluate(()=>{updated=true;player.refresh();});await page.clock.fastForward(300);await page.waitForFunction(()=>document.querySelector('#ra-sidebar').textContent.includes('2 / 2 achievements completed'));
  await page.waitForFunction(()=>calls.some(c=>c.command==='get_ra_game'&&c.args.refresh&&!c.args.cachedOnly));
  await page.evaluate(()=>player.select({id:10,title:'Merged',default_region_id:11,regions:[{game:{id:11,title:'Regional game'}}]}));
  await page.waitForFunction(()=>document.querySelector('#ra-sidebar').textContent.includes('RA Game 11'));
  assert.equal(await page.evaluate(()=>calls.filter(c=>c.command==='get_ra_game').at(-1).args.id),11,'the selected default region owns its achievement association');
- await page.evaluate(()=>{delay=true;void player.select({id:2,title:'Slow'});void player.select({id:1,title:'Current'});});await page.waitForTimeout(220);
+ await page.evaluate(()=>{delay=true;window.slowSelection=player.select({id:2,title:'Slow'});return player.select({id:1,title:'Current'});});
+ await page.clock.fastForward(220);await page.evaluate(()=>slowSelection);
  assert.ok((await page.locator('#ra-sidebar').textContent()).includes('RA Game 1'));
- await page.evaluate(()=>{offline=true;return player.select({id:4,title:'Cached offline'});});await page.waitForTimeout(320);
+ await page.evaluate(()=>{offline=true;return player.select({id:4,title:'Cached offline'});});await page.clock.fastForward(300);
+ await page.waitForFunction(()=>document.querySelector('#ra-sidebar').textContent.includes('Offline'));
  assert.ok((await page.locator('#ra-sidebar').textContent()).includes('RA Game 4'));assert.ok((await page.locator('#ra-sidebar').textContent()).includes('Offline'));
- await page.evaluate(()=>{offline=false;return player.select({id:3,title:'Unmatched'});});await page.waitForTimeout(350);
+ await page.evaluate(()=>{offline=false;return player.select({id:3,title:'Unmatched'});});await page.clock.fastForward(300);
+ await page.waitForFunction(()=>!document.querySelector('#ra-sidebar button[aria-label="Refresh achievements"]').disabled);
  await page.locator('#ra-sidebar').getByRole('button',{name:'Choose matching game'}).click();await page.locator('.ra-link-editor select').selectOption('99');
- await page.locator('.ra-link-editor').getByRole('button',{name:'Use selected game'}).click();await page.waitForFunction(()=>document.querySelector('#ra-sidebar').textContent.includes('RA Game 99'));
+ await page.locator('.ra-link-editor').getByRole('button',{name:'Use selected game'}).click();await page.clock.fastForward(300);await page.waitForFunction(()=>document.querySelector('#ra-sidebar').textContent.includes('RA Game 99'));
  await page.evaluate(()=>{account={connected:true,username:'Second'};updated=false;player.invalidate();});await page.waitForFunction(()=>document.querySelector('#ra-sidebar').textContent.includes('0 / 2 achievements completed'));
  await page.evaluate(()=>{const theme=structuredClone(OpenCabinetThemes.builtins[0]);theme.layout.sections.find(s=>s.id==='achievements').visible=false;OpenCabinetThemes.apply(theme);});
  assert.equal(await page.locator('#ra-sidebar').isVisible(),false,'themes can hide the achievements section');

@@ -1,24 +1,24 @@
-## What's new in v0.7.0
+## What's new in v0.8.0
 
-- Take manuals out of 3D cases, inspect them independently, and open the reader with a click.
-- Add multiple configurable Extras per game: folded posters, leaflets and cards, with front/back artwork, folding controls and independent inspection.
-- Pan 3D views with the middle mouse button and preserve background case shadows while examining extracted objects.
-- Use console spine templates with configurable title placement when a game has no spine or full-cover image.
-- Support packed full-cover material maps for varying surface relief, roughness and reflections, plus reversible covers through the viewer's context menu.
-- Configure disc finishes per game, with console defaults and a more realistic black PlayStation disc surface.
-- Add hinged two-disc trays for PS2 games: disc 1 on the swinging tray and disc 2 in the case, with separate artwork and inspection controls.
-- Align console metadata and image editors with game editors, including source credits and metadata lookup.
+- Connect RetroAchievements per user profile and view completed, available and hardcore achievements in the right sidebar, with cached progress and manual game matching.
+- Listen to local game soundtracks from audio-only CUE sheets, M3U playlists or folders of MP3, WAV, FLAC and M4A files, with sidebar, floating and expanded player controls.
+- Automatically play a game's soundtrack when selecting it, and show, hide or reorder the sidebar music player and achievements through Themes.
+- Create user profiles with independent play statistics, sessions, ratings, favorites and personal notes.
+- Add desktop game shortcuts, configurable Couch Mode controller bindings and per-game startup settings.
+- Customize game loading screens with artwork, theme colors and automatic or timed dismissal.
+- Restore default preferences for the current section or all settings, with confirmation.
+- Fix rating updates for existing profile data and make the expanded music player minimize when clicking outside it.
 
-## Novedades de v0.7.0
+## Novedades de v0.8.0
 
-- Extraé los manuales de las cajas 3D, inspeccionalos por separado y abrí el lector con un clic.
-- Agregá varios Extras por juego: pósteres doblados, folletos y tarjetas, con imágenes de frente/dorso, controles de plegado e inspección independiente.
-- Desplazá la vista 3D con el botón central del mouse y conservá las sombras de la caja al examinar objetos extraídos.
-- Usá plantillas de lomo de consola con posición de título configurable cuando el juego no tenga imagen de lomo ni cubierta completa.
-- Soporte de mapas de material para cubiertas completas, con relieve, rugosidad y reflejos variables, además de carátulas reversibles desde el menú contextual del visor.
-- Acabados de disco configurables por juego, con valores predeterminados por consola y una superficie negra más realista para los discos de PlayStation.
-- Bandejas articuladas para juegos de PS2 con dos discos: disco 1 en la bandeja móvil y disco 2 en la caja, con imágenes y controles de inspección independientes.
-- Editores de metadatos e imágenes de consolas unificados con los de juegos, con créditos de origen y búsqueda de metadatos.
+- Conectá RetroAchievements por perfil y consultá los logros completados, disponibles y hardcore en el lateral derecho, con caché de progreso y selección manual de coincidencias.
+- Escuchá soundtracks locales desde CUE de audio, listas M3U o carpetas con archivos MP3, WAV, FLAC y M4A, con controles en el lateral, flotantes y ampliados.
+- Reproducí automáticamente el soundtrack al seleccionar un juego y usá Themes para mostrar, ocultar u ordenar el reproductor lateral y los logros.
+- Creá perfiles con estadísticas de juego, sesiones, puntuaciones, favoritos y notas personales independientes.
+- Accesos directos de juegos en el escritorio, controles de joystick configurables en Couch Mode y opciones de inicio por juego.
+- Pantallas de carga configurables con imágenes, colores del tema y duración automática o fija.
+- Restaurá las preferencias de la sección actual o de todas las secciones, con confirmación.
+- Corregida la actualización de puntuaciones existentes por perfil; el reproductor ampliado ahora se minimiza al hacer clic fuera.
 
 ## Downloads / Descargas
 
