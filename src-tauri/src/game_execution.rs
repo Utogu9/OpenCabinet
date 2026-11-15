@@ -1,6 +1,7 @@
 use rusqlite::{Connection, OptionalExtension};
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
+fn err(e:impl std::fmt::Display)->String{e.to_string()}
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(default)]
@@ -9,9 +10,36 @@ pub struct ExecutionOptions {
     pub arguments: Option<String>,
     #[serde(skip_serializing_if="Option::is_none")]
     pub linux: Option<crate::linux_execution::Options>,
+    pub startup_screen: Option<crate::launch_screen::Settings>,
+}
+pub fn startup_all(conn:&Connection)->Result<std::collections::HashMap<i32,crate::launch_screen::Settings>,String>{
+    init_startup(conn).map_err(err)?;
+    conn.prepare("SELECT game_id,settings FROM game_startup_screens").map_err(err)?
+        .query_map([],|r|Ok((r.get::<_,i32>(0)?,r.get::<_,String>(1)?))).map_err(err)?
+        .map(|row|{let(id,value)=row.map_err(err)?;Ok((id,serde_json::from_str(&value).map_err(err)?))}).collect()
+}
+fn init_startup(conn:&Connection)->rusqlite::Result<()>{
+    conn.execute_batch("CREATE TABLE IF NOT EXISTS game_startup_screens(game_id INTEGER PRIMARY KEY,settings TEXT NOT NULL);
+        CREATE TRIGGER IF NOT EXISTS remove_game_startup_screen AFTER DELETE ON games BEGIN DELETE FROM game_startup_screens WHERE game_id=OLD.id; END;")
+}
+
+#[cfg(test)]
+mod startup_tests {
+    use super::*;
+    #[test]fn game_startup_settings_persist_reset_to_inheritance_and_leave_other_launch_options_intact(){
+        let conn=Connection::open_in_memory().unwrap();
+        conn.execute_batch("CREATE TABLE games(id INTEGER PRIMARY KEY,rom_path TEXT,launch_directly INTEGER,emulator_override_id INTEGER,arguments_override TEXT);INSERT INTO games VALUES(1,'game.exe',1,NULL,NULL)").unwrap();
+        let settings=serde_json::from_value(serde_json::json!({"enabled":false,"useThemeColor":true,"color":"#14161e","useBackground":true,"mode":"auto","seconds":8,"timeoutSeconds":5})).unwrap();
+        let options=ExecutionOptions{arguments:Some("--fullscreen".into()),startup_screen:Some(settings),..Default::default()};
+        save(&conn,1,"Windows",&options).unwrap();let saved=read(&conn,1).unwrap();
+        assert_eq!(saved.arguments.as_deref(),Some("--fullscreen"));assert!(saved.startup_screen.is_some());assert_eq!(startup_all(&conn).unwrap().len(),1);
+        save(&conn,1,"Windows",&ExecutionOptions{arguments:saved.arguments,..Default::default()}).unwrap();
+        assert!(read(&conn,1).unwrap().startup_screen.is_none());assert!(startup_all(&conn).unwrap().is_empty());
+    }
 }
 
 pub fn init_schema(conn: &Connection) -> rusqlite::Result<()> {
+    init_startup(conn)?;
     conn.execute_batch("CREATE TRIGGER IF NOT EXISTS clear_deleted_game_emulator AFTER DELETE ON emulators
         BEGIN UPDATE games SET emulator_override_id=NULL WHERE emulator_override_id=OLD.rowid; END;
         CREATE TRIGGER IF NOT EXISTS clear_moved_game_emulator AFTER UPDATE OF platform ON emulators
@@ -19,19 +47,22 @@ pub fn init_schema(conn: &Connection) -> rusqlite::Result<()> {
 }
 
 pub fn read(conn: &Connection, id: i32) -> Result<ExecutionOptions, String> {
+    init_startup(conn).map_err(err)?;
     // Retain compatibility with older launch-only databases and fixtures.
     let present: bool = conn.query_row("SELECT EXISTS(SELECT 1 FROM pragma_table_info('games') WHERE name='emulator_override_id')", [], |r| r.get(0)).map_err(|e| e.to_string())?;
     if !present {
         return Ok(ExecutionOptions::default());
     }
     conn.query_row(
-        "SELECT emulator_override_id,arguments_override FROM games WHERE id=?1",
+        "SELECT emulator_override_id,arguments_override,(SELECT settings FROM game_startup_screens WHERE game_id=games.id) FROM games WHERE id=?1",
         [id],
         |r| {
             Ok(ExecutionOptions {
                 emulator_id: r.get(0)?,
                 arguments: r.get(1)?,
                 linux: crate::linux_execution::read(conn,id).map_err(|e|rusqlite::Error::ToSqlConversionFailure(e.into()))?,
+                startup_screen: r.get::<_,Option<String>>(2)?.map(|value|serde_json::from_str(&value)
+                    .map_err(|e|rusqlite::Error::ToSqlConversionFailure(e.into()))).transpose()?,
             })
         },
     )
@@ -44,6 +75,8 @@ pub fn save(
     platform: &str,
     options: &ExecutionOptions,
 ) -> Result<(), String> {
+    init_startup(conn).map_err(err)?;
+    if options.startup_screen.as_ref().is_some_and(|settings|!settings.valid()) {return Err(crate::i18n::text("launchScreen.invalid").into());}
     let (path, direct): (String, bool) = conn
         .query_row(
             "SELECT rom_path,launch_directly FROM games WHERE id=?1",
@@ -71,6 +104,10 @@ pub fn save(
     )
     .map_err(|e| e.to_string())?;
     crate::linux_execution::save(conn,id,options.linux.as_ref())?;
+    if let Some(settings)=&options.startup_screen {
+        conn.execute("INSERT INTO game_startup_screens VALUES(?1,?2) ON CONFLICT(game_id) DO UPDATE SET settings=excluded.settings",
+            (id,serde_json::to_string(settings).map_err(err)?)).map_err(err)?;
+    }else{conn.execute("DELETE FROM game_startup_screens WHERE game_id=?1",[id]).map_err(err)?;}
     Ok(())
 }
 

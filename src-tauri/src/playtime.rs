@@ -8,6 +8,11 @@ use std::time::Duration;
 pub struct PlayTracker(Arc<Mutex<HashSet<i32>>>);
 
 impl PlayTracker {
+    pub fn while_idle<T>(&self,action:impl FnOnce()->Result<T,String>)->Result<T,String>{
+        let sessions=self.0.lock().unwrap_or_else(|error|error.into_inner());
+        if !sessions.is_empty(){return Err(crate::i18n::text("profiles.busy").into());}
+        let result=action();drop(sessions);result
+    }
     pub fn has_active_sessions(&self) -> bool {
         !self.0.lock().unwrap_or_else(|error| error.into_inner()).is_empty()
     }

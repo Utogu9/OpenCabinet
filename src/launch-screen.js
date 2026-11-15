@@ -29,8 +29,8 @@
     return {...own,logo:own.logo||backups.find(art=>art.logo)?.logo||null,
       media:medium?.media||null,spinning:!!medium?.spinning};
   }
-  function editor(document) {
-    const fields=Object.fromEntries(Object.keys(defaults).map(key=>[key,document.getElementById(`launch-screen-${key}`)]));
+  function editor(document,prefix='launch-screen') {
+    const fields=Object.fromEntries(Object.keys(defaults).map(key=>[key,document.getElementById(`${prefix}-${key}`)]));
     const read=()=>normalize(Object.fromEntries(Object.entries(fields).map(([key,input])=>[key,
       typeof defaults[key]==='boolean'?input.checked:input.value])));
     function sync(busy=false) {
@@ -38,20 +38,36 @@
       fields.color.disabled ||= fields.useThemeColor.checked;
       fields.seconds.disabled ||= fields.mode.value!=='fixed';
       fields.timeoutSeconds.disabled ||= fields.mode.value!=='auto';
-      document.getElementById('launch-screen-fixed-options').classList.toggle('hidden',fields.mode.value!=='fixed');
-      document.getElementById('launch-screen-auto-options').classList.toggle('hidden',fields.mode.value!=='auto');
+      document.getElementById(prefix+'-fixed-options').classList.toggle('hidden',fields.mode.value!=='fixed');
+      document.getElementById(prefix+'-auto-options').classList.toggle('hidden',fields.mode.value!=='auto');
     }
     for(const input of Object.values(fields))input.addEventListener('change',()=>sync());
     return {read,sync,load(value){const settings=normalize(value);for(const [key,input] of Object.entries(fields)){
       if(typeof defaults[key]==='boolean')input.checked=settings[key];else input.value=String(settings[key]);}sync();},
       changed(value){return JSON.stringify(read())!==JSON.stringify(normalize(value));}};
   }
+  function gameEditor(host,document,getPreferences) {
+    if(!host)return null;
+    const wrapper=document.createElement('label');wrapper.className='preference-toggle';
+    const inherit=document.createElement('input');inherit.type='checkbox';const text=document.createElement('span');
+    text.textContent=globalThis.OpenCabinetI18n.t('launchScreen.inherit');wrapper.append(inherit,text);
+    const panel=document.getElementById('preferences-panel-launch').cloneNode(true);
+    panel.removeAttribute('id');panel.removeAttribute('role');panel.removeAttribute('aria-labelledby');panel.className='game-startup-options';
+    for(const node of panel.querySelectorAll('[id]'))node.id=node.id.replace('launch-screen-','game-launch-screen-');
+    for(const node of panel.querySelectorAll('[for]'))node.htmlFor=node.htmlFor.replace('launch-screen-','game-launch-screen-');
+    host.append(wrapper,panel);const form=editor(document,'game-launch-screen');
+    const sync=()=>{panel.classList.toggle('hidden',inherit.checked);form.sync();
+      if(inherit.checked)for(const control of panel.querySelectorAll('input,select'))control.disabled=true;};
+    inherit.addEventListener('change',sync);
+    return {load(value){inherit.checked=value==null;form.load(value||getPreferences().launchScreen);sync();},
+      read:()=>inherit.checked?null:form.read()};
+  }
   function create({invoke,getPreferences,listen,themeColor=()=>defaults.color,t=key=>key,onError=console.error}) {
     let active=null,starting=false,subscription=null,closedWhileStarting=new Set();
     return {
       get active(){return starting||active!==null;},
       async begin(game,discId,alternatives=[]) {
-        const settings=normalize(getPreferences().launchScreen);
+        const settings=normalize(game.execution?.startup_screen??getPreferences().launchScreen);
         if(!settings.enabled)return null;
         // One native overlay per launch; never let a second request cover the first.
         if(starting||active!==null)throw new Error(t('launchScreen.busy'));
@@ -78,5 +94,5 @@
       },
     };
   }
-  globalThis.OpenCabinetLaunchScreen={defaults,normalize,artwork,editor,create};
+  globalThis.OpenCabinetLaunchScreen={defaults,normalize,artwork,editor,gameEditor,create};
 })();

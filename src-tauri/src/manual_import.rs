@@ -257,7 +257,7 @@ mod tests {
         let conn = files.database();
         crate::game_execution::save(&conn, 1, "Windows", &crate::game_execution::ExecutionOptions {
             emulator_id: None, arguments: Some("--windowed --profile \"My Profile\"".into()),
-         linux: None }).unwrap();
+         linux: None, startup_screen: None }).unwrap();
         conn.execute("UPDATE games SET platform='My renamed platform'", [])
             .unwrap();
         let (launch, ()) =

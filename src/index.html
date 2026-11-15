@@ -22,6 +22,7 @@
             <span><span class="ui-icon" data-icon="gamepad-2" aria-hidden="true"></span></span> <span data-i18n="msg.3df52e855a"></span>
           </button>
           <button class="dropdown-item" id="btn-library-categories" type="button"><span><span class="ui-icon" data-icon="folders" aria-hidden="true"></span></span> <span data-i18n="msg.8c6ce4c469"></span></button>
+          <button class="dropdown-item" id="btn-open-profiles" type="button"><span class="ui-icon" data-icon="globe" aria-hidden="true"></span> <span data-i18n="profiles.title"></span><span id="active-user-profile" class="active-profile-name"></span></button>
           <button class="dropdown-item" id="btn-open-preferences" type="button">
             <span><span class="ui-icon" data-icon="settings" aria-hidden="true"></span></span> <span data-i18n="msg.d5d19e9b70"></span>
           </button>
@@ -538,6 +539,7 @@
             <div id="game-linux-execution" class="hidden"></div>
             <label class="preference-toggle"><input type="checkbox" id="game-edit-custom-arguments"><span><span data-i18n="msg.ab0d3e60a8"></span></span></label>
             <div class="form-group"><label for="game-edit-arguments"><span data-i18n="msg.e7ee175f9c"></span></label><input id="game-edit-arguments" type="text" disabled placeholder='"%ROM%"'><p class="help-text"><span data-i18n="msg.2f8f9d89f9"></span></p></div>
+            <div id="game-startup-screen"></div>
           </section>
           <section class="game-image-editor hidden" id="game-discs-section" role="tabpanel" aria-labelledby="game-discs-title">
             <h3 id="game-discs-title"><span data-i18n="msg.2d2dca072e"></span></h3>
@@ -1197,6 +1199,7 @@
       <button class="dropdown-item" id="context-game-notes" type="button" role="menuitem" tabindex="-1"><span class="ui-icon" data-icon="file-text" aria-hidden="true"></span><span data-i18n="personal.notes"></span></button>
       <button class="dropdown-item" id="context-session-history" type="button" role="menuitem" tabindex="-1"><span aria-hidden="true"><span class="ui-icon" data-icon="history" aria-hidden="true"></span></span> <span data-i18n="sessions.open"></span></button>
       <button class="dropdown-item" id="context-open-emulator" type="button" role="menuitem" tabindex="-1"><span data-i18n="msg.b3a8ed7ae3"></span></button>
+      <button class="dropdown-item" id="context-create-shortcut" type="button" role="menuitem" tabindex="-1"><span class="ui-icon" data-icon="external-link" aria-hidden="true"></span> <span data-i18n="shortcuts.create"></span></button>
       <button class="dropdown-item" id="context-open-game-files" type="button" role="menuitem" tabindex="-1"><span data-i18n="msg.339fbb2a97"></span></button>
       <button class="dropdown-item" id="context-open-images" type="button" role="menuitem" tabindex="-1"><span data-i18n="msg.4fe8c2a22f"></span></button>
       <button class="dropdown-item" id="context-open-manuals" type="button" role="menuitem" tabindex="-1"><span data-i18n="msg.5bedcd421f"></span></button>
@@ -1250,6 +1253,8 @@
             <button id="preferences-tab-startup" type="button" role="tab" aria-controls="preferences-panel-startup" aria-selected="true"><span data-i18n="msg.58fcc9468f"></span></button>
             <button id="preferences-tab-library" type="button" role="tab" aria-controls="preferences-panel-library" aria-selected="false" tabindex="-1"><span data-i18n="msg.c9169c12cb"></span></button>
             <button id="preferences-tab-launch" type="button" role="tab" aria-controls="preferences-panel-launch" aria-selected="false" tabindex="-1" data-i18n="launchScreen.title"></button>
+            <button id="preferences-tab-controller" type="button" role="tab" aria-controls="preferences-panel-controller" aria-selected="false" tabindex="-1" data-i18n="controller.title"></button>
+            <button id="preferences-tab-profiles" type="button" role="tab" aria-controls="preferences-panel-profiles" aria-selected="false" tabindex="-1" data-i18n="profiles.title"></button>
             <button id="preferences-tab-themes" type="button" role="tab" aria-controls="preferences-panel-themes" aria-selected="false" tabindex="-1" data-i18n="themes.title"></button>
             <div id="preferences-theme-editor-row" class="preferences-subcategory-row hidden" role="presentation">
               <button id="preferences-tab-theme-editor" class="preferences-subcategory hidden" type="button" role="tab" aria-controls="preferences-panel-theme-editor" aria-selected="false" tabindex="-1" data-i18n="themes.editor"></button>
@@ -1273,6 +1278,8 @@
           </label>
           <p class="preference-help" id="preference-startup-help"><span data-i18n="msg.ea23eae3da"></span></p>
         </section>
+        <section id="preferences-panel-controller" class="preferences-section hidden" role="tabpanel" aria-labelledby="preferences-tab-controller"><h3 data-i18n="controller.title"></h3><p class="preference-help" data-i18n="controller.help"></p><div id="controller-settings" class="controller-settings"></div></section>
+        <section id="preferences-panel-profiles" class="preferences-section hidden" role="tabpanel" aria-labelledby="preferences-tab-profiles"><h3 data-i18n="profiles.title"></h3><p class="preference-help" data-i18n="profiles.help"></p><div id="user-profiles"></div></section>
         <section id="preferences-panel-launch" class="preferences-section hidden" role="tabpanel" aria-labelledby="preferences-tab-launch">
           <h3 data-i18n="launchScreen.title"></h3>
           <label class="preference-toggle"><input id="launch-screen-enabled" type="checkbox"><span data-i18n="launchScreen.enabled"></span></label>
@@ -1628,6 +1635,9 @@
     <script src="library-features.js"></script>
     <script src="library-play.js"></script>
     <script src="launch-screen.js"></script>
+    <script src="controller-settings.js"></script>
+    <script src="user-profiles.js"></script>
+    <script src="game-shortcuts.js"></script>
     <script src="game-regions.js"></script>
     <script src="game-order.js"></script>
     <script src="keyboard-navigation.js"></script>

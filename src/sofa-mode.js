@@ -16,11 +16,12 @@
       ...byName.get(name), name, count: games.filter(game => game.platform === name).length,
     }))];
   }
-  function rightStick(pad) {
+  const controlSettings=value=>root.OpenCabinetController?.normalize(value)||{bindings:{accept:0,back:1,view:2,turn:3,previousPlatform:4,nextPlatform:5,exit:9,manual:10,openBox:11,zoomOut:6,zoomIn:7},navigationDeadZone:.55,rotationDeadZone:.18,rotationSensitivity:1,zoomSensitivity:1,repeatDelay:360,repeatInterval:145};
+  function rightStick(pad,settings) {
     if (!pad || pad.connected === false || pad.mapping !== 'standard') return null;
     const x = pad.axes?.[2], y = pad.axes?.[3];
     if (!Number.isFinite(x) || !Number.isFinite(y)) return null;
-    const length = Math.hypot(x, y), deadZone = .18;
+    const length = Math.hypot(x, y), deadZone = controlSettings(settings).rotationDeadZone;
     if (length <= deadZone) return null;
     const strength = Math.min(1, (length - deadZone) / (1 - deadZone));
     return [x / length * strength, y / length * strength];
@@ -43,32 +44,33 @@
     }
     return jobs;
   }
-  function createPadInput() {
+  function createPadInput(getSettings=()=>null) {
     let identity = null, held = new Set(), direction = null, nextRepeat = 0;
     return {
       reset() { identity = null; held.clear(); direction = null; },
       sample(pad, now) {
+        const settings=controlSettings(getSettings());
         if (!pad || pad.connected === false || pad.mapping !== 'standard') {
           identity = null; held.clear(); direction = null; return [];
         }
         const pressed = index => !!pad.buttons?.[index]?.pressed || pad.buttons?.[index]?.value > 0.6;
-        const buttons = new Set([0, 1, 2, 3, 4, 5, 9, 10, 11].filter(pressed));
+        const buttons = new Set(Object.entries(settings.bindings).filter(([key])=>!['zoomIn','zoomOut'].includes(key)).map(([,index])=>index).filter(pressed));
         const x = Number(pad.axes?.[0]) || 0, y = Number(pad.axes?.[1]) || 0;
         const movement = pressed(14) ? 'left' : pressed(15) ? 'right' : pressed(12) ? 'up' : pressed(13) ? 'down'
-          : Math.abs(x) > 0.55 && Math.abs(x) >= Math.abs(y) ? (x < 0 ? 'left' : 'right')
-          : Math.abs(y) > 0.55 ? (y < 0 ? 'up' : 'down') : null;
+          : Math.abs(x) > settings.navigationDeadZone && Math.abs(x) >= Math.abs(y) ? (x < 0 ? 'left' : 'right')
+          : Math.abs(y) > settings.navigationDeadZone ? (y < 0 ? 'up' : 'down') : null;
         const key = `${pad.index}:${pad.id}`;
         // Opening the mode, reconnecting or returning from a game must not
         // interpret already-held buttons as new presses.
         if (identity !== key) {
-          identity = key; held = buttons; direction = movement; nextRepeat = now + 360; return [];
+          identity = key; held = buttons; direction = movement; nextRepeat = now + settings.repeatDelay; return [];
         }
         const actions = [];
         if (movement && (movement !== direction || now >= nextRepeat)) {
-          actions.push(movement); nextRepeat = now + (movement !== direction ? 360 : 145);
+          actions.push(movement); nextRepeat = now + (movement !== direction ? settings.repeatDelay : settings.repeatInterval);
         }
         direction = movement;
-        const names = { 0: 'accept', 1: 'back', 2: 'view', 3: 'turn', 4: 'previousPlatform', 5: 'nextPlatform', 9: 'exit', 10:'manual', 11:'openBox' };
+        const names=Object.fromEntries(Object.entries(settings.bindings).map(([name,index])=>[index,name]));
         for (const button of buttons) if (!held.has(button)) actions.push(names[button]);
         held = buttons;
         return actions;
@@ -172,7 +174,7 @@
     let lastPad = false, selectedKey = null, backgroundAbort = null, lastBoxSelection = null, lastPollTime = null;
     let railDrag = null, railDragged = false;
     let lastRailNavigation = -Infinity, railScrollTarget = null;
-    const remembered = new Map(), banks = new Map(), platformNodes = new Map(), padInput = createPadInput();
+    const remembered = new Map(), banks = new Map(), platformNodes = new Map(), padInput = createPadInput(()=>options.getControls?.());
     let cardNodes = new Map(), spareCards = [], activeBank = null;
     let manualCard = null, boxMenu = null;
     const manualReader = root.OpenCabinetManualReader?.create({ imageSource:options.imageSource,helpText:t('sofa.manualHelp'),
@@ -804,11 +806,11 @@
     function rotateSelected(pad, elapsed) {
       if (!active || !boxMode || busy || watchedGame !== null || topDialog() !== dialog
         || document.activeElement?.matches?.('input, textarea, select')) return false;
-      const stick = rightStick(pad), node = cardNodes.get(gameId);
+      const settings=controlSettings(options.getControls?.()),stick = rightStick(pad,settings), node = cardNodes.get(gameId);
       if (!stick || !elapsed || node?.dataset.boxReady !== 'true' || !node._viewer?.rotate) return false;
       node._interacted = true;
       // Degrees per millisecond: analog speed, with no jump after a slow frame.
-      node._viewer.rotate(stick[0] * elapsed * .11, stick[1] * elapsed * .11);
+      node._viewer.rotate(stick[0] * elapsed * .11*settings.rotationSensitivity, stick[1] * elapsed * .11*settings.rotationSensitivity);
       return true;
     }
     function poll() {
@@ -818,7 +820,7 @@
       try { pad = [...(window.navigator.getGamepads?.() || [])].find(pad => pad?.connected && pad.mapping === 'standard'); } catch {}
       const connected = !!pad;
       if (connected !== lastPad) {
-        lastPad = connected; hint.textContent = t(connected ? 'sofa.padHelp' : 'sofa.keyboardHelp');
+        lastPad = connected; hint.textContent = connected&&root.OpenCabinetController?root.OpenCabinetController.hint(options.getControls?.()):t(connected ? 'sofa.padHelp' : 'sofa.keyboardHelp');
         padStatus.textContent = t(connected ? 'sofa.padConnected' : 'sofa.padConnect');
       }
       if (document.visibilityState !== 'hidden' && document.hasFocus()) {
@@ -827,10 +829,11 @@
         for (const command of padInput.sample(pad, now)) action(command);
         if(pad&&elapsed&&!busy&&watchedGame===null){
           const value=index=>{const v=pad.buttons?.[index]?.value;return Number.isFinite(v)?Math.max(0,Math.min(1,v)):pad.buttons?.[index]?.pressed?1:0;};
-          const zoom=value(7)-value(6),delta=Math.abs(zoom)>.1?zoom*elapsed*.001:0;
+          const settings=controlSettings(options.getControls?.());
+          const zoom=value(settings.bindings.zoomIn)-value(settings.bindings.zoomOut),delta=Math.abs(zoom)>.1?zoom*elapsed*.001*settings.zoomSensitivity:0;
           if(readingManual()){
             if(delta)manualReader.zoom(delta);
-            const stick=rightStick(pad);if(stick)manualReader.pan(stick[0]*elapsed*.7,stick[1]*elapsed*.7);
+            const stick=rightStick(pad,settings);if(stick)manualReader.pan(stick[0]*elapsed*.7*settings.rotationSensitivity,stick[1]*elapsed*.7*settings.rotationSensitivity);
           }else if(boxMode&&topDialog()===dialog&&!document.activeElement?.matches?.('input, textarea, select')&&delta){
             const node=cardNodes.get(gameId);if(node?._viewer){node._interacted=true;node._viewer.zoom(delta);}
           }

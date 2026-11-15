@@ -530,6 +530,7 @@ pub fn merge(
         if *id != primary {
             crate::session_history::init(&tx).map_err(err)?;
             tx.execute("UPDATE play_sessions SET game_id=?1 WHERE game_id=?2",params![primary,id]).map_err(err)?;
+            crate::user_profiles::merge(&tx,primary,*id)?;
             tx.execute("DELETE FROM games WHERE id=?1", [id])
                 .map_err(err)?;
         }
@@ -765,7 +766,7 @@ mod tests {
         .unwrap();
         crate::game_execution::save(&conn, id as i32, "PS1", &crate::game_execution::ExecutionOptions {
             emulator_id: Some(1), arguments: Some("--verbose \"%ROM%\"".into()),
-         linux: None }).unwrap();
+         linux: None, startup_screen: None }).unwrap();
         crate::launch_game_record_with_disc(&conn, id as i32, discs[1].id, |_, args, _| {
             assert_eq!(args, &["-L".to_string(), core.to_string_lossy().into_owned(), "--verbose".into(), b.clone()]);
             Ok(())

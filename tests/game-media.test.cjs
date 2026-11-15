@@ -386,7 +386,7 @@ test("Execution inherits the console default, filters emulators and saves option
   app.get("game-edit-arguments").value = '--fullscreen "%ROM%"';
   await app.save();
   assert.deepEqual(app.calls.find(call => call.command === "update_game").args.details.execution,
-    { emulator_id: 1, arguments: '--fullscreen "%ROM%"' });
+    { emulator_id: 1, arguments: '--fullscreen "%ROM%"', startup_screen:null });
   await app.open();
   assert.equal(app.get("game-edit-emulator").value, "1");
   assert.equal(app.get("game-edit-custom-arguments").checked, true);
@@ -394,7 +394,7 @@ test("Execution inherits the console default, filters emulators and saves option
   app.get("game-edit-custom-arguments").checked = false;
   await app.save();
   assert.deepEqual(app.calls.filter(call => call.command === "update_game").at(-1).args.details.execution,
-    { emulator_id: null, arguments: null });
+    { emulator_id: null, arguments: null, startup_screen:null });
 });
 
 test("Direct PC games allow arguments without emulators; stores retain client launch and skip Discs navigation", async () => {
@@ -417,7 +417,7 @@ test("Direct PC games allow arguments without emulators; stores retain client la
     app.get("game-edit-arguments").value = "--windowed";
     await app.save();
     assert.deepEqual(app.calls.find(call => call.command === "update_game").args.details.execution,
-      { emulator_id: null, arguments: store ? null : "--windowed" });
+      { emulator_id: null, arguments: store ? null : "--windowed", startup_screen:null });
   }
 });
 

@@ -5,14 +5,14 @@ use std::{sync::{Arc, Mutex}, time::{Duration, Instant}};
 use tauri::{Emitter, Manager};
 
 const LABEL: &str = "launch-screen";
-#[derive(Clone, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(rename_all="camelCase")]
 pub struct Settings {
     enabled: bool, use_theme_color: bool, color: String, use_background: bool,
     mode: String, seconds: f64, timeout_seconds: f64,
 }
 impl Settings {
-    fn valid(&self) -> bool {
+    pub fn valid(&self) -> bool {
         matches!(self.mode.as_str(),"auto"|"fixed") && valid_color(&self.color)
             && self.seconds.is_finite() && (1.0..=120.0).contains(&self.seconds)
             && self.timeout_seconds.is_finite() && (1.0..=120.0).contains(&self.timeout_seconds)

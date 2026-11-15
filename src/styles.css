@@ -2405,6 +2405,7 @@ html[data-os="linux"] .game-card:has(.game-cover-surface.has-cover)::before { wi
   margin-left: 4px;
 }
 
+.user-profile-row input,
 .form-group input,
 .form-group textarea,
 .form-group select {
@@ -2417,6 +2418,7 @@ html[data-os="linux"] .game-card:has(.game-cover-surface.has-cover)::before { wi
   outline: none;
 }
 
+.user-profile-row input:focus,
 .form-group input:focus,
 .form-group textarea:focus,
 .form-group select:focus {
@@ -3126,3 +3128,16 @@ html[data-i18n-pending] body { visibility: hidden; }
 #platform-spine-reset { margin-top:10px; }
 @media(max-width:750px){.platform-spine-layout { grid-template-columns:minmax(0,1fr) 100px; gap:14px; }}
 #game-edit-panel-posters > .help-text { margin:12px 0 0; line-height:1.45; }
+
+.controller-settings {display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:8px 20px;}
+.user-profile-row {display:flex;align-items:center;gap:8px;margin:12px 0;flex-wrap:wrap;}
+.user-profile-row input {flex:1;min-width:140px;}
+.user-profile-row button {flex:none;}
+#game-startup-screen {margin-top:24px;}
+.game-startup-options {display:flex;flex-direction:column;gap:16px;margin-top:18px;}
+.game-startup-options h3,.game-startup-options > .preference-help {margin:0;}
+.controller-binding {width:100%;text-align:left;min-height:43px;}
+.controller-binding.listening {border-color:var(--accent-color);background:var(--accent-soft);}
+.controller-capture-status {grid-column:1/-1;margin:0;}
+.controller-capture-status:empty {display:none;}
+.active-profile-name {opacity:.65;max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}

@@ -91,6 +91,8 @@ pub struct Manifest {
     manual_sources: crate::media_provenance::Sources,
     #[serde(default)]
     statistics: Option<SavedStatistics>,
+    #[serde(default,skip_serializing_if="Option::is_none")]
+    personal_profile_key: Option<String>,
     #[serde(default)]
     box_3d: Option<crate::platform_details::BoxSettings>,
     #[serde(default)]
@@ -343,6 +345,7 @@ pub fn sync_game(
             .into_iter()
             .map(|p| relative(p.strip_prefix(&folder).unwrap()))
             .collect::<Result<_>>()?,
+        personal_profile_key: Some(crate::user_profiles::key(conn)),
         statistics: Some(conn.query_row("SELECT play_time_seconds,session_count,last_played FROM games WHERE id=?1", [game_id], |row| Ok(SavedStatistics {
             play_time_seconds: row.get(0)?, session_count: row.get(1)?, last_played: row.get(2)?,
         })).map_err(err)?),
@@ -365,7 +368,8 @@ pub fn sync_statistics(conn:&Connection,ids:&[i32])->Result<()> {
     let exists:bool=conn.query_row("SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE name='media_collections')",[],|r|r.get(0)).map_err(err)?;
     if !exists{return Ok(());}
     for id in ids {
-        conn.execute("UPDATE media_collections SET manifest=json_set(manifest,'$.statistics',(SELECT json_object('play_time_seconds',play_time_seconds,'session_count',session_count,'last_played',last_played) FROM games WHERE id=?1)) WHERE id=(SELECT media_collection_id FROM games WHERE id=?1)",[id]).map_err(err)?;
+        let personal=crate::library_features::read(conn,crate::game_regions::owner(conn,*id)?)?;
+        conn.execute("UPDATE media_collections SET manifest=json_set(manifest,'$.personal_profile_key',?2,'$.personal',json(?3),'$.statistics',(SELECT json_object('play_time_seconds',play_time_seconds,'session_count',session_count,'last_played',last_played) FROM games WHERE id=?1)) WHERE id=(SELECT media_collection_id FROM games WHERE id=?1)",params![id,crate::user_profiles::key(conn),serde_json::to_string(&personal).map_err(err)?]).map_err(err)?;
         conn.execute("INSERT INTO media_manifest_outbox(id,body) SELECT id,manifest FROM media_collections WHERE id=(SELECT media_collection_id FROM games WHERE id=?1) ON CONFLICT(id) DO UPDATE SET body=excluded.body",[id]).map_err(err)?;
     }
     Ok(())
@@ -742,7 +746,9 @@ pub fn attach(conn: &Connection, root: &Path, game_id: i64, id: &str) -> Result<
         }
     }
     let changed=conn.execute("UPDATE games SET media_collection_id=?1,launch\u{0062}ox_id=COALESCE(launch\u{0062}ox_id,?3) WHERE id=?2",params![id,game_id,manifest.catalog_id]).map_err(err)?;
-    if let Some(personal)=&manifest.personal {crate::library_features::save(conn,game_id as i32,personal)?;}
+    if crate::user_profiles::same_owner(conn,manifest.personal_profile_key.as_deref()) {
+        if let Some(personal)=&manifest.personal {crate::library_features::save(conn,game_id as i32,personal)?;}
+    }
     if let Some(name)=&manifest.preferred_manual {
         if Path::new(name).file_name().is_some_and(|part|part==name.as_str()) {
             let dir:String=conn.query_row("SELECT directory FROM media_collections WHERE id=?1",[id],|r|r.get(0)).map_err(err)?;
@@ -754,7 +760,7 @@ pub fn attach(conn: &Connection, root: &Path, game_id: i64, id: &str) -> Result<
     if changed == 0 {
         return Err(crate::i18n::text("msg.d73324547f").into());
     }
-    if let Some(stats) = &manifest.statistics {
+    if let Some(stats) = manifest.statistics.as_ref().filter(|_|crate::user_profiles::same_owner(conn,manifest.personal_profile_key.as_deref())) {
         // Recovery is for a new entry, never overwrite a played entry's statistics.
         conn.execute("UPDATE games SET play_time_seconds=?1,play_time=?2,session_count=?3,last_played=?4 WHERE id=?5 AND COALESCE(play_time_seconds,0)=0 AND COALESCE(session_count,0)=0 AND last_played IS NULL",
             params![stats.play_time_seconds.max(0), (stats.play_time_seconds.max(0)/60).min(i32::MAX as i64), stats.session_count.max(0), stats.last_played, game_id]).map_err(err)?;

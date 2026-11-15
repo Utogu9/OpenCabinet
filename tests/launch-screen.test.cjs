@@ -1,6 +1,13 @@
 const {test}=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('node:vm');
 const context=vm.createContext({console});vm.runInContext(fs.readFileSync('src/launch-screen.js','utf8'),context);
 const api=context.OpenCabinetLaunchScreen;
+test('A game can disable or customize startup independently of global preferences',async()=>{
+  const calls=[],manager=api.create({getPreferences:()=>({launchScreen:{enabled:true,timeoutSeconds:5}}),
+    invoke:async(command,args)=>{calls.push(args.presentation);return 'ticket';}});
+  assert.equal(await manager.begin({execution:{startup_screen:{enabled:false}}}),null);assert.equal(calls.length,0);
+  await manager.begin({execution:{startup_screen:{enabled:true,mode:'fixed',seconds:12,color:'#123456',useThemeColor:false}}});
+  assert.equal(calls[0].settings.seconds,12);assert.equal(calls[0].settings.mode,'fixed');assert.equal(calls[0].color,'#123456');
+});
 test('Presentation preserves the selected edition and disc artwork, with cartridge and missing-art fallbacks',()=>{
   const game={discs:[{id:11},{id:12}],images:[{kind:'logo',path:'logo.webp'},
     {kind:'fanart_background',path:'background.webp'},{kind:'disc',path:'disc1.png'},

@@ -1,5 +1,6 @@
 let appFeatures = null;
 let libraryPlay = null;
+let gameShortcuts=null;
 const invoke = (...args) => window.__TAURI__.core.invoke(...args).catch(error => {
   globalThis.OpenCabinetMaintenance?.record(error, `command:${args[0]}`);
   throw error;
@@ -141,7 +142,7 @@ let manualCoverCache = null;
 const isJewelManualGame = game => !!window.OpenCabinet3D?.jewelFamily(game?.platform);
 const pauseManualPrefetchForScroll=()=>manualCoverCache?.pauseForScroll();
 const PREFERENCES_KEY = "opencabinet.preferences";
-const DEFAULT_PREFERENCES = { language: globalThis.OpenCabinetI18n.defaultLocale, maxCachedCovers: 400, cacheMode: "disk", cacheDirectory: "", startMaximized: true, coversOnly: false, timeFormat: "24h", releaseDateFormat: "DD-MM-YYYY", autoUpdateCatalog: true, defaultRegion: "North America", combineRegionStatistics: true, useCatalogTitles: true, launchScreen:globalThis.OpenCabinetLaunchScreen?.defaults };
+const DEFAULT_PREFERENCES = { language: globalThis.OpenCabinetI18n.defaultLocale, maxCachedCovers: 400, cacheMode: "disk", cacheDirectory: "", startMaximized: true, coversOnly: false, timeFormat: "24h", releaseDateFormat: "DD-MM-YYYY", autoUpdateCatalog: true, defaultRegion: "North America", combineRegionStatistics: true, useCatalogTitles: true, launchScreen:globalThis.OpenCabinetLaunchScreen?.defaults, couchControls:globalThis.OpenCabinetController?.defaults };
 
 function canonicalImportRegion(value) {
   const aliases={u:'North America',us:'North America',usa:'North America','north america':'North America',e:'Europe',eu:'Europe',eur:'Europe',europe:'Europe',european:'Europe',pal:'Europe',j:'Japan',jp:'Japan',jpn:'Japan',jap:'Japan',japan:'Japan',w:'World',world:'World',worldwide:'World',all:'World',asia:'Asia',as:'Asia',korea:'Korea',kr:'Korea',kor:'Korea',australia:'Australia',au:'Australia',aus:'Australia',brazil:'Brazil',br:'Brazil',spain:'Spain',france:'France',germany:'Germany',italy:'Italy'};
@@ -184,6 +185,7 @@ function readPreferences() {
       combineRegionStatistics: typeof saved?.combineRegionStatistics === "boolean" ? saved.combineRegionStatistics : true,
       useCatalogTitles: typeof saved?.useCatalogTitles === "boolean" ? saved.useCatalogTitles : true,
       launchScreen:globalThis.OpenCabinetLaunchScreen?.normalize(saved?.launchScreen),
+      couchControls:globalThis.OpenCabinetController?.normalize(saved?.couchControls),
     };
   } catch { /* Use defaults if preferences are missing or unreadable. */ }
   return { ...DEFAULT_PREFERENCES };
@@ -212,6 +214,8 @@ function setupPreferences() {
   const defaultRegion=document.getElementById("preference-default-region");
   const restoreDefaults=document.getElementById("btn-reset-preferences");
   const launchScreenEditor=globalThis.OpenCabinetLaunchScreen?.editor(document);
+  const controllerEditor=globalThis.OpenCabinetController?.editor(document.getElementById('controller-settings'),document);
+  let profilesPanel=null;
   let resettingDefaults=false;
   const directory = document.getElementById("preference-data-directory");
   const browse = document.getElementById("btn-browse-data-directory");
@@ -251,18 +255,20 @@ function setupPreferences() {
   }
   showThemeEditorTab(false);
   const maintenancePanel = globalThis.OpenCabinetMaintenance?.setup({ document, invoke, getPreferences: () => preferences, onBusyChange: update });
-  function updateSaveVisibility() { save.classList.toggle("hidden", ["backups", "storage", "themes", "theme-editor"].includes(preferenceCategory)); }
-  const tabs = ["startup", "library", "launch", "themes", "theme-editor", "metadata", "data", "storage", "backups"].map(name => ({
+  function updateSaveVisibility() { save.classList.toggle("hidden", ["profiles", "backups", "storage", "themes", "theme-editor"].includes(preferenceCategory)); }
+  const tabs = ["startup", "library", "launch", "controller", "profiles", "themes", "theme-editor", "metadata", "data", "storage", "backups"].map(name => ({
     name, button: document.getElementById(`preferences-tab-${name}`),
     panel: document.getElementById(`preferences-panel-${name}`),
   }));
   function showCategory(name, focus = false, internal = false) {
-    if (!internal && (backupsPanel?.busy || themesPanel?.busy || maintenancePanel?.busy)) return;
+    if (!internal && (backupsPanel?.busy || themesPanel?.busy || maintenancePanel?.busy || profilesPanel?.busy)) return;
+    if(name!=='controller')controllerEditor?.cancel();
     preferenceCategory = name; updateSaveVisibility();
     document.getElementById("preferences-tab-data").classList.toggle("has-active-subcategory", ["backups", "storage"].includes(name));
     document.getElementById("preferences-tab-themes").classList.toggle("has-active-subcategory", name === "theme-editor");
     if (name === "backups") void backupsPanel?.open();
     if (name === "storage") void maintenancePanel?.open();
+    if (name === "profiles") void profilesPanel?.open();
     document.getElementById("preferences-panels").scrollTop = 0;
     tabs.forEach(tab => {
       const active = tab.name === name;
@@ -286,6 +292,10 @@ function setupPreferences() {
     });
   });
 
+  document.getElementById('btn-open-profiles')?.addEventListener('click',event=>{
+    event.stopPropagation();openButton.click();showCategory('profiles');
+  });
+
   function readLocation() {
     if (!reading) reading = invoke("get_data_location").finally(() => { reading = null; });
     return reading;
@@ -298,7 +308,7 @@ function setupPreferences() {
     directory.value = draftDirectory;
     document.getElementById("preferences-current-directory").textContent = location
       ? globalThis.OpenCabinetI18n.t("msg.8d1a55bd93", location.active_directory) : globalThis.OpenCabinetI18n.t("msg.cd9c5528d2");
-    const busy = saving || choosing || !!backupsPanel?.busy || !!themesPanel?.busy || !!maintenancePanel?.busy;
+    const busy = saving || choosing || !!backupsPanel?.busy || !!themesPanel?.busy || !!maintenancePanel?.busy || !!profilesPanel?.busy;
     tabs.forEach(tab => { tab.button.disabled = busy; });
     metadataImport.disabled=metadataReset.disabled=busy;
     catalogTitles.disabled=busy;
@@ -311,6 +321,7 @@ function setupPreferences() {
     document.getElementById("preference-cache-disk-options").classList.toggle("hidden", cacheMode.value !== "disk");
     startMaximized.disabled = coversOnly.disabled = busy;
     launchScreenEditor?.sync(busy);
+    controllerEditor?.sync(busy);
     timeFormat.disabled = busy;
     releaseDateFormat.disabled=autoUpdateCatalog.disabled=defaultRegion.disabled=restoreDefaults.disabled=busy;
     document.getElementById("btn-close-preferences").disabled = busy;
@@ -340,7 +351,10 @@ function setupPreferences() {
     Channel: window.__TAURI__.core.Channel, getPreferences: () => preferences, onBusyChange: update,
     onRestored: async () => { location = await readLocation(); draftDirectory = location.pending_directory || location.active_directory; selection = null; update(); },
     canRestart: () => !scanInProgress && !launchingGames.size && !allGames.some(game => game.is_running) });
-  function close() { if (!saving && !choosing && !backupsPanel?.busy && !themesPanel?.busy && !maintenancePanel?.busy) { themesPanel?.close(); dialog.close(); } }
+  profilesPanel=globalThis.OpenCabinetProfiles?.create({host:document.getElementById('user-profiles'),document,invoke,confirm:confirmDeletion,onBusyChange:update,
+    canSwitch:()=>!libraryLoading&&!scanInProgress&&!launchingGames.size&&!launchPresentation?.active&&!allGames.some(game=>game.is_running)&&!deletingGames,
+    onChanged:async()=>{sofaMode?.close();selectedGameIds.clear();platformDetailsCache.clear();await loadGames();const game=allGames.find(game=>game.id===selectedGameId);if(game)showGameDetails(game);showToast(globalThis.OpenCabinetI18n.t('profiles.changed'));}});
+  function close() { if (!saving && !choosing && !backupsPanel?.busy && !themesPanel?.busy && !maintenancePanel?.busy && !profilesPanel?.busy) { controllerEditor?.cancel();themesPanel?.close(); dialog.close(); } }
   openButton.addEventListener("click", async (event) => {
     event.stopPropagation();
     document.getElementById("dropdown-options-menu").classList.remove("show");
@@ -358,6 +372,7 @@ function setupPreferences() {
     autoUpdateCatalog.checked=preferences.autoUpdateCatalog;
     defaultRegion.value=preferences.defaultRegion;
     launchScreenEditor?.load(preferences.launchScreen);
+    controllerEditor?.load(preferences.couchControls);
     resettingDefaults=false;
     error.classList.add("hidden");
     location = null;
@@ -429,6 +444,7 @@ function setupPreferences() {
     combineRegions.checked=DEFAULT_PREFERENCES.combineRegionStatistics;catalogTitles.checked=DEFAULT_PREFERENCES.useCatalogTitles;
     timeFormat.value=DEFAULT_PREFERENCES.timeFormat;releaseDateFormat.value=DEFAULT_PREFERENCES.releaseDateFormat;autoUpdateCatalog.checked=DEFAULT_PREFERENCES.autoUpdateCatalog;defaultRegion.value=DEFAULT_PREFERENCES.defaultRegion;
     launchScreenEditor?.load(DEFAULT_PREFERENCES.launchScreen);
+    controllerEditor?.load(DEFAULT_PREFERENCES.couchControls);
     draftCatalog=null;draftDirectory=location.active_directory;selection=null;resettingDefaults=true;
     showCategory("startup");update();
     document.getElementById("preferences-form").requestSubmit();
@@ -445,8 +461,8 @@ function setupPreferences() {
   });
   document.getElementById("preferences-form").addEventListener("submit", async (event) => {
     event.preventDefault();
-    if (saving || choosing || backupsPanel?.busy || themesPanel?.busy || !location) return;
-    if (["themes", "theme-editor"].includes(preferenceCategory)) return;
+    if (saving || choosing || backupsPanel?.busy || themesPanel?.busy || profilesPanel?.busy || !location) return;
+    if (["profiles", "themes", "theme-editor"].includes(preferenceCategory)) return;
     if (preferenceCategory === "backups") { await backupsPanel?.saveSettings(); return; }
     const value = Number(input.value);
     if (!validCoverLimit(value)) {
@@ -471,7 +487,7 @@ function setupPreferences() {
       releaseDateFormat:releaseDateFormat.value,autoUpdateCatalog:autoUpdateCatalog.checked,
       defaultRegion:canonicalImportRegion(defaultRegion.value)||DEFAULT_PREFERENCES.defaultRegion,
       combineRegionStatistics: combineRegions.checked, useCatalogTitles: catalogTitles.checked,
-      launchScreen:launchScreenEditor?.read()||preferences.launchScreen };
+      launchScreen:launchScreenEditor?.read()||preferences.launchScreen, couchControls:controllerEditor?.read()||preferences.couchControls };
     let previous;
     saving = true; update();
     try {
@@ -562,6 +578,7 @@ function setupPreferences() {
       || combineRegions.checked !== preferences.combineRegionStatistics
       || catalogTitles.checked !== preferences.useCatalogTitles
       || launchScreenEditor?.changed(preferences.launchScreen)
+      || controllerEditor?.changed(preferences.couchControls)
       || (selection && selection.action !== (location.pending_action || "move"))) {
       showError(globalThis.OpenCabinetI18n.t("msg.39ef2ccc28"));
       return;
@@ -1596,6 +1613,8 @@ function setupGameContextMenu() {
   const imageFolder = document.getElementById("context-open-images");
   const manualFolder = document.getElementById("context-open-manuals");
   const gameFiles = document.getElementById("context-open-game-files");
+  const shortcut=document.getElementById('context-create-shortcut');
+  shortcut?.addEventListener('click',()=>{const game=allGames.find(game=>game.id===targetId);close(true);if(game)void gameShortcuts?.save(game);});
   let items = [play, edit];
   let targetId = null;
   let targetIds = [];
@@ -1636,6 +1655,7 @@ function setupGameContextMenu() {
     imageFolder.classList.toggle("hidden", multiple);
     manualFolder.classList.toggle("hidden", multiple);
     gameFiles.classList.toggle("hidden", multiple);
+    shortcut?.classList.toggle('hidden',multiple);
     const mergeCandidates = targetIds.map(id => allGames.find(g => g.id === id));
     const canMerge = multiple && mergeCandidates.every(g => g && !g.launch_directly && !g.steam_app_id && !g.epic_app_id && !g.is_running && !launchingGames.has(g.id) && g.platform.toLowerCase() === game.platform.toLowerCase());
     const canMergeDiscs = canMerge && mergeCandidates.every(game => !game.regions?.length);
@@ -1643,7 +1663,7 @@ function setupGameContextMenu() {
     mergeRegions.classList.toggle("hidden", !canMerge);
     const canMergeRecomp=window.OpenCabinetRegions?.canMergeRecomp?.(mergeCandidates)&&mergeCandidates.every(g=>!g.is_running&&!launchingGames.has(g.id));
     mergeRecomp.classList.toggle('hidden',!canMergeRecomp);
-    items = multiple ? [remove, downloadImages, playlistAction, ...(canMergeDiscs ? [mergeDiscs] : []), ...(canMerge ? [mergeRegions] : []),...(canMergeRecomp?[mergeRecomp]:[])] : [play, edit, playlistAction, ...(appFeatures?[statusAction,notesAction]:[]), ...(window.OpenCabinetLibraryTools?[history]:[]), ...(emulator ? [openEmulator] : []), gameFiles, imageFolder, manualFolder, remove];
+    items = multiple ? [remove, downloadImages, playlistAction, ...(canMergeDiscs ? [mergeDiscs] : []), ...(canMerge ? [mergeRegions] : []),...(canMergeRecomp?[mergeRecomp]:[])] : [play, edit, playlistAction, ...(appFeatures?[statusAction,notesAction]:[]), ...(window.OpenCabinetLibraryTools?[history]:[]), ...(emulator ? [openEmulator] : []), gameFiles, imageFolder, manualFolder, ...(shortcut?[shortcut]:[]), remove];
     document.querySelectorAll(".dropdown-menu.show").forEach((dropdown) => dropdown.classList.remove("show"));
     document.querySelectorAll(".menu-item-dropdown.active").forEach((dropdown) => dropdown.classList.remove("active"));
     menu.classList.remove("hidden");
@@ -3200,6 +3220,7 @@ function setupGameEditor() {
   const argumentsInput = document.getElementById("game-edit-arguments");
   let editingDirectly = false, editingStore = false;
   const linuxEditor=window.OpenCabinetRuntime?.createEditor(document.getElementById("game-linux-execution"),{invoke,document,prefix:"game"});
+  const gameStartupEditor=globalThis.OpenCabinetLaunchScreen?.gameEditor?.(document.getElementById('game-startup-screen'),document,()=>preferences);
   const sourceSelect=document.getElementById('game-edit-source-select');
   function syncExecutionSources(){
     sourceSelect.replaceChildren();
@@ -3692,6 +3713,7 @@ function setupGameEditor() {
         ? game.discs.map(disc => `${disc.label}: ${disc.rom_path}`).join("\n") : game.rom_path || "";
       customArguments.checked = game.execution?.arguments != null && !editingStore;
       argumentsInput.value = game.execution?.arguments ?? "";
+      gameStartupEditor?.load(game.execution?.startup_screen);
       draftCatalogId = null;
       draftMetadataSource = null;
       resetMetadata(); metadataPanel.classList.add("hidden");
@@ -3802,6 +3824,7 @@ function setupGameEditor() {
         emulator_id: emulatorSelect.value ? Number(emulatorSelect.value) : null,
         arguments: customArguments.checked && !editingStore ? argumentsInput.value : null,
         ...(linuxExecution ? {linux:linuxExecution} : {}),
+        startup_screen:gameStartupEditor?.read()??null,
       },
       discs: discEditor?.value() ?? null,
       catalogId: draftCatalogId,
@@ -6230,6 +6253,7 @@ function setupSofaMode() {
   sofaMode = window.OpenCabinetSofa.create({
     document, window,
     games: () => allGames, platforms: () => allPlatforms,
+    getControls:()=>preferences.couchControls,
     getPlaylists:()=>libraryPlay?.lists||[],
     hasManual:game=>manualCoverCache?.hasManuals(game.id),
     manualIsCover:isJewelManualGame,
@@ -6408,6 +6432,12 @@ window.addEventListener("DOMContentLoaded", async () => {
   await setupTitlebar();
   await setupPlayStatistics();
   await loading;
+  void invoke('get_user_profiles').then(data=>{document.getElementById('active-user-profile').textContent=' · '+data.profiles.find(profile=>profile.id===data.active)?.name;}).catch(console.error);
+  gameShortcuts=globalThis.OpenCabinetShortcuts?.create({invoke,listen:(...args)=>window.__TAURI__.event.listen(...args),games:()=>allGames,
+    images:displayGameImages,toUrl:imageSource,showToast,launch:game=>launchGame(game.id,game.title),
+    canLaunch:()=>!launchingGames.size&&!launchPresentation?.active&&!allGames.some(game=>game.is_running),
+    focus:async()=>{const current=window.__TAURI__.window.getCurrentWindow();await current.show();await current.unminimize();await current.setFocus();}});
+  void gameShortcuts?.start();
   void appUpdates.check(true);
   void invoke("get_pending_imports").then(rows=>{const button=document.getElementById("btn-pending-imports");if(rows.length){button?.classList.add("has-pending-imports");showToast(globalThis.OpenCabinetI18n.t("resume.notice",rows.length));}}).catch(console.error);
   // Image discovery is maintenance, not a prerequisite for showing the catalog.

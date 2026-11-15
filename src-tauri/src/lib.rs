@@ -22,6 +22,8 @@ mod library_files;
 mod session_history;
 mod library_features;
 mod launch_actions;
+mod user_profiles;
+mod game_shortcuts;
 mod launch_screen;
 mod launch_window_probe;
 mod playlists;
@@ -315,6 +317,7 @@ fn init_database(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     game_regions::init(&conn)?;
     library_files::init(&conn)?;
     session_history::recover(&conn)?;
+    user_profiles::init(&conn)?;
     metadata::init_library_schema(&conn)?;
     init_game_images(&conn)?;
     media_library::init_schema(&conn)?;
@@ -429,7 +432,7 @@ fn read_library_games(conn: &Connection, root: &Path, tracker: &PlayTracker) -> 
         .map_err(|e| e.to_string())?;
     let games_iter = stmt
         .query_map([], |row| {
-            Ok(Game { personal:Default::default(), order_group:None, box_3d:None, regions:Vec::new(), default_region_id:None, execution: game_execution::ExecutionOptions { emulator_id: row.get(17)?, arguments: row.get(18)? , linux: None }, discs: Vec::new(),
+            Ok(Game { personal:Default::default(), order_group:None, box_3d:None, regions:Vec::new(), default_region_id:None, execution: game_execution::ExecutionOptions { emulator_id: row.get(17)?, arguments: row.get(18)? , linux: None, startup_screen: None }, discs: Vec::new(),
                 id: row.get(0)?,
                 title: row.get(1)?,
                 platform: row.get(2)?,
@@ -462,11 +465,13 @@ fn read_library_games(conn: &Connection, root: &Path, tracker: &PlayTracker) -> 
         by_game.entry(id).or_default().push(image);
     }
     let mut linux_options = linux_execution::all(conn)?;
+    let mut startup_options = game_execution::startup_all(conn)?;
     let mut disc_lists = discs::all(conn)?;
     for game in games_iter {
         let mut game = game.map_err(|e| e.to_string())?;
         game.discs = disc_lists.remove(&game.id).unwrap_or_default();
         game.execution.linux = linux_options.remove(&game.id);
+        game.execution.startup_screen = startup_options.remove(&game.id);
         game.recomp = entity_variables::truth(variables.get(&game.id).and_then(|values|values.get("recomp")));
         game.box_3d = box_settings.remove(&game.id);
         game.order_group = order_index.get(&game_order::key(&game.title)).map(|index|order_groups[*index].clone());
@@ -812,7 +817,7 @@ fn save_game_details_in_transaction(conn: &Connection, details: GameDetails) -> 
     }
     let mut game = tx.query_row(
         "SELECT id, title, platform, rom_path, cover_path, play_time, release_date, developer, publisher, genre, game_mode, max_players, description, last_played, play_time_seconds, session_count, launch_directly, emulator_override_id, arguments_override FROM games WHERE id = ?1",
-        [details.id], |row| Ok(Game { personal:Default::default(), order_group:None, box_3d:None, regions:Vec::new(), default_region_id:None, execution: game_execution::ExecutionOptions { emulator_id: row.get(17)?, arguments: row.get(18)? , linux: None }, discs: Vec::new(),
+        [details.id], |row| Ok(Game { personal:Default::default(), order_group:None, box_3d:None, regions:Vec::new(), default_region_id:None, execution: game_execution::ExecutionOptions { emulator_id: row.get(17)?, arguments: row.get(18)? , linux: None, startup_screen: None }, discs: Vec::new(),
             id: row.get(0)?, title: row.get(1)?, platform: row.get(2)?,
             rom_path: row.get(3)?, cover_path: row.get(4)?, play_time: row.get(5)?,
             release_date: row.get(6)?, developer: row.get(7)?, publisher: row.get(8)?,
@@ -828,6 +833,7 @@ fn save_game_details_in_transaction(conn: &Connection, details: GameDetails) -> 
     ).map_err(|e| e.to_string())?;
     game.personal = library_features::read(tx, game_regions::owner(tx,game.id)?)?;
     game.execution.linux = linux_execution::read(tx, game.id)?;
+    game.execution.startup_screen = game_execution::read(tx,game.id)?.startup_screen;
     game.steam_app_id = steam::app_id(&game.rom_path);
     game.recomp = entity_variables::truth(entity_variables::read(tx,"game",details.id)?.get("recomp"));
     game.epic_app_id = epic::app_id(&game.rom_path);
@@ -2338,7 +2344,7 @@ mod game_edit_tests {
         discs::init(&conn).unwrap();
         discs::replace(&conn,1,&[discs::source(&first),discs::source(&second)]).unwrap();
         let mut edit = details(); edit.platform="SNES".into();
-        edit.execution=Some(game_execution::ExecutionOptions { emulator_id:Some(2),arguments:Some("--custom \"%ROM%\"".into()) , linux: None });
+        edit.execution=Some(game_execution::ExecutionOptions { emulator_id:Some(2),arguments:Some("--custom \"%ROM%\"".into()) , linux: None, startup_screen: None });
         let saved=save_game_details(&mut conn,edit).unwrap();
         assert_eq!(saved.execution.emulator_id,Some(2));
         let disc=discs::read(&conn,1).unwrap()[1].id;
@@ -2346,11 +2352,11 @@ mod game_edit_tests {
             assert_eq!(exe,"second.exe"); assert_eq!(args,&["--custom".to_string(),second.clone()]); Ok(())
         }).unwrap();
         let mut edit=details(); edit.platform="SNES".into();
-        edit.execution=Some(game_execution::ExecutionOptions { emulator_id:Some(3),arguments:None , linux: None });
+        edit.execution=Some(game_execution::ExecutionOptions { emulator_id:Some(3),arguments:None , linux: None, startup_screen: None });
         assert!(save_game_details(&mut conn,edit).is_err());
         assert_eq!(game_execution::read(&conn,1).unwrap().emulator_id,Some(2));
         let mut edit=details(); edit.platform="SNES".into();
-        edit.execution=Some(game_execution::ExecutionOptions { emulator_id:Some(2),arguments:None , linux: None });
+        edit.execution=Some(game_execution::ExecutionOptions { emulator_id:Some(2),arguments:None , linux: None, startup_screen: None });
         save_game_details(&mut conn,edit).unwrap();
         launch_game_record_with_disc(&conn,1,disc,|exe,args,_|{
             assert_eq!(exe,"second.exe"); assert_eq!(args,&["--second".to_string(),second.clone()]); Ok(())
@@ -2375,7 +2381,7 @@ mod game_edit_tests {
         conn.execute_batch("CREATE TABLE emulators(id INTEGER PRIMARY KEY,platform TEXT);
             INSERT INTO emulators VALUES(1,'SNES'),(2,'SNES');").unwrap();
         game_execution::init_schema(&conn).unwrap();
-        game_execution::save(&conn,1,"SNES",&game_execution::ExecutionOptions{emulator_id:Some(2),arguments:Some(String::new()), linux: None }).unwrap();
+        game_execution::save(&conn,1,"SNES",&game_execution::ExecutionOptions{emulator_id:Some(2),arguments:Some(String::new()), linux: None, startup_screen: None }).unwrap();
         init_game_metadata(&conn).unwrap();
         assert_eq!(game_execution::read(&conn,1).unwrap().arguments.as_deref(),Some(""));
         conn.execute("UPDATE games SET platform='Super Nintendo'",[]).unwrap();
@@ -2383,11 +2389,11 @@ mod game_edit_tests {
         assert_eq!(game_execution::read(&conn,1).unwrap().emulator_id,Some(2));
         conn.execute("UPDATE emulators SET platform='Genesis' WHERE id=2",[]).unwrap();
         assert_eq!(game_execution::read(&conn,1).unwrap().emulator_id,None);
-        game_execution::save(&conn,1,"Super Nintendo",&game_execution::ExecutionOptions{emulator_id:Some(1),arguments:None, linux: None }).unwrap();
+        game_execution::save(&conn,1,"Super Nintendo",&game_execution::ExecutionOptions{emulator_id:Some(1),arguments:None, linux: None, startup_screen: None }).unwrap();
         conn.execute("DELETE FROM emulators WHERE id=1",[]).unwrap();
         assert_eq!(game_execution::read(&conn,1).unwrap().emulator_id,None);
         conn.execute("UPDATE games SET launch_directly=1,rom_path='steam://run/42'",[]).unwrap();
-        assert!(game_execution::save(&conn,1,"PC",&game_execution::ExecutionOptions{emulator_id:None,arguments:Some("--windowed".into()), linux: None }).is_err());
+        assert!(game_execution::save(&conn,1,"PC",&game_execution::ExecutionOptions{emulator_id:None,arguments:Some("--windowed".into()), linux: None, startup_screen: None }).is_err());
     }
 
     #[test]
@@ -2693,11 +2699,17 @@ mod game_edit_tests {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     i18n::initialize();
+    let startup_request=match game_shortcuts::arguments(std::env::args()) {
+        Ok(request)=>request,
+        Err(error)=>{rfd::MessageDialog::new().set_title("OpenCabinet").set_description(error).show();return;}
+    };
+    if startup_request.as_ref().is_some_and(|request|game_shortcuts::forward(request).unwrap_or(false)){return;}
     #[cfg(target_os="linux")]
     if let Err(error) = linux_desktop::initialize() {
         eprintln!("Could not register the OpenCabinet desktop launcher: {error}");
     }
     if let Err(error) = storage::initialize() {
+        if startup_request.as_ref().is_some_and(|request|game_shortcuts::forward(request).unwrap_or(false)){return;}
         rfd::MessageDialog::new().set_title(crate::i18n::text("msg.47dd28ae40"))
             .set_description(&error).set_level(rfd::MessageLevel::Error).show();
         return;
@@ -2726,6 +2738,7 @@ pub fn run() {
     }
     tauri::Builder::default()
         .manage(PlayTracker::default())
+        .manage(game_shortcuts::Requests::new(startup_request))
         .manage(launch_screen::LaunchScreen::default())
         .manage(metadata::MetadataJobs::default())
         .manage(retroarch::RetroArchJobs::default())
@@ -2752,6 +2765,7 @@ pub fn run() {
                 eprintln!("Error al inicializar la base de datos portable: {}", e);
             }
             backups::start_worker(app.handle().clone());
+            game_shortcuts::start(app.handle().clone());
             Ok(())
         })
         .on_window_event(|window,event| {
@@ -2813,6 +2827,12 @@ pub fn run() {
             get_games,
             set_game_cover_reversed,
             library_features::set_game_personal,
+            user_profiles::get_user_profiles,
+            user_profiles::save_user_profile,
+            user_profiles::switch_user_profile,
+            user_profiles::delete_user_profile,
+            game_shortcuts::create_game_shortcut,
+            game_shortcuts::take_shortcut_requests,
             launch_actions::get_game_launch_actions,
             launch_actions::choose_launch_action,
             playlists::get_playlists,
