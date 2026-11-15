@@ -470,6 +470,7 @@ fn kind(value: &str) -> Option<String> {
         "cover_front" => "cover",
         "cover_back" => "back_cover",
         "cover_full" => "box_full",
+        "background" => "fanart_background",
         "poster" => "poster_front",
         "label" | "cart_label" => "cart_label",
         other => other,

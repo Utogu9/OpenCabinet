@@ -16,7 +16,8 @@ function environment(){
     focus(){this.focused=true;}
     querySelectorAll(){return this.children.flatMap(child=>[child,...child.querySelectorAll()]).filter(child=>['input','select','button','textarea'].includes(child.tag));}
   }
-  const body=new Element('body');const context=vm.createContext({document:{body,createElement:tag=>new Element(tag)},window:{},console});
+  const body=new Element('body');const context=vm.createContext({document:{body,createElement:tag=>new Element(tag)},window:{},console,
+    launchPresentation:null,getLaunchPresentation:()=>null,displayGameImages:game=>game.images||[]});
   vm.runInContext(fs.readFileSync('src/game-regions.js','utf8'),context);
   return {context,api:context.window.OpenCabinetRegions,body,Element};
 }

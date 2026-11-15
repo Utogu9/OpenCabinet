@@ -18,7 +18,8 @@ function environment() {
     querySelectorAll() { return this.children.flatMap(el => [el, ...el.querySelectorAll()]).filter(el => ["input", "select", "button"].includes(el.tag)); }
   }
   const body = new Element("body"), doc = { body, createElement: tag => new Element(tag) };
-  const context = vm.createContext({ window: {}, document: doc, console });
+  const context = vm.createContext({ window: {}, document: doc, console,launchPresentation:null,
+    getLaunchPresentation:()=>null,displayGameImages:game=>game.images||[] });
   vm.runInContext(fs.readFileSync("src/game-discs.js", "utf8"), context);
   return { context, doc, api: context.window.OpenCabinetDiscs, Element };
 }

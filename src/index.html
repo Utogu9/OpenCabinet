@@ -1249,6 +1249,7 @@
           <nav class="game-editor-nav" role="tablist" aria-label="" data-i18n-aria-label="msg.745e968437" aria-orientation="vertical">
             <button id="preferences-tab-startup" type="button" role="tab" aria-controls="preferences-panel-startup" aria-selected="true"><span data-i18n="msg.58fcc9468f"></span></button>
             <button id="preferences-tab-library" type="button" role="tab" aria-controls="preferences-panel-library" aria-selected="false" tabindex="-1"><span data-i18n="msg.c9169c12cb"></span></button>
+            <button id="preferences-tab-launch" type="button" role="tab" aria-controls="preferences-panel-launch" aria-selected="false" tabindex="-1" data-i18n="launchScreen.title"></button>
             <button id="preferences-tab-themes" type="button" role="tab" aria-controls="preferences-panel-themes" aria-selected="false" tabindex="-1" data-i18n="themes.title"></button>
             <div id="preferences-theme-editor-row" class="preferences-subcategory-row hidden" role="presentation">
               <button id="preferences-tab-theme-editor" class="preferences-subcategory hidden" type="button" role="tab" aria-controls="preferences-panel-theme-editor" aria-selected="false" tabindex="-1" data-i18n="themes.editor"></button>
@@ -1271,6 +1272,18 @@
             <span><span data-i18n="msg.1dfd984682"></span></span>
           </label>
           <p class="preference-help" id="preference-startup-help"><span data-i18n="msg.ea23eae3da"></span></p>
+        </section>
+        <section id="preferences-panel-launch" class="preferences-section hidden" role="tabpanel" aria-labelledby="preferences-tab-launch">
+          <h3 data-i18n="launchScreen.title"></h3>
+          <label class="preference-toggle"><input id="launch-screen-enabled" type="checkbox"><span data-i18n="launchScreen.enabled"></span></label>
+          <label class="preference-toggle"><input id="launch-screen-useThemeColor" type="checkbox"><span data-i18n="launchScreen.themeColor"></span></label>
+          <div class="form-group"><label for="launch-screen-color" data-i18n="launchScreen.color"></label><input id="launch-screen-color" type="color"></div>
+          <label class="preference-toggle"><input id="launch-screen-useBackground" type="checkbox"><span data-i18n="launchScreen.background"></span></label>
+          <p class="preference-help" data-i18n="launchScreen.artworkHelp"></p>
+          <div class="form-group"><label for="launch-screen-mode" data-i18n="launchScreen.duration"></label><select id="launch-screen-mode"><option value="auto" data-i18n="launchScreen.auto"></option><option value="fixed" data-i18n="launchScreen.fixed"></option></select></div>
+          <div id="launch-screen-fixed-options" class="form-group"><label for="launch-screen-seconds" data-i18n="launchScreen.seconds"></label><input id="launch-screen-seconds" type="number" min="1" max="120" step="1"></div>
+          <div id="launch-screen-auto-options" class="form-group"><label for="launch-screen-timeoutSeconds" data-i18n="launchScreen.timeout"></label><input id="launch-screen-timeoutSeconds" type="number" min="1" max="120" step="1"><p class="preference-help" data-i18n="launchScreen.autoHelp"></p></div>
+          <p class="preference-help" data-i18n="launchScreen.dismissHelp"></p>
         </section>
         <section id="preferences-panel-library" class="preferences-section hidden" role="tabpanel" aria-labelledby="preferences-tab-library">
           <h3 id="preferences-library-title"><span data-i18n="msg.c9169c12cb"></span></h3>
@@ -1614,6 +1627,7 @@
     <script src="library-tools.js"></script>
     <script src="library-features.js"></script>
     <script src="library-play.js"></script>
+    <script src="launch-screen.js"></script>
     <script src="game-regions.js"></script>
     <script src="game-order.js"></script>
     <script src="keyboard-navigation.js"></script>

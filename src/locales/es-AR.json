@@ -1921,6 +1921,22 @@
     "disc.black": "Negro (CD de PlayStation)",
     "disc.blue": "Azul (CD de PlayStation 2)",
     "disc.gold": "Dorado",
-    "disc.invalidFinish": "El acabado del reverso del disco no es válido."
+    "disc.invalidFinish": "El acabado del reverso del disco no es válido.",
+    "launchScreen.title": "Inicio de juegos",
+    "launchScreen.enabled": "Mostrar una pantalla de carga al iniciar un juego",
+    "launchScreen.themeColor": "Usar el color de fondo del tema actual",
+    "launchScreen.color": "Color de fondo personalizado",
+    "launchScreen.background": "Usar la imagen de fondo del juego si está disponible",
+    "launchScreen.artworkHelp": "Usa imágenes de Fondo / Fanart, el logo del juego y un disco giratorio o cartucho. Si faltan imágenes, muestra el color de fondo.",
+    "launchScreen.duration": "Ocultar la pantalla de carga",
+    "launchScreen.auto": "Automáticamente cuando aparezca una ventana del juego lista",
+    "launchScreen.fixed": "Después de un tiempo fijo",
+    "launchScreen.seconds": "Duración desde el inicio del proceso (segundos)",
+    "launchScreen.timeout": "Espera máxima / duración alternativa (segundos)",
+    "launchScreen.autoHelp": "Busca una ventana estable y visible del juego o emulador. No puede confirmar que terminó su carga interna. Linux X11 requiere xprop; Wayland, Steam y Epic usan la espera máxima.",
+    "launchScreen.dismissHelp": "Presioná Esc o usá el botón para ocultar esta pantalla sin detener el juego.",
+    "launchScreen.loading": "Cargando…",
+    "launchScreen.dismiss": "Ocultar pantalla de carga · Esc",
+    "launchScreen.busy": "Ya se está iniciando un juego. Ocultá su pantalla de carga antes de iniciar otro."
   }
 }

@@ -141,13 +141,20 @@ let manualCoverCache = null;
 const isJewelManualGame = game => !!window.OpenCabinet3D?.jewelFamily(game?.platform);
 const pauseManualPrefetchForScroll=()=>manualCoverCache?.pauseForScroll();
 const PREFERENCES_KEY = "opencabinet.preferences";
-const DEFAULT_PREFERENCES = { language: globalThis.OpenCabinetI18n.defaultLocale, maxCachedCovers: 400, cacheMode: "disk", cacheDirectory: "", startMaximized: true, coversOnly: false, timeFormat: "24h", releaseDateFormat: "DD-MM-YYYY", autoUpdateCatalog: true, defaultRegion: "North America", combineRegionStatistics: true, useCatalogTitles: true };
+const DEFAULT_PREFERENCES = { language: globalThis.OpenCabinetI18n.defaultLocale, maxCachedCovers: 400, cacheMode: "disk", cacheDirectory: "", startMaximized: true, coversOnly: false, timeFormat: "24h", releaseDateFormat: "DD-MM-YYYY", autoUpdateCatalog: true, defaultRegion: "North America", combineRegionStatistics: true, useCatalogTitles: true, launchScreen:globalThis.OpenCabinetLaunchScreen?.defaults };
 
 function canonicalImportRegion(value) {
   const aliases={u:'North America',us:'North America',usa:'North America','north america':'North America',e:'Europe',eu:'Europe',eur:'Europe',europe:'Europe',european:'Europe',pal:'Europe',j:'Japan',jp:'Japan',jpn:'Japan',jap:'Japan',japan:'Japan',w:'World',world:'World',worldwide:'World',all:'World',asia:'Asia',as:'Asia',korea:'Korea',kr:'Korea',kor:'Korea',australia:'Australia',au:'Australia',aus:'Australia',brazil:'Brazil',br:'Brazil',spain:'Spain',france:'France',germany:'Germany',italy:'Italy'};
   return aliases[String(value||'').trim().toLowerCase()]||null;
 }
 let preferences = readPreferences();
+let launchPresentation=null;
+function getLaunchPresentation() {
+  return launchPresentation ??= globalThis.OpenCabinetLaunchScreen?.create({invoke,getPreferences:()=>preferences,
+    listen:(...args)=>window.__TAURI__.event.listen(...args),
+    themeColor:()=>getComputedStyle(document.documentElement).getPropertyValue('--bg-color').trim()||'#14161e',
+    t:(...args)=>globalThis.OpenCabinetI18n.t(...args),onError:error=>console.error('Launch presentation:',error)});
+}
 let appThemes = null;
 const launchingGames = new Set();
 let deletingGames = false;
@@ -176,6 +183,7 @@ function readPreferences() {
       defaultRegion: canonicalImportRegion(saved?.defaultRegion) || DEFAULT_PREFERENCES.defaultRegion,
       combineRegionStatistics: typeof saved?.combineRegionStatistics === "boolean" ? saved.combineRegionStatistics : true,
       useCatalogTitles: typeof saved?.useCatalogTitles === "boolean" ? saved.useCatalogTitles : true,
+      launchScreen:globalThis.OpenCabinetLaunchScreen?.normalize(saved?.launchScreen),
     };
   } catch { /* Use defaults if preferences are missing or unreadable. */ }
   return { ...DEFAULT_PREFERENCES };
@@ -203,6 +211,7 @@ function setupPreferences() {
   const autoUpdateCatalog=document.getElementById("preference-auto-update-catalog");
   const defaultRegion=document.getElementById("preference-default-region");
   const restoreDefaults=document.getElementById("btn-reset-preferences");
+  const launchScreenEditor=globalThis.OpenCabinetLaunchScreen?.editor(document);
   let resettingDefaults=false;
   const directory = document.getElementById("preference-data-directory");
   const browse = document.getElementById("btn-browse-data-directory");
@@ -243,7 +252,7 @@ function setupPreferences() {
   showThemeEditorTab(false);
   const maintenancePanel = globalThis.OpenCabinetMaintenance?.setup({ document, invoke, getPreferences: () => preferences, onBusyChange: update });
   function updateSaveVisibility() { save.classList.toggle("hidden", ["backups", "storage", "themes", "theme-editor"].includes(preferenceCategory)); }
-  const tabs = ["startup", "library", "themes", "theme-editor", "metadata", "data", "storage", "backups"].map(name => ({
+  const tabs = ["startup", "library", "launch", "themes", "theme-editor", "metadata", "data", "storage", "backups"].map(name => ({
     name, button: document.getElementById(`preferences-tab-${name}`),
     panel: document.getElementById(`preferences-panel-${name}`),
   }));
@@ -301,6 +310,7 @@ function setupPreferences() {
     cacheDirectory.value = draftCacheDirectory || (location ? `${location.active_directory.replace(/[\\/]$/, "")}/cache` : globalThis.OpenCabinetI18n.t("msg.efe5f1e8d3"));
     document.getElementById("preference-cache-disk-options").classList.toggle("hidden", cacheMode.value !== "disk");
     startMaximized.disabled = coversOnly.disabled = busy;
+    launchScreenEditor?.sync(busy);
     timeFormat.disabled = busy;
     releaseDateFormat.disabled=autoUpdateCatalog.disabled=defaultRegion.disabled=restoreDefaults.disabled=busy;
     document.getElementById("btn-close-preferences").disabled = busy;
@@ -347,6 +357,7 @@ function setupPreferences() {
     releaseDateFormat.value=preferences.releaseDateFormat;
     autoUpdateCatalog.checked=preferences.autoUpdateCatalog;
     defaultRegion.value=preferences.defaultRegion;
+    launchScreenEditor?.load(preferences.launchScreen);
     resettingDefaults=false;
     error.classList.add("hidden");
     location = null;
@@ -417,6 +428,7 @@ function setupPreferences() {
     startMaximized.checked=DEFAULT_PREFERENCES.startMaximized;coversOnly.checked=DEFAULT_PREFERENCES.coversOnly;languageSelect.value=DEFAULT_PREFERENCES.language;
     combineRegions.checked=DEFAULT_PREFERENCES.combineRegionStatistics;catalogTitles.checked=DEFAULT_PREFERENCES.useCatalogTitles;
     timeFormat.value=DEFAULT_PREFERENCES.timeFormat;releaseDateFormat.value=DEFAULT_PREFERENCES.releaseDateFormat;autoUpdateCatalog.checked=DEFAULT_PREFERENCES.autoUpdateCatalog;defaultRegion.value=DEFAULT_PREFERENCES.defaultRegion;
+    launchScreenEditor?.load(DEFAULT_PREFERENCES.launchScreen);
     draftCatalog=null;draftDirectory=location.active_directory;selection=null;resettingDefaults=true;
     showCategory("startup");update();
     document.getElementById("preferences-form").requestSubmit();
@@ -458,7 +470,8 @@ function setupPreferences() {
       startMaximized: startMaximized.checked, coversOnly: coversOnly.checked, timeFormat: timeFormat.value,
       releaseDateFormat:releaseDateFormat.value,autoUpdateCatalog:autoUpdateCatalog.checked,
       defaultRegion:canonicalImportRegion(defaultRegion.value)||DEFAULT_PREFERENCES.defaultRegion,
-      combineRegionStatistics: combineRegions.checked, useCatalogTitles: catalogTitles.checked };
+      combineRegionStatistics: combineRegions.checked, useCatalogTitles: catalogTitles.checked,
+      launchScreen:launchScreenEditor?.read()||preferences.launchScreen };
     let previous;
     saving = true; update();
     try {
@@ -548,6 +561,7 @@ function setupPreferences() {
       || languageSelect.value !== preferences.language
       || combineRegions.checked !== preferences.combineRegionStatistics
       || catalogTitles.checked !== preferences.useCatalogTitles
+      || launchScreenEditor?.changed(preferences.launchScreen)
       || (selection && selection.action !== (location.pending_action || "move"))) {
       showError(globalThis.OpenCabinetI18n.t("msg.39ef2ccc28"));
       return;
@@ -2740,6 +2754,7 @@ function setupEscapeDismissal() {
   escapeDismissalReady = true;
   window.addEventListener("keydown", (event) => {
     if (event.key !== "Escape" || event.defaultPrevented || event.isComposing) return;
+    if (launchPresentation?.active) {event.preventDefault();event.stopImmediatePropagation();void launchPresentation.dismiss();return;}
     // Holding Escape must not dismiss several stacked windows. Native dialogs
     // keep their cancel handlers, including confirmation and download cleanup.
     if (event.repeat) { event.preventDefault(); return; }
@@ -3880,10 +3895,11 @@ function setupGameEditor() {
 // --- Lanzamiento de Juegos ---
 async function launchGame(gameId, gameTitle) {
   const selected = allGames.find((game) => game.id === gameId);
-  if (selected?.is_running || launchingGames.has(gameId)) return;
+  if (selected?.is_running || launchingGames.has(gameId) || launchPresentation?.active) return;
   launchingGames.add(gameId);
   let discId = null;
   let regionId = null;
+  let presentationId=null;
   try {
     const repairDisc=(game,disc,isCurrent)=>getLibraryTools()?.replaceDisc(game,disc,isCurrent);
     let source = selected;
@@ -3901,11 +3917,16 @@ async function launchGame(gameId, gameTitle) {
     updatePlatformStatistics();
     if (selected && selectedGameId === gameId) updatePlayStatus(selected);
     showToast(`Iniciando ${gameTitle}...`);
-    const result = await invoke("launch_game", { gameId, ...(regionId !== null ? { regionId } : {}), ...(discId !== null ? { discId } : {}) });
+    const artworkAlternatives=(selected?.regions||[]).map(region=>region.game).filter(game=>game.id!==source?.id)
+      .map(game=>({...game,images:displayGameImages(game)}));
+    presentationId=await getLaunchPresentation()?.begin({...source,title:source?.title||gameTitle,images:source?displayGameImages(source):[]},discId,artworkAlternatives);
+    const result = await invoke("launch_game", { gameId, ...(regionId !== null ? { regionId } : {}), ...(discId !== null ? { discId } : {}),
+      ...(presentationId?{launchScreenId:presentationId}:{}) });
     applyPlayStatistics({ ...result, id: gameId });
     showToast(`${result.message}`);
     return result;
   } catch (error) {
+    if(presentationId)await launchPresentation?.dismiss(presentationId);
     console.error("Error al lanzar juego:", error);
     getLibraryTools()?.diagnostic(String(error));
     showToast(`${error}`, true);

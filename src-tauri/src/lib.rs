@@ -22,6 +22,8 @@ mod library_files;
 mod session_history;
 mod library_features;
 mod launch_actions;
+mod launch_screen;
+mod launch_window_probe;
 mod playlists;
 mod steam;
 mod epic;
@@ -1038,7 +1040,7 @@ fn delete_game_records_with_progress(conn: &mut Connection, ids: &[i32], discard
 }
 
 #[tauri::command]
-async fn launch_game(game_id: i32, disc_id: Option<i64>, region_id: Option<i32>, app: tauri::AppHandle, tracker: tauri::State<'_, PlayTracker>) -> Result<LaunchResult, String> {
+async fn launch_game(game_id: i32, disc_id: Option<i64>, region_id: Option<i32>, launch_screen_id: Option<String>, app: tauri::AppHandle, tracker: tauri::State<'_, PlayTracker>) -> Result<LaunchResult, String> {
     let active = tracker.reserve(game_id)?;
     tauri::async_runtime::spawn_blocking(move || {
         let conn = get_db_connection().map_err(|e| e.to_string())?;
@@ -1069,6 +1071,7 @@ async fn launch_game(game_id: i32, disc_id: Option<i64>, region_id: Option<i32>,
             }
             let mut child = command.spawn()
                 .map_err(|e| crate::i18n::i18n_format!("msg.ebe0ff502e", emu_path, e))?;
+            launch_screen::spawned(&app,launch_screen_id.as_deref(),child.id(),steam_id.is_some()||epic::app_id(&game_path).is_some());
             let errors=child.stderr.take().map(linux_process::capture_errors);
             let session=cfg!(target_os="linux").then(||linux_process::Session::new(child.id(),token));
             Ok((child, Instant::now(),log,session,errors))
@@ -1107,10 +1110,11 @@ async fn launch_game(game_id: i32, disc_id: Option<i64>, region_id: Option<i32>,
                 || steam_session.borrow().as_ref().map(|session| session.elapsed())
                     .or_else(|| epic_session.borrow().as_ref().map(|session| session.elapsed())).or_else(||process_session.borrow().as_ref().map(|session|session.elapsed())).unwrap_or_else(|| started.elapsed()), || std::thread::sleep(Duration::from_secs(1)),
                 |stats| {
-                    if !stats.is_running { drop(active.take()); }
+                    if !stats.is_running { launch_screen::ended(&app,launch_screen_id.as_deref());drop(active.take()); }
                     if let Ok(stats) = game_regions::statistics(&conn,game_id,stats) { let _ = app.emit("play-statistics-updated", stats); }
                 },
             ) {
+                launch_screen::ended(&app,launch_screen_id.as_deref());
                 drop(active.take());
                 eprintln!("Error al medir el tiempo de juego: {}", error);
                 // Liberar también el estado visual si el proceso ya no se puede supervisar.
@@ -2722,6 +2726,7 @@ pub fn run() {
     }
     tauri::Builder::default()
         .manage(PlayTracker::default())
+        .manage(launch_screen::LaunchScreen::default())
         .manage(metadata::MetadataJobs::default())
         .manage(retroarch::RetroArchJobs::default())
         .manage(app_updates::AppUpdates::default())
@@ -2748,6 +2753,17 @@ pub fn run() {
             }
             backups::start_worker(app.handle().clone());
             Ok(())
+        })
+        .on_window_event(|window,event| {
+            if window.label()=="main" && matches!(event,tauri::WindowEvent::Destroyed) {
+                // A cached hidden launch window must not keep the app alive.
+                if let Some(overlay)=window.app_handle().get_webview_window("launch-screen") {let _=overlay.destroy();}
+            }
+            if window.label()=="launch-screen" {
+                if let tauri::WindowEvent::CloseRequested{api,..}=event {
+                    api.prevent_close();launch_screen::dismiss_current(window.app_handle());
+                }
+            }
         })
         .invoke_handler(tauri::generate_handler![
             maintenance::get_storage_usage,
@@ -2843,6 +2859,10 @@ pub fn run() {
             game_execution::open_game_emulator,
             manuals::open_game_manual,
             launch_game,
+            launch_screen::show_launch_screen,
+            launch_screen::launch_screen_presentation,
+            launch_screen::launch_screen_rendered,
+            launch_screen::dismiss_launch_screen,
             discs::prepare_disc_import,
             discs::get_game_discs,
             discs::pick_disc_files,

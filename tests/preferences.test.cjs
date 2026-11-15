@@ -52,6 +52,7 @@ function app(storage = new Map(), failSave = false, options = {}) {
     },
   });
   const evaluate = (code) => vm.runInContext(code, context);
+  evaluate(fs.readFileSync(path.join(__dirname,"../src/launch-screen.js"),"utf8"));
   if(options.backups) evaluate(fs.readFileSync(path.join(__dirname, "../src/backups.js"), "utf8"));
   if(options.maintenance) evaluate(fs.readFileSync(path.join(__dirname, "../src/maintenance.js"), "utf8"));
   if(options.updates) {
@@ -73,6 +74,25 @@ function app(storage = new Map(), failSave = false, options = {}) {
     },
   };
 }
+
+test('Launch screen preferences have their own category, persist and expose sensible defaults',async()=>{
+  const instance=app();await instance.open();
+  assert.equal(instance.get('launch-screen-enabled').checked,true);
+  assert.equal(instance.get('launch-screen-mode').value,'auto');
+  assert.equal(instance.get('launch-screen-timeoutSeconds').value,'5');
+  instance.get('preferences-tab-launch').handlers.click();
+  assert.equal(instance.get('preferences-panel-launch').classList.contains('hidden'),false);
+  instance.get('launch-screen-useThemeColor').checked=false;
+  instance.get('launch-screen-color').value='#223344';
+  instance.get('launch-screen-mode').value='fixed';instance.get('launch-screen-seconds').value='6';
+  instance.get('launch-screen-useBackground').checked=false;
+  await instance.save(400);
+  const restarted=app(instance.storage);await restarted.open();
+  assert.equal(restarted.get('launch-screen-color').value,'#223344');
+  assert.equal(restarted.get('launch-screen-mode').value,'fixed');
+  assert.equal(restarted.get('launch-screen-seconds').value,'6');
+  assert.equal(restarted.get('launch-screen-useBackground').checked,false);
+});
 
 test('Import region defaults to USA, accepts aliases and persists independently of the interface language',async()=>{
   const instance=app();await instance.open();

@@ -1921,6 +1921,22 @@
     "disc.black": "Black (PlayStation CD)",
     "disc.blue": "Blue (PlayStation 2 CD)",
     "disc.gold": "Gold",
-    "disc.invalidFinish": "Invalid disc underside finish."
+    "disc.invalidFinish": "Invalid disc underside finish.",
+    "launchScreen.title": "Game startup",
+    "launchScreen.enabled": "Show a loading screen when starting a game",
+    "launchScreen.themeColor": "Use the current theme background color",
+    "launchScreen.color": "Custom background color",
+    "launchScreen.background": "Use the game background image when available",
+    "launchScreen.artworkHelp": "Uses Background / Fanart artwork, the game logo and a spinning disc or cartridge image. Missing images fall back to the background color.",
+    "launchScreen.duration": "Hide the loading screen",
+    "launchScreen.auto": "Automatically when a game window appears ready",
+    "launchScreen.fixed": "After a fixed duration",
+    "launchScreen.seconds": "Duration after starting the process (seconds)",
+    "launchScreen.timeout": "Maximum wait / fallback duration (seconds)",
+    "launchScreen.autoHelp": "Looks for a stable, visible game or emulator window. This cannot confirm that internal loading is complete. Linux X11 requires xprop; Wayland, Steam and Epic use the maximum wait instead.",
+    "launchScreen.dismissHelp": "Press Esc or use the dismiss button to hide the screen without stopping the game.",
+    "launchScreen.loading": "Loading…",
+    "launchScreen.dismiss": "Hide loading screen · Esc",
+    "launchScreen.busy": "A game is already starting. Hide its loading screen before starting another game."
   }
 }
