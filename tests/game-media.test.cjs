@@ -406,6 +406,8 @@ test("Direct PC games allow arguments without emulators; stores retain client la
     assert.equal(app.get("game-edit-tab-discs").disabled, true);
     assert.equal(app.get("game-edit-custom-arguments").disabled, store);
     await app.get("game-edit-tab-manuals").trigger("keydown", { key: "ArrowDown" });
+    assert.equal(app.document.activeElement, app.get("game-edit-tab-ost"));
+    await app.get("game-edit-tab-ost").trigger("keydown", { key: "ArrowDown" });
     assert.equal(app.document.activeElement, app.get("game-edit-tab-posters"));
     await app.get("game-edit-tab-posters").trigger("keydown", { key: "ArrowDown" });
     assert.equal(app.document.activeElement, app.get("game-edit-tab-box"));

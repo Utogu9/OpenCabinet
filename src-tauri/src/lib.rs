@@ -32,6 +32,7 @@ mod epic;
 mod media_library;
 mod media_provenance;
 mod manuals;
+mod soundtracks;
 mod cbz;
 mod discs;
 mod game_execution;
@@ -2869,6 +2870,11 @@ pub fn run() {
             update_game,
             select_game_images,
             manuals::select_game_manuals,
+            soundtracks::get_game_soundtracks,
+            soundtracks::get_disc_soundtrack,
+            soundtracks::prepare_ost_track,
+            soundtracks::open_game_ost_folder,
+            soundtracks::import_game_soundtrack,
             manuals::get_game_manuals,
             manuals::get_game_manual_sources,
             manuals::delete_game_manual,

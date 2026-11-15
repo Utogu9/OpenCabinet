@@ -589,6 +589,7 @@
       status();
       const key = game ? JSON.stringify([game.id, game.title, game.rom_path, game.default_region_id, options.images(game), game.box_3d, boxMode]) : null;
       if (key === selectedKey) return;
+      options.onSelection?.(game);
       const token = ++selectionVersion;
       selectedKey = key; availability = null; status();
       const images = game ? options.images(game) : [];
@@ -864,6 +865,7 @@
     }
     function close() {
       if (!active) return;
+      options.onSelection?.(null);
       closeBoxMenu();closeManual();
       stopRailDrag(); railDragged = false;
       active = false; ++generation; ++selectionVersion;

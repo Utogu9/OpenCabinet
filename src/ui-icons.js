@@ -1,6 +1,6 @@
 // Icons are local assets. Never interpret user metadata as HTML or icon names.
 (() => {
-  const names = new Set(["joystick","gamepad-2","folders","settings","folder-open","pencil","trash-2","rotate-ccw","book-open","maximize","play","history","external-link","x","link","search","dice-5","image","rocket","circle-x","chevron-right","chevron-down","save","plus","circle-check","hourglass","party-popper","globe","file-text","download","triangle-alert","disc-3","star"]);
+  const names = new Set(["joystick","gamepad-2","folders","settings","folder-open","pencil","trash-2","rotate-ccw","book-open","maximize","play","history","external-link","x","link","search","dice-5","image","rocket","circle-x","chevron-right","chevron-down","save","plus","circle-check","hourglass","party-popper","globe","file-text","download","triangle-alert","disc-3","star","pause","skip-back","skip-forward","square","shuffle","repeat","volume-2","volume-x","picture-in-picture-2","panel-right"]);
   const labels = {
   "msg.7a28a67ea0": "save",
   "msg.856129e2b9": "plus",

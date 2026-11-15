@@ -95,7 +95,7 @@ test("The shared launch flow asks once, passes only the selected disc ID and cre
   const calls = []; let chooseCount = 0, chosen = 2;
   context.invoke = async (command, args) => { calls.push({ command, args }); return command === "get_game_discs" ? discs() : { message: "OK" }; };
   context.window.OpenCabinetDiscs.chooseDisc = async () => { chooseCount++; return chosen; };
-  vm.runInContext(`let allGames=[{id:7,title:'Game',discs:[{},{}]}];const launchingGames=new Set();let selectedGameId=7;
+  vm.runInContext(`let soundtrackPlayer=null;let allGames=[{id:7,title:'Game',discs:[{},{}]}];const launchingGames=new Set();let selectedGameId=7;
     function updatePlatformStatistics(){} function updatePlayStatus(){} function showToast(){} function applyPlayStatistics(){}`, context);
   const main = fs.readFileSync("src/main.js", "utf8");
   vm.runInContext(main.slice(main.indexOf("async function launchGame("), main.indexOf("async function loadEmulators()")), context);

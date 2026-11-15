@@ -1,6 +1,8 @@
 let appFeatures = null;
 let libraryPlay = null;
 let gameShortcuts=null;
+let soundtrackPlayer=null;
+function getSoundtracks(){return soundtrackPlayer??=globalThis.OpenCabinetOST?.create({document,invoke,imageSource,getPreferences:()=>preferences,onError:error=>showToast(String(error),true)});}
 const invoke = (...args) => window.__TAURI__.core.invoke(...args).catch(error => {
   globalThis.OpenCabinetMaintenance?.record(error, `command:${args[0]}`);
   throw error;
@@ -142,7 +144,7 @@ let manualCoverCache = null;
 const isJewelManualGame = game => !!window.OpenCabinet3D?.jewelFamily(game?.platform);
 const pauseManualPrefetchForScroll=()=>manualCoverCache?.pauseForScroll();
 const PREFERENCES_KEY = "opencabinet.preferences";
-const DEFAULT_PREFERENCES = { language: globalThis.OpenCabinetI18n.defaultLocale, maxCachedCovers: 400, cacheMode: "disk", cacheDirectory: "", startMaximized: true, coversOnly: false, timeFormat: "24h", releaseDateFormat: "DD-MM-YYYY", autoUpdateCatalog: true, defaultRegion: "North America", combineRegionStatistics: true, useCatalogTitles: true, launchScreen:globalThis.OpenCabinetLaunchScreen?.defaults, couchControls:globalThis.OpenCabinetController?.defaults };
+const DEFAULT_PREFERENCES = { autoplayOST:false, language: globalThis.OpenCabinetI18n.defaultLocale, maxCachedCovers: 400, cacheMode: "disk", cacheDirectory: "", startMaximized: true, coversOnly: false, timeFormat: "24h", releaseDateFormat: "DD-MM-YYYY", autoUpdateCatalog: true, defaultRegion: "North America", combineRegionStatistics: true, useCatalogTitles: true, launchScreen:globalThis.OpenCabinetLaunchScreen?.defaults, couchControls:globalThis.OpenCabinetController?.defaults };
 
 function canonicalImportRegion(value) {
   const aliases={u:'North America',us:'North America',usa:'North America','north america':'North America',e:'Europe',eu:'Europe',eur:'Europe',europe:'Europe',european:'Europe',pal:'Europe',j:'Japan',jp:'Japan',jpn:'Japan',jap:'Japan',japan:'Japan',w:'World',world:'World',worldwide:'World',all:'World',asia:'Asia',as:'Asia',korea:'Korea',kr:'Korea',kor:'Korea',australia:'Australia',au:'Australia',aus:'Australia',brazil:'Brazil',br:'Brazil',spain:'Spain',france:'France',germany:'Germany',italy:'Italy'};
@@ -180,6 +182,7 @@ function readPreferences() {
       coversOnly: typeof saved?.coversOnly === "boolean" ? saved.coversOnly : DEFAULT_PREFERENCES.coversOnly,
       timeFormat: ["12h", "24h"].includes(saved?.timeFormat) ? saved.timeFormat : DEFAULT_PREFERENCES.timeFormat,
       releaseDateFormat: ["DD-MM-YYYY","MM-DD-YYYY","YYYY-MM-DD"].includes(saved?.releaseDateFormat) ? saved.releaseDateFormat : DEFAULT_PREFERENCES.releaseDateFormat,
+      autoplayOST: typeof saved?.autoplayOST === "boolean" ? saved.autoplayOST : false,
       autoUpdateCatalog: typeof saved?.autoUpdateCatalog === "boolean" ? saved.autoUpdateCatalog : true,
       defaultRegion: canonicalImportRegion(saved?.defaultRegion) || DEFAULT_PREFERENCES.defaultRegion,
       combineRegionStatistics: typeof saved?.combineRegionStatistics === "boolean" ? saved.combineRegionStatistics : true,
@@ -214,6 +217,7 @@ function setupPreferences() {
   const defaultRegion=document.getElementById("preference-default-region");
   const restoreDefaults=document.getElementById("btn-reset-preferences");
   const launchScreenEditor=globalThis.OpenCabinetLaunchScreen?.editor(document);
+  const autoplayOST=document.getElementById("preference-autoplay-ost");
   const controllerEditor=globalThis.OpenCabinetController?.editor(document.getElementById('controller-settings'),document);
   let profilesPanel=null;
   const directory = document.getElementById("preference-data-directory");
@@ -314,7 +318,7 @@ function setupPreferences() {
     metadataCatalog.value=draftCatalog===undefined?(metadataSource?.label||globalThis.OpenCabinetI18n.t('source.default')):draftCatalog===null?globalThis.OpenCabinetI18n.t('source.default'):draftCatalog;
     browse.disabled = reset.disabled = save.disabled = !location || busy;
     undo.disabled = !location || busy || draftDirectory === location.active_directory;
-    input.disabled = busy;
+    input.disabled = busy;autoplayOST.disabled=busy;
     cacheMode.disabled = cacheBrowse.disabled = cacheReset.disabled = busy;
     cacheDirectory.value = draftCacheDirectory || (location ? `${location.active_directory.replace(/[\\/]$/, "")}/cache` : globalThis.OpenCabinetI18n.t("msg.efe5f1e8d3"));
     document.getElementById("preference-cache-disk-options").classList.toggle("hidden", cacheMode.value !== "disk");
@@ -362,7 +366,7 @@ function setupPreferences() {
     cacheMode.value = preferences.cacheMode;
     draftCacheDirectory = preferences.cacheDirectory;
     startMaximized.checked = preferences.startMaximized;
-    coversOnly.checked = preferences.coversOnly;
+    coversOnly.checked = preferences.coversOnly;autoplayOST.checked=preferences.autoplayOST;
     languageSelect.value = preferences.language;
     combineRegions.checked = preferences.combineRegionStatistics;
     catalogTitles.checked = preferences.useCatalogTitles;
@@ -432,14 +436,14 @@ function setupPreferences() {
   });
   metadataReset.addEventListener('click',()=>{if(!saving&&!choosing){draftCatalog=null;update();}});
   cacheReset.addEventListener("click", () => { draftCacheDirectory = ""; update(); });
-  const resetKeys={startup:['language','startMaximized'],library:['coversOnly','combineRegionStatistics','timeFormat','releaseDateFormat'],
+  const resetKeys={startup:['language','startMaximized'],library:['coversOnly','combineRegionStatistics','timeFormat','releaseDateFormat','autoplayOST'],
     launch:['launchScreen'],controller:['couchControls'],metadata:['useCatalogTitles','autoUpdateCatalog','defaultRegion'],
     data:['maxCachedCovers','cacheMode','cacheDirectory']};
   const sectionTitles={startup:'msg.58fcc9468f',library:'msg.c9169c12cb',launch:'launchScreen.title',controller:'controller.title',metadata:'source.title',
     data:'msg.cf6371762e',backups:'backup.title',themes:'themes.title','theme-editor':'themes.editor',profiles:'profiles.title',storage:'maintenance.storage'};
   function resetFields(scope){
     const keys=scope==='all'?Object.values(resetKeys).flat():resetKeys[scope]||[];
-    const fields={language:languageSelect,startMaximized,coversOnly,combineRegionStatistics:combineRegions,timeFormat,releaseDateFormat,
+    const fields={language:languageSelect,startMaximized,coversOnly,autoplayOST,combineRegionStatistics:combineRegions,timeFormat,releaseDateFormat,
       useCatalogTitles:catalogTitles,autoUpdateCatalog,defaultRegion,maxCachedCovers:input,cacheMode};
     for(const key of keys){
       if(key==='launchScreen')launchScreenEditor?.load(DEFAULT_PREFERENCES.launchScreen);
@@ -493,7 +497,7 @@ function setupPreferences() {
     if (saving || choosing || backupsPanel?.busy || themesPanel?.busy || profilesPanel?.busy || !location) return;
     if (["profiles", "themes", "theme-editor"].includes(preferenceCategory)) return;
     if (preferenceCategory === "backups") { await backupsPanel?.saveSettings(); return; }
-    const draft={...preferences,language:languageSelect.value,maxCachedCovers:Number(input.value),cacheMode:cacheMode.value==='ram'?'ram':'disk',cacheDirectory:draftCacheDirectory,
+    const draft={...preferences,autoplayOST:autoplayOST.checked,language:languageSelect.value,maxCachedCovers:Number(input.value),cacheMode:cacheMode.value==='ram'?'ram':'disk',cacheDirectory:draftCacheDirectory,
       startMaximized:startMaximized.checked,coversOnly:coversOnly.checked,timeFormat:timeFormat.value,releaseDateFormat:releaseDateFormat.value,
       autoUpdateCatalog:autoUpdateCatalog.checked,defaultRegion:canonicalImportRegion(defaultRegion.value)||DEFAULT_PREFERENCES.defaultRegion,
       combineRegionStatistics:combineRegions.checked,useCatalogTitles:catalogTitles.checked,
@@ -566,7 +570,7 @@ function setupPreferences() {
       const cacheChanged = preferences.cacheMode !== next.cacheMode || preferences.cacheDirectory !== next.cacheDirectory;
       const statisticsChanged = preferences.combineRegionStatistics !== next.combineRegionStatistics;
       if(resetScope==='all'){await invoke("save_backup_settings",{settings:{automatic:true,keep:7}});await themesPanel?.resetDefaults();}
-      preferences = next;
+      preferences = next;soundtrackPlayer?.preferencesChanged();
       void invoke("save_backup_preferences", { preferences }).catch(reason => console.error(reason));
       allGames.forEach(projectRegionalStatistics);
       if (statisticsChanged) renderPlatformFilters();
@@ -600,6 +604,7 @@ function setupPreferences() {
       || cacheMode.value !== preferences.cacheMode || draftCacheDirectory !== preferences.cacheDirectory
       || startMaximized.checked !== preferences.startMaximized || coversOnly.checked !== preferences.coversOnly
       || timeFormat.value !== preferences.timeFormat
+      || autoplayOST.checked !== preferences.autoplayOST
       || releaseDateFormat.value !== preferences.releaseDateFormat || autoUpdateCatalog.checked !== preferences.autoUpdateCatalog
       || defaultRegion.value !== preferences.defaultRegion
       || languageSelect.value !== preferences.language
@@ -1628,6 +1633,8 @@ function setupGameContextMenu() {
   const play = document.getElementById("context-play-game");
   const edit = document.getElementById("context-edit-game");
   const history = document.getElementById("context-session-history");
+  const soundtrack=document.getElementById('context-ost');
+  soundtrack.addEventListener('click',()=>{const game=allGames.find(game=>game.id===targetId);close(true);if(game)void getSoundtracks()?.open(game,{expandPlaying:true});});
   const statusAction = document.getElementById("context-game-status"), notesAction = document.getElementById("context-game-notes");
   for(const [button,focus] of [[statusAction,"status"],[notesAction,"notes"]]) button?.addEventListener("click",()=>{const game=allGames.find(game=>game.id===targetId);close(true);if(game)appFeatures?.editPersonal(game,focus);});
   const playlistAction=document.getElementById("context-playlist");
@@ -1670,7 +1677,7 @@ function setupGameContextMenu() {
     play.disabled = Boolean(game.is_running);
     targetIds = [...selectedGameIds];
     targetCard = card;
-    const multiple = targetIds.length > 1;
+    const multiple = targetIds.length > 1;document.getElementById("context-ost").classList.toggle("hidden",multiple);
     const emulator = !game.launch_directly && !game.steam_app_id && !game.epic_app_id && allEmulators.some(emu =>
       emu.platform.toLowerCase() === game.platform.toLowerCase() && (!game.execution?.emulator_id || emu.id === game.execution.emulator_id));
     openEmulator.classList.toggle("hidden", multiple || !emulator);
@@ -1691,7 +1698,7 @@ function setupGameContextMenu() {
     mergeRegions.classList.toggle("hidden", !canMerge);
     const canMergeRecomp=window.OpenCabinetRegions?.canMergeRecomp?.(mergeCandidates)&&mergeCandidates.every(g=>!g.is_running&&!launchingGames.has(g.id));
     mergeRecomp.classList.toggle('hidden',!canMergeRecomp);
-    items = multiple ? [remove, downloadImages, playlistAction, ...(canMergeDiscs ? [mergeDiscs] : []), ...(canMerge ? [mergeRegions] : []),...(canMergeRecomp?[mergeRecomp]:[])] : [play, edit, playlistAction, ...(appFeatures?[statusAction,notesAction]:[]), ...(window.OpenCabinetLibraryTools?[history]:[]), ...(emulator ? [openEmulator] : []), gameFiles, imageFolder, manualFolder, ...(shortcut?[shortcut]:[]), remove];
+    items = multiple ? [remove, downloadImages, playlistAction, ...(canMergeDiscs ? [mergeDiscs] : []), ...(canMerge ? [mergeRegions] : []),...(canMergeRecomp?[mergeRecomp]:[])] : [play, edit, soundtrack, playlistAction, ...(appFeatures?[statusAction,notesAction]:[]), ...(window.OpenCabinetLibraryTools?[history]:[]), ...(emulator ? [openEmulator] : []), gameFiles, imageFolder, manualFolder, ...(shortcut?[shortcut]:[]), remove];
     document.querySelectorAll(".dropdown-menu.show").forEach((dropdown) => dropdown.classList.remove("show"));
     document.querySelectorAll(".menu-item-dropdown.active").forEach((dropdown) => dropdown.classList.remove("active"));
     menu.classList.remove("hidden");
@@ -2246,6 +2253,7 @@ function formatReleaseDate(value) {
 }
 
 function showGameDetails(game) {
+  getSoundtracks()?.select(game);
   ++platformDetailsRequest;
   selectedGameId = game.id;
   const placeholder = document.getElementById("details-placeholder");
@@ -2298,6 +2306,7 @@ function showGameDetails(game) {
 }
 
 function resetGameDetails() {
+  soundtrackPlayer?.select(null);
   ++fileAvailabilityRequest; selectedFileAvailability = null;
   selectedGameId = null;
   logoPanelKey = null;
@@ -3172,7 +3181,7 @@ function setupGameEditor() {
   });
   imageKind.value = "cover";
   let editingId = null;
-  let editingSourceGame=null,draftRomPath=null,sessionHistoryView=null;
+  let editingSourceGame=null,draftRomPath=null,sessionHistoryView=null,ostEditorDispose=null;
   const orderEditor = globalThis.OpenCabinetOrder?.createEditor({getGames:()=>allGames});
   let gameModeSource = null, gameModeLabel = "";
   function setGameModeDraft(value) {
@@ -3199,12 +3208,14 @@ function setupGameEditor() {
   function editorState() {
     return JSON.stringify([[...form.querySelectorAll("input,select,textarea")].filter(input=>input.id!=='game-edit-source-select').map(input => [input.id, input.value, input.checked]), draftImages, draftManuals, draftPreferredManual, personalEditor?.value(), discEditor?.value(), regionEditor?.value()]);
   }
-  const editorTabs = ["details", "order", "execution", "actions", "history", "images", "manuals", "posters", "discs", "regions", "box", "variables", "personal"].map(name => ({
+  const editorTabs = ["details", "order", "execution", "actions", "history", "images", "manuals", "ost", "posters", "discs", "regions", "box", "variables", "personal"].map(name => ({
     name, tab: document.getElementById(`game-edit-tab-${name}`),
     panel: document.getElementById(name === "discs" ? "game-discs-section" : `game-edit-panel-${name}`),
   }));
   function showEditorTab(name, focus = false) {
     activeEditorTab = name;
+    ostEditorDispose?.();ostEditorDispose=null;
+    if(name==='ost'&&editingSourceGame){const current=editingId;void getSoundtracks()?.manage(editingSourceGame,document.getElementById('game-ost-editor')).then(dispose=>{if(editingId===current&&activeEditorTab==='ost')ostEditorDispose=dispose;else dispose?.();});}
     if(name==='posters')posterEditor.render();
     updateEditorActions();
     document.getElementById("game-editor-panels").scrollTop = 0;
@@ -3683,6 +3694,7 @@ function setupGameEditor() {
 
   async function close() {
     if (saving || choosingImages || closing) return;
+    ostEditorDispose?.();ostEditorDispose=null;
     editorManualReader?.close(false,false);
     sessionHistoryView?.dispose();sessionHistoryView=null;
     closing = true;
@@ -3960,11 +3972,15 @@ async function launchGame(gameId, gameTitle) {
       source = selected.regions.find(region => region.game.id === regionId)?.game;
       if (!source) throw new Error(globalThis.OpenCabinetI18n.t("msg.5877fb995a"));
     }
+    let sourcePath=source?.rom_path;
     if (!source?.launch_directly && source?.discs?.length > 1) {
       const discs = await invoke("get_game_discs", { id: source.id });
       discId = await window.OpenCabinetDiscs.chooseDisc(source, discs,{repairDisc});
       if (discId === null) return;
+      sourcePath=discs.find(disc=>disc.id===discId)?.rom_path;
     }
+    if(sourcePath&&globalThis.OpenCabinetOST?.candidate(sourcePath)&&await getSoundtracks()?.launch(source||selected,sourcePath))return;
+    soundtrackPlayer?.stop();
     updatePlatformStatistics();
     if (selected && selectedGameId === gameId) updatePlayStatus(selected);
     showToast(`Iniciando ${gameTitle}...`);
@@ -6282,6 +6298,7 @@ function setupSofaMode() {
     document, window,
     games: () => allGames, platforms: () => allPlatforms,
     getControls:()=>preferences.couchControls,
+    onSelection:game=>getSoundtracks()?.select(game),
     getPlaylists:()=>libraryPlay?.lists||[],
     hasManual:game=>manualCoverCache?.hasManuals(game.id),
     manualIsCover:isJewelManualGame,

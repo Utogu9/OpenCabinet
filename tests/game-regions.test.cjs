@@ -137,7 +137,7 @@ test('All shared launch paths select region first, then only its discs, and canc
   context.window.OpenCabinetRegions.chooseRegion=async()=>{calls.push({command:'choose_region'});return regionId;};
   context.window.OpenCabinetDiscs={chooseDisc:async()=>{calls.push({command:'choose_disc'});return discId;}};
   context.seed=group();
-  vm.runInContext('let allGames=[seed];const launchingGames=new Set();let selectedGameId=1;function updatePlatformStatistics(){}function updatePlayStatus(){}function showToast(){}function applyPlayStatistics(){}',context);
+  vm.runInContext('let soundtrackPlayer=null;let allGames=[seed];const launchingGames=new Set();let selectedGameId=1;function updatePlatformStatistics(){}function updatePlayStatus(){}function showToast(){}function applyPlayStatistics(){}',context);
   const main=fs.readFileSync('src/main.js','utf8');vm.runInContext(main.slice(main.indexOf('async function launchGame('),main.indexOf('async function loadEmulators()')),context);
   await vm.runInContext('launchGame(1,"Game")',context);
   assert.deepEqual(calls.map(call=>call.command),['choose_region','get_game_discs','choose_disc','launch_game']);
@@ -152,7 +152,7 @@ test('Choosing a recomp launches it directly without requesting a disc, while re
  const {context}=environment(),calls=[];const game=group();game.regions.push({label:'Recomp',game:{...recomp(),discs:[{},{}]}});
  context.invoke=async(command,args)=>{calls.push({command,args});return {message:'OK'};};context.seed=game;
  context.window.OpenCabinetRegions.chooseRegion=async()=>3;
- vm.runInContext('let allGames=[seed];const launchingGames=new Set();let selectedGameId=1;function updatePlatformStatistics(){}function updatePlayStatus(){}function showToast(){}function applyPlayStatistics(){}',context);
+ vm.runInContext('let soundtrackPlayer=null;let allGames=[seed];const launchingGames=new Set();let selectedGameId=1;function updatePlatformStatistics(){}function updatePlayStatus(){}function showToast(){}function applyPlayStatistics(){}',context);
  const main=fs.readFileSync('src/main.js','utf8');vm.runInContext(main.slice(main.indexOf('async function launchGame('),main.indexOf('async function loadEmulators()')),context);
  await vm.runInContext('launchGame(1,"Game")',context);assert.deepEqual(calls.map(call=>call.command),['launch_game']);
  assert.deepEqual({...calls[0].args},{gameId:1,regionId:3});

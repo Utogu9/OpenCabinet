@@ -31,6 +31,7 @@ Those dependencies may include additional components with their own notices.
 | [windows-sys](https://github.com/microsoft/windows-rs) | Windows APIs | MIT OR Apache-2.0 |
 | [webp](https://github.com/jaredforth/webp), [libwebp-sys](https://github.com/NoXF/libwebp-sys) and [libwebp](https://chromium.googlesource.com/webm/libwebp/) | Thumbnail encoding when the webview cannot encode WebP | webp: MIT OR Apache-2.0; bindings: MIT; libwebp: BSD-3-Clause |
 | [image](https://github.com/image-rs/image) | Native Linux thumbnail decoding and resizing | MIT OR Apache-2.0 |
+| [Lofty](https://github.com/Serial-ATA/lofty-rs) | Local soundtrack tags, durations and embedded artwork | MIT OR Apache-2.0 |
 
 Dependency source packages contain their authoritative license texts. Preserve
 the required upstream notices when redistributing their code or binaries.

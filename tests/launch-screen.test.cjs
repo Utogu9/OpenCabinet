@@ -62,7 +62,7 @@ test('The shared launch selects a region and disc before presenting artwork and 
     assert.equal(alternatives.length,1);assert.equal(alternatives[0].images[0].path,'fallback.webp');
     assert.equal(game.images[0].path,'regional.webp');assert.equal(discId,22);return 'ticket';},
     dismiss:async id=>{assert.equal(id,'ticket');order.push('dismiss');}};
-  const app=vm.createContext({console:{error(){}},allGames:[selected],launchingGames:new Set(),selectedGameId:1,
+  const app=vm.createContext({soundtrackPlayer:null,console:{error(){}},allGames:[selected],launchingGames:new Set(),selectedGameId:1,
     launchPresentation:overlay,getLaunchPresentation:()=>overlay,displayGameImages:game=>game.images,
     getLibraryTools:()=>({diagnostic(){}}),updatePlatformStatistics(){},updatePlayStatus(){},showToast(){},applyPlayStatistics(){},
     window:{OpenCabinetRegions:{chooseRegion:async()=>{order.push('region');return cancel?null:2;}},

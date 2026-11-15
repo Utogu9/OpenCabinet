@@ -236,6 +236,7 @@
             <p id="details-description"><span data-i18n="msg.591e5cef97"></span></p>
           </section>
         </div>
+        <section id="ost-sidebar" class="ost-compact ost-sidebar hidden" data-i18n-aria-label="ost.title"></section>
       </aside>
     </main>
 
@@ -453,6 +454,7 @@
               <button type="button" id="game-edit-tab-history" role="tab" aria-controls="game-edit-panel-history" aria-selected="false" tabindex="-1" data-i18n="sessions.open"></button>
               <button type="button" id="game-edit-tab-images" role="tab" aria-controls="game-edit-panel-images" aria-selected="false" tabindex="-1"><span data-i18n="msg.a7f0af4e37"></span></button>
               <button type="button" id="game-edit-tab-manuals" role="tab" aria-controls="game-edit-panel-manuals" aria-selected="false" tabindex="-1"><span data-i18n="msg.58cb5b9cf5"></span></button>
+              <button type="button" id="game-edit-tab-ost" role="tab" aria-controls="game-edit-panel-ost" aria-selected="false" tabindex="-1" data-i18n="ost.title"></button>
               <button type="button" id="game-edit-tab-posters" role="tab" aria-controls="game-edit-panel-posters" aria-selected="false" tabindex="-1" data-i18n="poster.title"></button>
               <button type="button" id="game-edit-tab-discs" role="tab" aria-controls="game-discs-section" aria-selected="false" tabindex="-1"><span data-i18n="msg.2d2dca072e"></span></button>
               <button type="button" id="game-edit-tab-regions" role="tab" aria-controls="game-edit-panel-regions" aria-selected="false" tabindex="-1"><span data-i18n="msg.d4a0db1956"></span></button>
@@ -612,6 +614,7 @@
             <p class="help-text"><span data-i18n="msg.3ee7f9cfd6"></span></p>
             <div class="game-manual-list" id="game-manual-list" aria-live="polite"></div>
           </section>
+          <section class="hidden" id="game-edit-panel-ost" role="tabpanel" aria-labelledby="game-edit-tab-ost"><h3 data-i18n="ost.title"></h3><div id="game-ost-editor"></div></section>
           <section class="hidden" id="game-edit-panel-posters" role="tabpanel" aria-labelledby="game-edit-tab-posters">
             <h3 data-i18n="poster.title"></h3>
             <div class="poster-pair-toolbar">
@@ -1195,6 +1198,7 @@
       <button class="dropdown-item" id="context-play-game" type="button" role="menuitem" tabindex="-1"><span data-i18n="msg.67fa9628c4"></span></button>
       <button class="dropdown-item" id="context-playlist" type="button" role="menuitem" tabindex="-1"><span class="ui-icon" data-icon="folders" aria-hidden="true"></span><span data-i18n="playlists.add"></span></button>
       <button class="dropdown-item" id="context-edit-game" type="button" role="menuitem" tabindex="-1"><span data-i18n="msg.02f344eb6e"></span></button>
+      <button class="dropdown-item" id="context-ost" type="button" role="menuitem" tabindex="-1"><span class="ui-icon" data-icon="disc-3" aria-hidden="true"></span><span data-i18n="ost.listen"></span></button>
       <button class="dropdown-item" id="context-game-status" type="button" role="menuitem" tabindex="-1"><span class="ui-icon" data-icon="circle-check" aria-hidden="true"></span><span data-i18n="personal.status"></span></button>
       <button class="dropdown-item" id="context-game-notes" type="button" role="menuitem" tabindex="-1"><span class="ui-icon" data-icon="file-text" aria-hidden="true"></span><span data-i18n="personal.notes"></span></button>
       <button class="dropdown-item" id="context-session-history" type="button" role="menuitem" tabindex="-1"><span aria-hidden="true"><span class="ui-icon" data-icon="history" aria-hidden="true"></span></span> <span data-i18n="sessions.open"></span></button>
@@ -1294,6 +1298,8 @@
         </section>
         <section id="preferences-panel-library" class="preferences-section hidden" role="tabpanel" aria-labelledby="preferences-tab-library">
           <h3 id="preferences-library-title"><span data-i18n="msg.c9169c12cb"></span></h3>
+          <label class="preference-toggle"><input id="preference-autoplay-ost" type="checkbox" /><span data-i18n="ost.autoplay"></span></label>
+          <p class="preference-help" data-i18n="ost.autoplayHelp"></p>
           <label class="preference-toggle">
             <input id="preference-combine-region-statistics" type="checkbox" aria-describedby="preference-region-statistics-help" />
             <span><span data-i18n="msg.9dcd044563"></span></span>
@@ -1644,6 +1650,18 @@
     <script src="controller-settings.js"></script>
     <script src="user-profiles.js"></script>
     <script src="game-shortcuts.js"></script>
+    <dialog id="ost-player" class="confirmation-dialog ost-player" aria-labelledby="ost-player-title">
+      <div class="modal-header"><h2 id="ost-player-title" data-i18n="ost.title"></h2><button id="ost-close" type="button" class="close-btn" data-i18n-aria-label="backup.close">&times;</button></div>
+      <div class="modal-body">
+        <div class="ost-album-header"><img id="ost-cover" class="hidden" alt="" /><div><label for="ost-albums" data-i18n="ost.album"></label><select id="ost-albums"></select><strong id="ost-track-title"></strong><span id="ost-track-artist"></span></div></div>
+        <div id="ost-tracks" class="ost-tracks" role="group" data-i18n-aria-label="ost.tracks"></div>
+        <p id="ost-status" class="preference-help" role="status"></p>
+        <div class="ost-timeline"><input id="ost-seek" type="range" min="0" max="1000" value="0" data-i18n-aria-label="ost.seek" /><span id="ost-elapsed">0:00 / --:--</span></div>
+        <div class="ost-controls ost-player-controls"><button id="ost-prev" type="button" class="secondary-btn ost-icon-button" data-i18n-title="ost.previous" data-i18n-aria-label="ost.previous"><span class="ui-icon" data-icon="skip-back" aria-hidden="true"></span></button><button id="ost-toggle" type="button" class="primary-btn ost-icon-button" data-i18n-title="ost.play" data-i18n-aria-label="ost.play"><span class="ui-icon" data-icon="play" aria-hidden="true"></span></button><button id="ost-next" type="button" class="secondary-btn ost-icon-button" data-i18n-title="ost.next" data-i18n-aria-label="ost.next"><span class="ui-icon" data-icon="skip-forward" aria-hidden="true"></span></button><button id="ost-stop" type="button" class="secondary-btn ost-icon-button" data-i18n-title="ost.stop" data-i18n-aria-label="ost.stop"><span class="ui-icon" data-icon="square" aria-hidden="true"></span></button><button id="ost-shuffle" class="secondary-btn ost-icon-button" type="button" aria-pressed="false" data-i18n-title="ost.shuffle" data-i18n-aria-label="ost.shuffle"><span class="ui-icon" data-icon="shuffle" aria-hidden="true"></span></button><button id="ost-repeat" class="secondary-btn ost-icon-button" type="button" aria-pressed="false" data-i18n-title="ost.repeat" data-i18n-aria-label="ost.repeat"><span class="ui-icon" data-icon="repeat" aria-hidden="true"></span></button><div class="ost-volume-control"><button id="ost-mute" class="secondary-btn ost-icon-button" type="button" aria-pressed="false" data-i18n-title="ost.mute" data-i18n-aria-label="ost.mute"><span class="ui-icon" data-icon="volume-2" aria-hidden="true"></span></button><input id="ost-volume" type="range" min="0" max="1" step="0.01" value="0.6" data-i18n-aria-label="ost.volume" /></div></div>
+      </div>
+    </dialog>
+    <aside id="ost-mini" class="import-task ost-compact ost-mini hidden" data-i18n-aria-label="ost.title"></aside>
+    <script src="soundtracks.js"></script>
     <script src="game-regions.js"></script>
     <script src="game-order.js"></script>
     <script src="keyboard-navigation.js"></script>
