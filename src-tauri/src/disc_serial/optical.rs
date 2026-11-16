@@ -71,6 +71,7 @@ fn segacd_header(bytes: &[u8]) -> Option<super::Identity> {
         return None;
     }
     let regions = match bytes[0x20b] {
+        0x7a => vec!["North America".to_owned()],
         0x64 => vec!["Europe".to_owned()],
         0xa1 => vec!["Japan".to_owned()],
         _ => [(b'J', "Japan"), (b'U', "North America"), (b'E', "Europe")]
@@ -79,12 +80,6 @@ fn segacd_header(bytes: &[u8]) -> Option<super::Identity> {
             .map(|(_, name)| name.to_owned())
             .collect(),
     };
-    #[cfg(test)]
-    println!(
-        "Sega CD product={field:?}, territory={:?}, security={:02x}",
-        String::from_utf8_lossy(&bytes[0x1f0..0x200]),
-        bytes[0x20b]
-    );
     Some(super::Identity { serial, regions })
 }
 pub(super) fn sega_identity(
@@ -875,5 +870,64 @@ pub(crate) mod tests {
         assert!(sega_header(&saturn_data("", "U"), System::Saturn).is_none());
         assert!(sega_header(&saturn_data("HOMEBREW", "J"), System::Saturn).is_none());
         assert!(sega_header(&data[..0x40], System::Saturn).is_none());
+    }
+    pub(crate) fn segacd_data(product: &str, security: u8) -> Vec<u8> {
+        let mut bytes = vec![b' '; 8 * 2048];
+        bytes[..14].copy_from_slice(b"SEGADISCSYSTEM");
+        bytes[0x180..0x18e].fill(b' ');
+        bytes[0x180..0x180 + product.len()].copy_from_slice(product.as_bytes());
+        bytes[0x1f0..0x200].fill(b' ');
+        bytes[0x1f0] = b'U';
+        bytes[0x20b] = security;
+        bytes
+    }
+    #[test]
+    fn segacd_reads_product_and_security_region_from_cue_and_chd_without_accepting_other_sega_headers()
+     {
+        let files = Files::new();
+        let conn = Connection::open_in_memory().unwrap();
+        init(&conn).unwrap();
+        for (security, region) in [(0x7a, "North America"), (0xa1, "Japan"), (0x64, "Europe")] {
+            let data = segacd_data("GM MK-4401 -00", security);
+            let bytes = chd(
+                &sectors(&data, 2448, 16, 150),
+                2448,
+                Some("TRACK:1 TYPE:MODE1_RAW SUBTYPE:NONE FRAMES:158 PREGAP:150 PGTYPE:VMODE1"),
+            );
+            let path = files.write("wrong.chd", &bytes);
+            let id = super::super::cached_identity(&path, System::SegaCd, Some(&conn), &|| false)
+                .unwrap();
+            assert_eq!(id.serial, "MK-4401-00");
+            assert_eq!(id.regions, [region]);
+            assert_eq!(fs::read(&path).unwrap(), bytes);
+            assert!(
+                super::super::cached_identity(&path, System::Saturn, Some(&conn), &|| false)
+                    .is_none()
+            );
+            assert!(
+                super::super::identity_checked(path.to_str().unwrap(), "Sega CD", &|| true)
+                    .is_none()
+            );
+        }
+        let data = segacd_data("GM T-60165 -00", 0x7a);
+        files.write("track.bin", &sectors(&data, 2352, 16, 0));
+        let cue = files.write(
+            "wrong.cue",
+            b"FILE \"track.bin\" BINARY\nTRACK 01 MODE1/2352\nINDEX 01 00:00:00\n",
+        );
+        assert_eq!(
+            super::super::cached_identity(&cue, System::SegaCd, Some(&conn), &|| false)
+                .unwrap()
+                .serial,
+            "T-60165-00"
+        );
+        assert!(segacd_header(&data[..0x200]).is_none());
+        assert!(segacd_header(&segacd_data("GM 000000 -00", 0x7a)).is_none());
+        assert!(segacd_header(&segacd_data("GM HOMEBREW", 0x7a)).is_none());
+        let mut invalid = data.clone();
+        invalid[0] = 0;
+        assert!(segacd_header(&invalid).is_none());
+        assert!(sega_header(&data, System::Dreamcast).is_none());
+        assert!(sega_header(&data, System::Saturn).is_none());
     }
 }

@@ -1377,6 +1377,28 @@ mod tests {
         let path=images.write("Alien Trilogy (USA).chd",&bytes);
         assert!(!search_candidate(&conn,"Alien Trilogy",source,path.to_str().unwrap()).unwrap().is_empty());
     }
+
+    #[test]
+    fn segacd_internal_codes_normalize_revisions_and_packaging_without_overriding_territories() {
+        let files=Sandbox::new();let mut conn=files.catalog();let source="Sega - Mega-CD - Sega CD";
+        conn.execute("INSERT INTO platforms VALUES(?1)",[source]).unwrap();
+        let fixture=files.job.directory.join("segacd.json");
+        fs::write(&fixture,r#"{"schema_version":2,"system":"Sega - Mega-CD - Sega CD","games":{
+            "4401":{"entries":[{"name":"Batman Returns (USA)"}],"images":{}},
+            "4427":{"entries":[{"name":"Eternal Champions (USA)"}],"images":{}},
+            "4427-50":{"entries":[{"name":"Eternal Champions (Europe)"}],"images":{}},
+            "T-125045":{"entries":[{"name":"Earthworm Jim (USA)"}],"images":{}},
+            "T-125045-50":{"entries":[{"name":"Earthworm Jim (Europe)"}],"images":{}}
+        }}"#).unwrap();insert_platform(&mut conn,&files.job,source,&fixture,|_|()).unwrap();
+        let images=crate::disc_serial::tests::Files::new();
+        for (code,security,key) in [("GM MK-4401 -00",0x7a,"4401"),("GM MK-4427 -00",0x64,"4427-50"),("GM T-125045-00",0x7a,"T-125045"),("GM T-125045-00",0x64,"T-125045-50")] {
+            let data=crate::disc_serial::optical::tests::segacd_data(code,security);
+            let bytes=crate::disc_serial::optical::tests::chd(&crate::disc_serial::optical::tests::sectors(&data,2448,16,0),2448,Some("TRACK:1 TYPE:MODE1_RAW FRAMES:8"));
+            let path=images.write("Wrong name (Japan).chd",&bytes);let matches=search_candidate(&conn,"Wrong name",source,path.to_str().unwrap()).unwrap();
+            assert_eq!(matches.len(),1);assert!(matches[0].exact);assert_eq!(matches[0].source_key.as_deref(),Some(key));
+            assert_eq!(super::super::import_match(&conn,&matches,path.to_str().unwrap(),"Japan").unwrap(),Some(matches[0].game.id));
+        }
+    }
     impl Sandbox {
         pub(super) fn new() -> Self {
             let root = std::env::current_dir()

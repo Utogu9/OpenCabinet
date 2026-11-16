@@ -142,6 +142,17 @@ fn disc_matches(conn:&Connection,platform:&str,identity:&crate::disc_serial::Ide
     let mut queries=vec![serial.clone(),serial.replace('-',"")];
     let dreamcast=crate::platform_defaults::equivalent(platform,"Sega Dreamcast");
     let saturn=crate::platform_defaults::equivalent(platform,"Sega Saturn");
+    let segacd=crate::platform_defaults::equivalent(platform,"Sega CD");
+    if segacd {
+        // The Mega Drive-style product field also carries a two-digit revision.
+        // Preserve the full code, then try its printed catalog form.
+        if let Some((base,_))=serial.rsplit_once('-').filter(|(base,revision)|base.len()>=4&&base.bytes().any(|b|b.is_ascii_digit())&&revision.len()==2&&revision.bytes().all(|b|b.is_ascii_digit())) {
+            queries.push(base.to_owned());
+        }
+        for query in queries.clone() {
+            if let Some(value)=query.strip_prefix('T').filter(|v|v.as_bytes().first().is_some_and(u8::is_ascii_digit)) {queries.push(format!("T-{value}"));}
+        }
+    }
     let wii=crate::platform_defaults::equivalent(platform,"Nintendo Wii");
     let gamecube=crate::platform_defaults::equivalent(platform,"Nintendo GameCube");
     if (wii || gamecube) && serial.len()==6 && serial.bytes().all(|b|b.is_ascii_alphanumeric()) {
@@ -154,17 +165,27 @@ fn disc_matches(conn:&Connection,platform:&str,identity:&crate::disc_serial::Ide
             for key in keys {queries.push(key.map_err(err)?.rsplit('/').next().unwrap_or_default().to_owned());}
         }
     }
-    if dreamcast || saturn {
+    if dreamcast || saturn || segacd {
         if let Some(value)=serial.strip_prefix('T').filter(|v|v.as_bytes().first().is_some_and(u8::is_ascii_digit)) {queries.push(format!("T-{value}"));}
         // Sega's US packaging omits MK-, while European packaging adds a
         // territory suffix which is not always present in IP.BIN.
-        if let Some(value)=serial.strip_prefix("MK-"){queries.push(value.to_owned());}
-        let base=queries.iter().find_map(|q|q.strip_prefix("MK-").or_else(||q.bytes().all(|b|b.is_ascii_digit()).then_some(q.as_str()))).map(str::to_owned);
+        for query in queries.clone() {if let Some(value)=query.strip_prefix("MK-"){queries.push(value.to_owned());}}
+        let base=queries.iter().find_map(|q|q.strip_prefix("MK-").or_else(||q.bytes().all(|b|b.is_ascii_digit()).then_some(q.as_str())).filter(|base|base.len()>=4&&base.bytes().all(|b|b.is_ascii_digit()))).map(str::to_owned);
         if let Some(base)=base.filter(|base|base.len()>=4&&base.bytes().all(|b|b.is_ascii_digit())) {
             let prefix=format!("{platform}/MK-{base}-");
             let mut statement=conn.prepare("SELECT source_key FROM repository_keys WHERE source_key>=?1 AND source_key<?2 ORDER BY source_key LIMIT 100").map_err(err)?;
             let keys=statement.query_map(params![prefix,format!("{prefix}\u{10ffff}")],|row|row.get::<_,String>(0)).map_err(err)?;
             for key in keys {queries.push(key.map_err(err)?.rsplit('/').next().unwrap_or_default().to_owned());}
+        }
+        if segacd {
+            let mut prefixes=HashSet::new();
+            for query in queries.clone() {
+                if query.len()<4 || !query.bytes().all(|b|b.is_ascii_alphanumeric()||b==b'-') || !prefixes.insert(query.clone()) {continue;}
+                let prefix=format!("{platform}/{query}-");
+                let mut statement=conn.prepare("SELECT source_key FROM repository_keys WHERE source_key>=?1 AND source_key<?2 ORDER BY source_key LIMIT 100").map_err(err)?;
+                let keys=statement.query_map(params![prefix,format!("{prefix}\u{10ffff}")],|row|row.get::<_,String>(0)).map_err(err)?;
+                for key in keys {queries.push(key.map_err(err)?.rsplit('/').next().unwrap_or_default().to_owned());}
+            }
         }
     }
     let mut found=Vec::new();let mut seen=HashSet::new();
@@ -177,7 +198,7 @@ fn disc_matches(conn:&Connection,platform:&str,identity:&crate::disc_serial::Ide
             if !identity.regions.is_empty() && !result.regions.is_empty() && !result.regions.iter().any(|region|super::super::canonical_region(region).is_some_and(|region|identity.regions.iter().any(|r|r==region))) {continue;}
             if seen.insert(result.game.id){found.push(result);}
         }
-        if !(dreamcast || saturn) && !found.is_empty() && (!(wii || gamecube) || query==*serial){break;}
+        if !(dreamcast || saturn || segacd) && !found.is_empty() && (!(wii || gamecube) || query==*serial){break;}
     }
     Ok(found)
 }

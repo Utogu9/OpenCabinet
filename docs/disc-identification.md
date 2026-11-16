@@ -11,6 +11,7 @@ external CHD tool or full-disc hash is required. Source files are read only.
 | PlayStation 2 | `BOOT2` executable in ISO 9660 `SYSTEM.CNF` | CUE/BIN, CHD, ISO, ISO.GZ |
 | Dreamcast | Product number and territory flags in the `IP.BIN` boot header | CUE/BIN, CHD |
 | Saturn | Product number and area symbols in the `IP.BIN` boot header | CUE/BIN, CHD |
+| Mega-CD / Sega CD | Product field following the disc system header | CUE/BIN, CHD |
 | Wii | Six-byte game ID (`ID6`) in the unencrypted disc header | ISO, RVZ, WBFS |
 | GameCube | Six-byte game ID (`ID6`) in the disc header | ISO, RVZ |
 
@@ -47,6 +48,22 @@ as Saturn. The header fields can be checked against
 [Yabause's disc-header reader](https://github.com/Yabause/yabause/blob/master/yabause/src/cs2.c).
 Only the required CHD hunks are decoded; no conversion, BIOS or external tool
 is needed. Saturn results use their own cache namespace.
+
+Mega-CD/Sega CD uses a `SEGADISCSYSTEM` signature and a Mega Drive-style
+product field at `0x180`. The reader removes the `GM`/`AI` program-type prefix
+and spacing, preserving the product and revision (for example,
+`GM MK-4401 -00` becomes `MK-4401-00`). Catalog lookup also tries the product
+without its two-digit revision, numeric Sega keys such as `4401`, and regional
+packaging suffixes such as `4427-50` and `T-125045-50`. These transformations
+are restricted to Sega CD, not applied to other platforms' identifiers.
+
+Recognized regional security-code markers at `0x20B` distinguish USA (`0x7A`),
+Japan (`0xA1`) and Europe (`0x64`). Other values use explicit `J`/`U`/`E`
+territory flags at `0x1F0`; an unknown marker alone does not imply USA. Blank,
+all-zero or non-product headers fall back to names. See the product and region
+fields in [Genesis Plus GX's header reader](https://github.com/ekeeke/Genesis-Plus-GX/blob/master/core/loadrom.c).
+OpenCabinet reads these fields independently; it does not run the security
+code or require a BIOS. The cache namespace is separate from Saturn and Dreamcast.
 
 Wii identification reads only the disc header: ID6 at offset `0x00`, validated
 against the Wii magic at `0x18`. RVZ preserves the first 128 disc bytes in its
