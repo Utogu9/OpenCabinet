@@ -1,24 +1,18 @@
-## What's new in v0.8.0
+## What's new in v0.8.1
 
-- Connect RetroAchievements per user profile and view completed, available and hardcore achievements in the right sidebar, with cached progress and manual game matching.
-- Listen to local game soundtracks from audio-only CUE sheets, M3U playlists or folders of MP3, WAV, FLAC and M4A files, with sidebar, floating and expanded player controls.
-- Automatically play a game's soundtrack when selecting it, and show, hide or reorder the sidebar music player and achievements through Themes.
-- Create user profiles with independent play statistics, sessions, ratings, favorites and personal notes.
-- Add desktop game shortcuts, configurable Couch Mode controller bindings and per-game startup settings.
-- Customize game loading screens with artwork, theme colors and automatic or timed dismissal.
-- Restore default preferences for the current section or all settings, with confirmation.
-- Fix rating updates for existing profile data and make the expanded music player minimize when clicking outside it.
+- Identify supported ROMs and disc images by their internal serial or product code before falling back to title and filename matching.
+- Add identification for PlayStation and PlayStation 2 ISO, CHD and CUE images, including compressed PS2 ISO.GZ files and existing index sidecars.
+- Recognize Dreamcast, Sega Saturn and Sega CD CHD/CUE images, Wii ISO/RVZ/WBFS images, GameCube ISO/RVZ images and Mega Drive/Genesis ROMs.
+- Use embedded regional information to improve catalog matching, and cache identification results to avoid repeated reads of unchanged files.
+- Add a global preference to disable serial and product-code matching for all platforms. Identification is enabled by default.
 
-## Novedades de v0.8.0
+## Novedades de v0.8.1
 
-- Conectá RetroAchievements por perfil y consultá los logros completados, disponibles y hardcore en el lateral derecho, con caché de progreso y selección manual de coincidencias.
-- Escuchá soundtracks locales desde CUE de audio, listas M3U o carpetas con archivos MP3, WAV, FLAC y M4A, con controles en el lateral, flotantes y ampliados.
-- Reproducí automáticamente el soundtrack al seleccionar un juego y usá Themes para mostrar, ocultar u ordenar el reproductor lateral y los logros.
-- Creá perfiles con estadísticas de juego, sesiones, puntuaciones, favoritos y notas personales independientes.
-- Accesos directos de juegos en el escritorio, controles de joystick configurables en Couch Mode y opciones de inicio por juego.
-- Pantallas de carga configurables con imágenes, colores del tema y duración automática o fija.
-- Restaurá las preferencias de la sección actual o de todas las secciones, con confirmación.
-- Corregida la actualización de puntuaciones existentes por perfil; el reproductor ampliado ahora se minimiza al hacer clic fuera.
+- Identificación de ROMs e imágenes de disco compatibles por su serial o código de producto interno, antes de recurrir al título y al nombre del archivo.
+- Soporte para imágenes ISO, CHD y CUE de PlayStation y PlayStation 2, incluidos los archivos ISO.GZ de PS2 y sus índices existentes.
+- Identificación de CHD/CUE de Dreamcast, Sega Saturn y Sega CD; ISO/RVZ/WBFS de Wii; ISO/RVZ de GameCube; y ROMs de Mega Drive/Genesis.
+- Uso de la región interna para mejorar las coincidencias con el catálogo, con caché de resultados para evitar volver a leer archivos sin cambios.
+- Nueva preferencia global para desactivar la búsqueda por serial y código de producto en todas las plataformas. Está activada por defecto.
 
 ## Downloads / Descargas
 

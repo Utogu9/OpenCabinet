@@ -2874,7 +2874,7 @@ dependencies = [
 
 [[package]]
 name = "opencabinet"
-version = "0.8.0"
+version = "0.8.1"
 dependencies = [
  "chd",
  "flate2",
