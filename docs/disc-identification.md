@@ -10,6 +10,7 @@ external CHD tool or full-disc hash is required. Source files are read only.
 | PlayStation | `BOOT` executable in ISO 9660 `SYSTEM.CNF` | CUE/BIN, CHD, ISO, ISO.GZ |
 | PlayStation 2 | `BOOT2` executable in ISO 9660 `SYSTEM.CNF` | CUE/BIN, CHD, ISO, ISO.GZ |
 | Dreamcast | Product number and territory flags in the `IP.BIN` boot header | CUE/BIN, CHD |
+| Wii | Six-byte game ID (`ID6`) in the unencrypted disc header | ISO, RVZ, WBFS |
 
 For PlayStation, `cdrom:\SLUS_009.99;1` becomes `SLUS-00999`. `BOOT` and
 `BOOT2` are deliberately distinct; selecting PS1 must not return a PS2 identity.
@@ -32,6 +33,27 @@ Matching considers these packaging variants and filters known regional
 conflicts using the header's `J`, `U` and `E` flags. It never reduces arbitrary
 third-party product numbers to digits alone. Multiple compatible releases
 remain subject to the existing region and ambiguity rules.
+
+Wii identification reads only the disc header: ID6 at offset `0x00`, validated
+against the Wii magic at `0x18`. RVZ preserves the first 128 disc bytes in its
+unencrypted container header; WBFS stores a disc-header copy in its disc-info
+area. Neither format requires decompressing game data, decrypting partitions,
+supplying keys or installing Dolphin. See Dolphin's
+[RVZ format specification](https://github.com/dolphin-emu/dolphin/blob/master/docs/WiaAndRvz.md)
+and [WBFS reader](https://github.com/dolphin-emu/dolphin/blob/master/Source/Core/DiscIO/WbfsBlob.cpp)
+for the container layouts. OpenCabinet reads these layouts independently.
+
+The Wii catalog may identify a disc by its printed product code rather than
+ID6: `RMGE01` corresponds to product codes beginning with `RVL-RMGE-`, such as
+`RVL-RMGE-USA`. A direct ID6 key is preferred when available. Product-code
+variants retain the existing ambiguity rules; revisions and modified games
+may share an ID. Digital title IDs are not inferred from these disc IDs.
+
+Single-game WBFS files are supported, including the first file of a split
+`.wbfs`/`.wbf1` set: its identifier is in the main file. Multi-game WBFS
+filesystems are not treated as one game. Container signatures, bounds and
+RVZ compatibility versions are checked; GameCube headers are rejected in the
+Wii reader. This is identification, not a container-integrity check.
 
 Results, including missing identifiers, are cached in `disc_identities` with
 separate keys for each platform. Changes to a source file invalidate its entry;

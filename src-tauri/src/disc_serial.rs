@@ -1,6 +1,7 @@
-//! Read PlayStation and Dreamcast disc identities without mounting images.
+//! Read PlayStation, Dreamcast and Wii disc identities without mounting images.
 //! PCSX2's packed gzip index is read as a file format, never as native pointers.
 pub(crate) mod optical;
+pub(crate) mod wii;
 use flate2::read::MultiGzDecoder;
 use rusqlite::{Connection, OptionalExtension, params};
 use serde::{Deserialize, Serialize};
@@ -25,6 +26,7 @@ enum System {
     Ps1,
     Ps2,
     Dreamcast,
+    Wii,
 }
 impl System {
     fn from_platform(platform: &str) -> Option<Self> {
@@ -32,6 +34,7 @@ impl System {
             ("Sony PlayStation", Self::Ps1),
             ("Sony PlayStation 2", Self::Ps2),
             ("Sega Dreamcast", Self::Dreamcast),
+            ("Nintendo Wii", Self::Wii),
         ]
         .into_iter()
         .find_map(|(name, system)| {
@@ -43,6 +46,7 @@ impl System {
             Self::Ps1 => "ps1",
             Self::Ps2 => "ps2",
             Self::Dreamcast => "dreamcast",
+            Self::Wii => "wii",
         }
     }
 }
@@ -125,12 +129,18 @@ fn file_stamp(path: &Path) -> Option<String> {
     serde_json::to_string(&(stamp(path)?, stamp(&index_path(path)))).ok()
 }
 fn eligible(path: &Path, platform: &str) -> bool {
-    System::from_platform(platform).is_some()
+    let system = System::from_platform(platform);
+    system.is_some()
         && path
             .file_name()
             .and_then(|v| v.to_str())
             .is_some_and(|name| {
                 let name = name.to_ascii_lowercase();
+                if system == Some(System::Wii) {
+                    return [".iso", ".rvz", ".wbfs"]
+                        .iter()
+                        .any(|ext| name.ends_with(ext));
+                }
                 name.ends_with(".iso")
                     || name.ends_with(".iso.gz")
                     || name.ends_with(".chd")
@@ -629,6 +639,9 @@ fn inspect_for(
         inflated: 0,
         cancelled,
     };
+    if system == System::Wii {
+        return wii::identity(path, &mut budget);
+    }
     if system == System::Dreamcast {
         return optical::dreamcast_identity(path, &mut budget);
     }
