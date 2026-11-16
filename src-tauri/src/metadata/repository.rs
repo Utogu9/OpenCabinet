@@ -1293,6 +1293,37 @@ mod tests {
         assert_eq!(disabled.len(),1);assert_eq!(disabled[0].source_key.as_deref(),Some("SLUS-12345"));
     }
     #[test]
+    fn ps3_sfo_serial_precedes_folder_title_and_respects_disabled_identification() {
+        let files=Sandbox::new();let mut conn=files.catalog();let source="Sony - PlayStation 3";
+        conn.execute("INSERT INTO platforms VALUES(?1)",[source]).unwrap();
+        let fixture=files.job.directory.join("ps3.json");
+        fs::write(&fixture,r#"{"schema_version":2,"system":"Sony - PlayStation 3","games":{
+            "BLUS-30581":{"entries":[{"name":"Dragon Ball - Raging Blast 2 (USA)"}],"images":{}},
+            "BLES-01234":{"entries":[{"name":"Different Game (Europe)"}],"images":{}},
+            "NPUB12345":{"entries":[{"name":"Installed Game (USA)"}],"images":{}}
+        }}"#).unwrap();
+        insert_platform(&mut conn,&files.job,source,&fixture,|_|()).unwrap();
+        let images=crate::disc_serial::tests::Files::new();
+        let boot=crate::disc_serial::ps3::tests::game(&images,"Different Game (Europe)/PS3_GAME","BLUS30581");
+        let results=search_candidate(&conn,"Different Game (Europe)",source,boot.to_str().unwrap()).unwrap();
+        assert_eq!(results.len(),1);assert_eq!(results[0].source_key.as_deref(),Some("BLUS-30581"));assert!(results[0].exact);
+        assert_eq!(super::super::import_match(&conn,&results,boot.to_str().unwrap(),"Europe").unwrap(),Some(results[0].game.id));
+        let disabled=matching::search_candidate_with_serial_matching(&conn,"Different Game (Europe)",source,boot.to_str().unwrap(),&||panic!("disabled identification must not inspect SFO"),false).unwrap();
+        assert_eq!(disabled.len(),1);assert_eq!(disabled[0].source_key.as_deref(),Some("BLES-01234"));
+        let installed=crate::disc_serial::ps3::tests::game(&images,"installed/NPUB12345","NPUB12345");
+        let results=search_candidate(&conn,"Wrong title",source,installed.to_str().unwrap()).unwrap();
+        assert_eq!(results.len(),1);assert_eq!(results[0].source_key.as_deref(),Some("NPUB12345"));
+        let sfo=boot.parent().unwrap().parent().unwrap().join("PARAM.SFO");
+        for bytes in [crate::disc_serial::ps3::tests::sfo("BLUS99999"),b"damaged".to_vec()] {
+            fs::write(&sfo,bytes).unwrap();
+            let results=search_candidate(&conn,"Different Game (Europe)",source,boot.to_str().unwrap()).unwrap();
+            assert_eq!(results.len(),1);assert_eq!(results[0].source_key.as_deref(),Some("BLES-01234"));
+        }
+        fs::remove_file(&sfo).unwrap();
+        let results=search_candidate(&conn,"Different Game (Europe)",source,boot.to_str().unwrap()).unwrap();
+        assert_eq!(results.len(),1);assert_eq!(results[0].source_key.as_deref(),Some("BLES-01234"));
+    }
+    #[test]
     fn ps1_and_dreamcast_disc_ids_override_renamed_files_and_preserve_embedded_region() {
         let files=Sandbox::new();let mut conn=files.catalog();
         let images=crate::disc_serial::tests::Files::new();

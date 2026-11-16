@@ -3,6 +3,7 @@
 pub(crate) mod megadrive;
 pub(crate) mod nintendo;
 pub(crate) mod optical;
+pub(crate) mod ps3;
 use flate2::read::MultiGzDecoder;
 use rusqlite::{Connection, OptionalExtension, params};
 use serde::{Deserialize, Serialize};
@@ -61,6 +62,7 @@ pub(crate) fn matching_enabled() -> bool {
 enum System {
     Ps1,
     Ps2,
+    Ps3,
     Dreamcast,
     Wii,
     GameCube,
@@ -73,6 +75,7 @@ impl System {
         [
             ("Sony PlayStation", Self::Ps1),
             ("Sony PlayStation 2", Self::Ps2),
+            ("Sony PlayStation 3", Self::Ps3),
             ("Sega Dreamcast", Self::Dreamcast),
             ("Nintendo Wii", Self::Wii),
             ("Nintendo GameCube", Self::GameCube),
@@ -89,6 +92,7 @@ impl System {
         match self {
             Self::Ps1 => "ps1",
             Self::Ps2 => "ps2",
+            Self::Ps3 => "ps3",
             Self::Dreamcast => "dreamcast",
             Self::Wii => "wii",
             Self::GameCube => "gamecube",
@@ -178,6 +182,9 @@ fn file_stamp(path: &Path) -> Option<String> {
 }
 fn eligible(path: &Path, platform: &str) -> bool {
     let system = System::from_platform(platform);
+    if system == Some(System::Ps3) {
+        return ps3::game_directory(path).is_some();
+    }
     system.is_some()
         && path
             .file_name()
@@ -205,6 +212,17 @@ fn eligible(path: &Path, platform: &str) -> bool {
                     || name.ends_with(".chd")
                     || name.ends_with(".cue")
             })
+}
+fn identity_stamp(path: &Path, system: System) -> Option<String> {
+    if system != System::Ps3 {
+        return file_stamp(path);
+    }
+    // EBOOT can remain unchanged while PARAM.SFO is added, replaced or removed.
+    let metadata = match ps3::metadata_path(path).ok()? {
+        Some(sfo) => Some((sfo.to_string_lossy().to_string(), stamp(&sfo)?)),
+        None => None,
+    };
+    serde_json::to_string(&(stamp(path)?, metadata)).ok()
 }
 /// Cache is optional: a read-only/unavailable library must not prevent matching.
 pub(crate) fn identity_checked(
@@ -244,7 +262,7 @@ fn cached_identity(
     if cancelled() {
         return None;
     }
-    let signature = file_stamp(path)?;
+    let signature = identity_stamp(path, system)?;
     let key = crate::platform_runtime::path_key(&path.to_string_lossy());
     if let Some(conn) = cache {
         let saved: Option<Option<String>> = conn
@@ -261,7 +279,7 @@ fn cached_identity(
         }
     }
     let result = inspect_for(path, system, cancelled).ok()?;
-    if !cancelled() && file_stamp(path).as_deref() == Some(&signature) {
+    if !cancelled() && identity_stamp(path, system).as_deref() == Some(&signature) {
         if let Some(conn) = cache {
             let encoded = result
                 .as_ref()
@@ -698,6 +716,9 @@ fn inspect_for(
         inflated: 0,
         cancelled,
     };
+    if system == System::Ps3 {
+        return ps3::identity(path, &mut budget);
+    }
     if system == System::MegaDrive {
         return megadrive::identity(path, &mut budget);
     }

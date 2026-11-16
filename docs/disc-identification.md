@@ -18,6 +18,7 @@ preference backups.
 | --- | --- | --- |
 | PlayStation | `BOOT` executable in ISO 9660 `SYSTEM.CNF` | CUE/BIN, CHD, ISO, ISO.GZ |
 | PlayStation 2 | `BOOT2` executable in ISO 9660 `SYSTEM.CNF` | CUE/BIN, CHD, ISO, ISO.GZ |
+| PlayStation 3 | `TITLE_ID` in the adjacent `PARAM.SFO` | Extracted folders launched through `USRDIR/EBOOT.BIN` |
 | Dreamcast | Product number and territory flags in the `IP.BIN` boot header | CUE/BIN, CHD |
 | Saturn | Product number and area symbols in the `IP.BIN` boot header | CUE/BIN, CHD |
 | Mega-CD / Sega CD | Product field following the disc system header | CUE/BIN, CHD |
@@ -28,6 +29,25 @@ preference backups.
 For PlayStation, `cdrom:\SLUS_009.99;1` becomes `SLUS-00999`. `BOOT` and
 `BOOT2` are deliberately distinct; selecting PS1 must not return a PS2 identity.
 Discs without a recognizable product-coded boot executable use name matching.
+
+For PlayStation 3, the reader follows the selected `USRDIR/EBOOT.BIN` to
+`../PARAM.SFO`: usually `PS3_GAME/PARAM.SFO`, or the installed game's root.
+It reads the SFO's `TITLE_ID` without opening or executing EBOOT. For example,
+`BLUS30581` becomes `BLUS-30581`; catalogs using either spelling are supported.
+Known territory prefixes supply regional hints; unknown territories remain
+unknown. The binary PSF header, entry tables, string types and bounds are
+validated, with a 1 MiB file limit. Only the adjacent directory is examined,
+including lower/mixed-case SFO filenames on Linux; no recursive asset search
+is performed. See the format definitions in
+[RPCS3's SFO reader](https://github.com/RPCS3/rpcs3/blob/master/rpcs3/Loader/PSF.cpp).
+OpenCabinet implements an independent, bounded reader.
+
+PS3 results have their own cache namespace and include the SFO's path, size
+and modification time in their signature. Adding, changing or removing the
+SFO invalidates a cached result even if EBOOT is unchanged. Missing, damaged
+or unmatched metadata falls back to the reviewed title and filename. The
+global serial-matching preference also controls this reader. This adds folder
+support, not PS3 ISO or PKG parsing, and requires no keys or RPCS3 installation.
 
 Dreamcast headers start with `SEGA SEGAKATANA ` and carry a ten-byte product
 number at offset `0x40`, plus territory flags at `0x30`. The reader examines
