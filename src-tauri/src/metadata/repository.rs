@@ -1284,6 +1284,15 @@ mod tests {
         pub(super) job: Arc<ImportJob>,
     }
     #[test]
+    fn disabling_serial_matching_skips_rom_inspection_and_uses_filename_matches() {
+        let files=Sandbox::new();let conn=files.catalog();let images=crate::disc_serial::tests::Files::new();
+        let path=images.write("Example Game (USA).iso",&crate::disc_serial::tests::iso("SLES_543.21"));
+        let enabled=matching::search_candidate_with_serial_matching(&conn,"Example Game","Sony - PlayStation 2",path.to_str().unwrap(),&||false,true).unwrap();
+        assert_eq!(enabled.len(),1);assert_eq!(enabled[0].source_key.as_deref(),Some("SLES-54321"));
+        let disabled=matching::search_candidate_with_serial_matching(&conn,"Example Game","Sony - PlayStation 2",path.to_str().unwrap(),&||panic!("disabled identification must not inspect the ROM"),false).unwrap();
+        assert_eq!(disabled.len(),1);assert_eq!(disabled[0].source_key.as_deref(),Some("SLUS-12345"));
+    }
+    #[test]
     fn ps1_and_dreamcast_disc_ids_override_renamed_files_and_preserve_embedded_region() {
         let files=Sandbox::new();let mut conn=files.catalog();
         let images=crate::disc_serial::tests::Files::new();

@@ -758,3 +758,22 @@ test("Restoring the default folder also checks whether it already contains a lib
   assert.equal(scheduled.args.directory, "C:/OpenCabinet/data");
   assert.equal(scheduled.args.directoryAction, "use_existing");
 });
+
+
+test('Serial matching defaults on, cancels cleanly, persists to native preferences and restores with metadata defaults',async()=>{
+ const instance=app();await instance.open();assert.equal(instance.get('preference-serial-matching').checked,true);
+ instance.get('preference-serial-matching').checked=false;instance.get('btn-cancel-preferences').handlers.click();
+ assert.equal(instance.evaluate('preferences.useSerialMatching'),true);await instance.open();assert.equal(instance.get('preference-serial-matching').checked,true);
+ instance.get('preference-serial-matching').checked=false;await instance.save(400);
+ assert.equal(instance.evaluate('preferences.useSerialMatching'),false);
+ assert.equal(instance.calls.filter(call=>call.command==='save_backup_preferences').at(-1).args.preferences.useSerialMatching,false);
+ const restarted=app(instance.storage);await restarted.open();assert.equal(restarted.get('preference-serial-matching').checked,false);
+ restarted.get('preferences-tab-metadata').handlers.click();await restore(restarted,'section');
+ assert.equal(restarted.evaluate('preferences.useSerialMatching'),true);assert.equal(restarted.get('preference-serial-matching').checked,true);
+});
+test('Failed native persistence keeps serial matching and local preferences unchanged',async()=>{
+ const instance=app(new Map(),false,{invoke:async(command)=>{if(command==='save_backup_preferences')throw Error('Write failed');}});
+ await instance.open();instance.get('preference-serial-matching').checked=false;await instance.save(400);
+ assert.equal(instance.evaluate('preferences.useSerialMatching'),true);assert.equal(instance.storage.has('opencabinet.preferences'),false);
+ assert.equal(instance.get('preferences-dialog').open,true);
+});

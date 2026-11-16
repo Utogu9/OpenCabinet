@@ -2073,6 +2073,8 @@
     "ra.rateLimit": "RetroAchievements está limitando las consultas. Volvé a intentarlo más tarde.",
     "ra.response": "RetroAchievements devolvió una respuesta inesperada.",
     "ra.invalidGame": "Ese conjunto de logros no pertenece a esta plataforma.",
-    "themes.section.achievements": "Logros"
+    "themes.section.achievements": "Logros",
+    "preferences.useSerialMatching": "Identificar juegos por serial o código de producto",
+    "preferences.useSerialMatchingHelp": "Lee el identificador interno de las ROMs e imágenes de disco compatibles de todas las plataformas. Al desactivarlo, busca por título y nombre de archivo."
   }
 }

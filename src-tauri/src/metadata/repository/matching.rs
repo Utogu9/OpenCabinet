@@ -97,7 +97,12 @@ pub(in crate::metadata) fn search_candidate(
 pub(in crate::metadata) fn search_candidate_checked(
     conn: &Connection,title: &str,platform: &str,path: &str,cancelled: &dyn Fn()->bool,
 ) -> Result<Vec<SearchResult>> {
-    if catalog_is_repository(conn) {
+    search_candidate_with_serial_matching(conn,title,platform,path,cancelled,crate::disc_serial::matching_enabled())
+}
+pub(super) fn search_candidate_with_serial_matching(
+    conn:&Connection,title:&str,platform:&str,path:&str,cancelled:&dyn Fn()->bool,use_serial_matching:bool,
+) -> Result<Vec<SearchResult>> {
+    if use_serial_matching && catalog_is_repository(conn) {
         if let Some(identity)=crate::disc_serial::identity_checked(path,platform,cancelled) {
             let results=disc_matches(conn,platform,&identity)?;
             if !results.is_empty(){return Ok(results);}

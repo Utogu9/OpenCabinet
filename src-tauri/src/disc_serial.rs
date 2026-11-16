@@ -22,6 +22,41 @@ const MAX_CNF: usize = 64 * 1024;
 const MAX_INFLATED: u64 = 256 * 1024 * 1024;
 const FORMAT: i32 = 1;
 
+fn matching_enabled_in(root: &Path) -> bool {
+    #[derive(Deserialize)]
+    struct Preferences {
+        #[serde(default = "default_enabled", rename = "useSerialMatching")]
+        enabled: bool,
+    }
+    fn default_enabled() -> bool {
+        true
+    }
+    let read = || -> Option<bool> {
+        let file = File::open(root.join("frontend_preferences.json")).ok()?;
+        if file.metadata().ok()?.len() > 256 * 1024 {
+            return None;
+        }
+        serde_json::from_reader::<_, Preferences>(file.take(256 * 1024))
+            .ok()
+            .map(|p| p.enabled)
+    };
+    read().unwrap_or(true)
+}
+pub(crate) fn matching_enabled() -> bool {
+    // Unit tests use isolated preferences and never read the debug library.
+    #[cfg(test)]
+    {
+        true
+    }
+    #[cfg(not(test))]
+    {
+        crate::storage::active_directory()
+            .ok()
+            .map(|root| matching_enabled_in(&root))
+            .unwrap_or(true)
+    }
+}
+
 #[derive(Clone, Copy, PartialEq)]
 enum System {
     Ps1,
@@ -800,6 +835,27 @@ pub(crate) mod tests {
             assert!(self.0.parent().unwrap().ends_with("ps2-serial-tests"));
             let _ = fs::remove_dir_all(&self.0);
         }
+    }
+    #[test]
+    fn serial_matching_preferences_default_on_and_persist_one_global_switch() {
+        let files = Files::new();
+        assert!(matching_enabled_in(&files.0));
+        for json in [
+            b"{}".as_slice(),
+            b"{\"useSerialMatching\":true}",
+            b"{\"useSerialMatching\":\"false\"}",
+            b"invalid",
+        ] {
+            files.write("frontend_preferences.json", json);
+            assert!(matching_enabled_in(&files.0));
+        }
+        files.write(
+            "frontend_preferences.json",
+            b"{\"useSerialMatching\":false,\"useCatalogTitles\":true}",
+        );
+        assert!(!matching_enabled_in(&files.0));
+        files.write("frontend_preferences.json", b"{\"useSerialMatching\":true}");
+        assert!(matching_enabled_in(&files.0));
     }
     fn both(bytes: &mut [u8], value: u32) {
         bytes[..4].copy_from_slice(&value.to_le_bytes());

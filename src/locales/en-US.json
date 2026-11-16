@@ -2073,6 +2073,8 @@
     "ra.rateLimit": "RetroAchievements is limiting requests. Please try again later.",
     "ra.response": "RetroAchievements returned an unexpected response.",
     "ra.invalidGame": "That achievement set does not belong to this platform.",
-    "themes.section.achievements": "Achievements"
+    "themes.section.achievements": "Achievements",
+    "preferences.useSerialMatching": "Identify games by serial or product code",
+    "preferences.useSerialMatchingHelp": "Read the internal identifier from supported ROMs and disc images on all platforms. When disabled, matching uses game titles and filenames."
   }
 }

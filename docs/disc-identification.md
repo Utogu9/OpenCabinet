@@ -5,6 +5,15 @@ back to the reviewed title and original filename. Manual searches and explicit
 catalog selections keep their existing behavior. No emulator, BIOS, keys,
 external CHD tool or full-disc hash is required. Source files are read only.
 
+**Preferences → Game Metadata → Identify games by serial or product code**
+controls internal identification globally. It defaults to enabled for new and
+existing preferences. Disabling it skips both ROM inspection and cached internal
+identities for all platforms, during import and automatic artwork matching;
+title/filename lookup, explicit searches and saved catalog associations remain
+available. Changes apply when saved, without restarting. Restoring metadata or
+all preference defaults re-enables it. The setting is included in the existing
+preference backups.
+
 | Platform | Identifier | Supported containers |
 | --- | --- | --- |
 | PlayStation | `BOOT` executable in ISO 9660 `SYSTEM.CNF` | CUE/BIN, CHD, ISO, ISO.GZ |

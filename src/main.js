@@ -147,7 +147,7 @@ let manualCoverCache = null;
 const isJewelManualGame = game => !!window.OpenCabinet3D?.jewelFamily(game?.platform);
 const pauseManualPrefetchForScroll=()=>manualCoverCache?.pauseForScroll();
 const PREFERENCES_KEY = "opencabinet.preferences";
-const DEFAULT_PREFERENCES = { autoplayOST:false, language: globalThis.OpenCabinetI18n.defaultLocale, maxCachedCovers: 400, cacheMode: "disk", cacheDirectory: "", startMaximized: true, coversOnly: false, timeFormat: "24h", releaseDateFormat: "DD-MM-YYYY", autoUpdateCatalog: true, defaultRegion: "North America", combineRegionStatistics: true, useCatalogTitles: true, launchScreen:globalThis.OpenCabinetLaunchScreen?.defaults, couchControls:globalThis.OpenCabinetController?.defaults };
+const DEFAULT_PREFERENCES = { autoplayOST:false, language: globalThis.OpenCabinetI18n.defaultLocale, maxCachedCovers: 400, cacheMode: "disk", cacheDirectory: "", startMaximized: true, coversOnly: false, timeFormat: "24h", releaseDateFormat: "DD-MM-YYYY", autoUpdateCatalog: true, defaultRegion: "North America", combineRegionStatistics: true, useCatalogTitles: true, useSerialMatching: true, launchScreen:globalThis.OpenCabinetLaunchScreen?.defaults, couchControls:globalThis.OpenCabinetController?.defaults };
 
 function canonicalImportRegion(value) {
   const aliases={u:'North America',us:'North America',usa:'North America','north america':'North America',e:'Europe',eu:'Europe',eur:'Europe',europe:'Europe',european:'Europe',pal:'Europe',j:'Japan',jp:'Japan',jpn:'Japan',jap:'Japan',japan:'Japan',w:'World',world:'World',worldwide:'World',all:'World',asia:'Asia',as:'Asia',korea:'Korea',kr:'Korea',kor:'Korea',australia:'Australia',au:'Australia',aus:'Australia',brazil:'Brazil',br:'Brazil',spain:'Spain',france:'France',germany:'Germany',italy:'Italy'};
@@ -190,6 +190,7 @@ function readPreferences() {
       defaultRegion: canonicalImportRegion(saved?.defaultRegion) || DEFAULT_PREFERENCES.defaultRegion,
       combineRegionStatistics: typeof saved?.combineRegionStatistics === "boolean" ? saved.combineRegionStatistics : true,
       useCatalogTitles: typeof saved?.useCatalogTitles === "boolean" ? saved.useCatalogTitles : true,
+      useSerialMatching: typeof saved?.useSerialMatching === "boolean" ? saved.useSerialMatching : true,
       launchScreen:globalThis.OpenCabinetLaunchScreen?.normalize(saved?.launchScreen),
       couchControls:globalThis.OpenCabinetController?.normalize(saved?.couchControls),
     };
@@ -248,6 +249,7 @@ function setupPreferences() {
   const metadataImport=document.getElementById('btn-import-metadata-catalog');
   const metadataReset=document.getElementById('btn-reset-metadata-catalog');
   const catalogTitles=document.getElementById('preference-catalog-titles');
+  const serialMatching=document.getElementById('preference-serial-matching');
   let metadataSource=null,draftCatalog=undefined;
   let location = null, draftDirectory = "", request = 0, saving = false, choosing = false;
   let selection = null;
@@ -320,7 +322,7 @@ function setupPreferences() {
     const busy = saving || choosing || !!backupsPanel?.busy || !!themesPanel?.busy || !!maintenancePanel?.busy || !!profilesPanel?.busy;
     tabs.forEach(tab => { tab.button.disabled = busy; });
     metadataImport.disabled=metadataReset.disabled=busy;
-    catalogTitles.disabled=busy;
+    catalogTitles.disabled=serialMatching.disabled=busy;
     metadataCatalog.value=draftCatalog===undefined?(metadataSource?.label||globalThis.OpenCabinetI18n.t('source.default')):draftCatalog===null?globalThis.OpenCabinetI18n.t('source.default'):draftCatalog;
     browse.disabled = reset.disabled = save.disabled = !location || busy;
     undo.disabled = !location || busy || draftDirectory === location.active_directory;
@@ -376,6 +378,7 @@ function setupPreferences() {
     languageSelect.value = preferences.language;
     combineRegions.checked = preferences.combineRegionStatistics;
     catalogTitles.checked = preferences.useCatalogTitles;
+    serialMatching.checked=preferences.useSerialMatching;
     timeFormat.value = preferences.timeFormat;
     releaseDateFormat.value=preferences.releaseDateFormat;
     autoUpdateCatalog.checked=preferences.autoUpdateCatalog;
@@ -443,14 +446,14 @@ function setupPreferences() {
   metadataReset.addEventListener('click',()=>{if(!saving&&!choosing){draftCatalog=null;update();}});
   cacheReset.addEventListener("click", () => { draftCacheDirectory = ""; update(); });
   const resetKeys={startup:['language','startMaximized'],library:['coversOnly','combineRegionStatistics','timeFormat','releaseDateFormat','autoplayOST'],
-    launch:['launchScreen'],controller:['couchControls'],metadata:['useCatalogTitles','autoUpdateCatalog','defaultRegion'],
+    launch:['launchScreen'],controller:['couchControls'],metadata:['useCatalogTitles','useSerialMatching','autoUpdateCatalog','defaultRegion'],
     data:['maxCachedCovers','cacheMode','cacheDirectory']};
   const sectionTitles={startup:'msg.58fcc9468f',library:'msg.c9169c12cb',launch:'launchScreen.title',controller:'controller.title',metadata:'source.title',
     data:'msg.cf6371762e',backups:'backup.title',themes:'themes.title','theme-editor':'themes.editor',profiles:'profiles.title',achievements:'ra.service',storage:'maintenance.storage'};
   function resetFields(scope){
     const keys=scope==='all'?Object.values(resetKeys).flat():resetKeys[scope]||[];
     const fields={language:languageSelect,startMaximized,coversOnly,autoplayOST,combineRegionStatistics:combineRegions,timeFormat,releaseDateFormat,
-      useCatalogTitles:catalogTitles,autoUpdateCatalog,defaultRegion,maxCachedCovers:input,cacheMode};
+      useCatalogTitles:catalogTitles,useSerialMatching:serialMatching,autoUpdateCatalog,defaultRegion,maxCachedCovers:input,cacheMode};
     for(const key of keys){
       if(key==='launchScreen')launchScreenEditor?.load(DEFAULT_PREFERENCES.launchScreen);
       else if(key==='couchControls')controllerEditor?.load(DEFAULT_PREFERENCES.couchControls);
@@ -506,7 +509,7 @@ function setupPreferences() {
     const draft={...preferences,autoplayOST:autoplayOST.checked,language:languageSelect.value,maxCachedCovers:Number(input.value),cacheMode:cacheMode.value==='ram'?'ram':'disk',cacheDirectory:draftCacheDirectory,
       startMaximized:startMaximized.checked,coversOnly:coversOnly.checked,timeFormat:timeFormat.value,releaseDateFormat:releaseDateFormat.value,
       autoUpdateCatalog:autoUpdateCatalog.checked,defaultRegion:canonicalImportRegion(defaultRegion.value)||DEFAULT_PREFERENCES.defaultRegion,
-      combineRegionStatistics:combineRegions.checked,useCatalogTitles:catalogTitles.checked,
+      combineRegionStatistics:combineRegions.checked,useCatalogTitles:catalogTitles.checked,useSerialMatching:serialMatching.checked,
       launchScreen:launchScreenEditor?.read()||preferences.launchScreen,couchControls:controllerEditor?.read()||preferences.couchControls};
     const next=scoped?{...preferences,...Object.fromEntries(resetKeys[resetScope].map(key=>[key,DEFAULT_PREFERENCES[key]]))}:draft;
     const value=next.maxCachedCovers;
@@ -576,8 +579,11 @@ function setupPreferences() {
       const cacheChanged = preferences.cacheMode !== next.cacheMode || preferences.cacheDirectory !== next.cacheDirectory;
       const statisticsChanged = preferences.combineRegionStatistics !== next.combineRegionStatistics;
       if(resetScope==='all'){await invoke("save_backup_settings",{settings:{automatic:true,keep:7}});await themesPanel?.resetDefaults();}
+      const serialMatchingChanged=next.useSerialMatching!==preferences.useSerialMatching;
+      // Native matching reads this snapshot too: publish it before accepting the change.
+      if(serialMatchingChanged)await invoke("save_backup_preferences",{preferences:next});
       preferences = next;soundtrackPlayer?.preferencesChanged();
-      void invoke("save_backup_preferences", { preferences }).catch(reason => console.error(reason));
+      if(!serialMatchingChanged)void invoke("save_backup_preferences", { preferences }).catch(reason => console.error(reason));
       allGames.forEach(projectRegionalStatistics);
       if (statisticsChanged) renderPlatformFilters();
       catalogCoverLoader?.dispose();
@@ -616,6 +622,7 @@ function setupPreferences() {
       || languageSelect.value !== preferences.language
       || combineRegions.checked !== preferences.combineRegionStatistics
       || catalogTitles.checked !== preferences.useCatalogTitles
+      || serialMatching.checked !== preferences.useSerialMatching
       || launchScreenEditor?.changed(preferences.launchScreen)
       || controllerEditor?.changed(preferences.couchControls)
       || (selection && selection.action !== (location.pending_action || "move"))) {
@@ -6466,7 +6473,7 @@ window.addEventListener("DOMContentLoaded", async () => {
   setupPlatformContextMenu();
   setupMenuBarAndModal();
   setupPreferences();
-  void invoke("save_backup_preferences", { preferences }).catch(error => console.error(error));
+  await invoke("save_backup_preferences", { preferences }).catch(error => console.error(error));
   setupAbout();
   setupAppUpdates();
   setupEmulatorExecutableBrowsers();
