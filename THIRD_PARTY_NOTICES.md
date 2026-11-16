@@ -34,6 +34,7 @@ Those dependencies may include additional components with their own notices.
 | [Lofty](https://github.com/Serial-ATA/lofty-rs) | Local soundtrack tags, durations and embedded artwork | MIT OR Apache-2.0 |
 | [flate2](https://github.com/rust-lang/flate2-rs), [zlib-rs](https://github.com/trifectatechfoundation/zlib-rs) | Read gzip-compressed PS2 disc metadata and existing random-access indexes | flate2: MIT OR Apache-2.0; zlib-rs: Zlib |
 | [chd](https://github.com/SnowflakePowered/chd-rs) | Read PlayStation, PS2, Dreamcast, Saturn and Mega-CD/Sega CD disc metadata without extracting or converting images | BSD-3-Clause |
+| [ruzstd](https://github.com/KillingSpark/zstd-rs), [twox-hash](https://github.com/shepmaster/twox-hash) | Read selected Zstandard-compressed ZAR blocks and verify frame checksums | ruzstd: MIT; twox-hash: MIT |
 
 Dependency source packages contain their authoritative license texts. Preserve
 the required upstream notices when redistributing their code or binaries.

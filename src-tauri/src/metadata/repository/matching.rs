@@ -67,7 +67,7 @@ pub(super) fn rom_name(path: &str) -> String {
             "smd", "sfc", "smc", "nes", "gba", "gbc", "gb", "n64", "z64", "v64", "nds", "3ds",
             "cia", "nsp", "xci", "xbe", "xex", "god", "cdi", "gdi", "v40", "zip", "7z", "gz",
             "bz2", "xz", "zst", "rar", "xiso", "zcci", "cci", "cxi", "pkg", "exe", "rom",
-            "a26", "a52", "a78", "j64", "jag", "abs", "cof", "lnx", "ws", "wsc", "col",
+            "a26", "a52", "a78", "j64", "jag", "abs", "cof", "lnx", "ws", "wsc", "col", "zar",
             "int", "xvd", "xvc", "pce", "sgx", "wud", "wux", "wua", "rpx", "vb", "vboy",
             "fds", "sg", "sms", "32x", "gg", "ngp", "ngc", "vpk",
         ]
@@ -145,6 +145,9 @@ pub(super) fn search_candidate_with_serial_matching(
 fn disc_matches(conn:&Connection,platform:&str,identity:&crate::disc_serial::Identity)->Result<Vec<SearchResult>> {
     let serial=&identity.serial;
     let mut queries=vec![serial.clone(),serial.replace('-',"")];
+    if crate::platform_defaults::equivalent(platform,"Microsoft Xbox 360") {
+        if let Some(product)=crate::disc_serial::xbox360::product_code(serial) {queries.extend([product.clone(),product.replace('-',"")]);}
+    }
     let dreamcast=crate::platform_defaults::equivalent(platform,"Sega Dreamcast");
     let saturn=crate::platform_defaults::equivalent(platform,"Sega Saturn");
     let segacd=crate::platform_defaults::equivalent(platform,"Sega CD");

@@ -1333,7 +1333,7 @@ fn discover_roms_for_platform(
     }
     let default_exts = vec![
         "iso", "cue", "chd", "md", "bin", "sfc", "smc", "gba", "gbc", "gb",
-        "n64", "z64", "nds", "3ds", "zcci", "cci", "cxi", "cia", "nsp", "xbe", "zip", "7z", "v40", "nes", "eboot"
+        "n64", "z64", "nds", "3ds", "zcci", "cci", "cxi", "cia", "nsp", "xbe", "xex", "zar", "zip", "7z", "v40", "nes", "eboot"
     ];
     let exts_to_check: Vec<String> = match custom_extensions {
         Some(list) if !list.is_empty() => list.into_iter().map(|e| e.trim().to_lowercase().replace('.', "")).collect(),

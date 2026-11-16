@@ -1391,6 +1391,36 @@ mod tests {
         }
     }
     #[test]
+    fn xbox360_title_ids_match_printed_retail_codes_and_keep_exact_hex_ids_first() {
+        let files=Sandbox::new();let mut conn=files.catalog();let source="Microsoft - Xbox 360";
+        conn.execute("INSERT INTO platforms VALUES(?1)",[source]).unwrap();let fixture=files.job.directory.join("xbox360.json");
+        fs::write(&fixture,r#"{"schema_version":2,"system":"Microsoft - Xbox 360","games":{
+            "MS-2053":{"entries":[{"name":"Alan Wake (USA, Europe)"}],"images":{}},
+            "AT-2007":{"entries":[{"name":"Catherine (USA)"}],"images":{}},
+            "4D5307E6":{"entries":[{"name":"Exact catalog ID (USA)"}],"images":{}},
+            "MS-2022":{"entries":[{"name":"Other printed ID (USA)"}],"images":{}},
+            "MS-2000":{"entries":[{"name":"Wrong Game (Japan)"}],"images":{}}
+        }}"#).unwrap();insert_platform(&mut conn,&files.job,source,&fixture,|_|()).unwrap();
+        let images=crate::disc_serial::tests::Files::new();let executable=crate::disc_serial::xbox360::tests::xex(0x4d530805,u32::MAX);
+        for (name,bytes) in [("Wrong Game (Japan).xex",executable.clone()),("Wrong Game (Japan).iso",crate::disc_serial::xbox360::tests::iso(&executable)),("Wrong Game (Japan).zar",crate::disc_serial::xbox360::tests::zar(&executable,65523))] {
+            let path=images.write(name,&bytes);let results=search_candidate(&conn,"Wrong Game (Japan)",source,path.to_str().unwrap()).unwrap();
+            assert_eq!(results.len(),1);assert_eq!(results[0].source_key.as_deref(),Some("MS-2053"));assert!(results[0].exact);
+            assert_eq!(super::super::import_match(&conn,&results,path.to_str().unwrap(),"Japan").unwrap(),Some(results[0].game.id));
+            let disabled=matching::search_candidate_with_serial_matching(&conn,"Wrong Game (Japan)",source,path.to_str().unwrap(),&||panic!("disabled identification must not open Xbox containers"),false).unwrap();
+            assert_eq!(disabled.len(),1);assert_eq!(disabled[0].source_key.as_deref(),Some("MS-2000"));
+        }
+        for (title,expected) in [(0x415407d7,"AT-2007"),(0x4d5307e6,"4D5307E6")] {
+            let path=images.write("Renamed.xex",&crate::disc_serial::xbox360::tests::xex(title,0xff));
+            let results=search_candidate(&conn,"Wrong Game",source,path.to_str().unwrap()).unwrap();assert_eq!(results.len(),1);assert_eq!(results[0].source_key.as_deref(),Some(expected));
+        }
+        for bytes in [crate::disc_serial::xbox360::tests::xex(0x45410999,0xff),b"not a valid archive".to_vec()] {
+            let path=images.write("Wrong Game (Japan).xex",&bytes);let results=search_candidate(&conn,"Wrong Game",source,path.to_str().unwrap()).unwrap();
+            assert_eq!(results.len(),1);assert_eq!(results[0].source_key.as_deref(),Some("MS-2000"));
+        }
+        let path=images.write("Wrong Game (Japan).zar",b"damaged archive");
+        let results=search_candidate(&conn,"Wrong Game",source,path.to_str().unwrap()).unwrap();assert_eq!(results.len(),1);assert_eq!(results[0].source_key.as_deref(),Some("MS-2000"));
+    }
+    #[test]
     fn ps1_and_dreamcast_disc_ids_override_renamed_files_and_preserve_embedded_region() {
         let files=Sandbox::new();let mut conn=files.catalog();
         let images=crate::disc_serial::tests::Files::new();

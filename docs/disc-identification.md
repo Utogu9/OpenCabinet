@@ -21,6 +21,7 @@ preference backups.
 | PlayStation 3 | `TITLE_ID` in the adjacent `PARAM.SFO` | Extracted folders launched through `USRDIR/EBOOT.BIN` |
 | PlayStation 4 | `TITLE_ID` in `sce_sys/param.sfo` | Extracted folders launched through `eboot.bin` |
 | PSP | `DISC_ID` in `PSP_GAME/PARAM.SFO` or the PBP metadata section | ISO, CSO, CHD, PBP |
+| Xbox 360 | XEX2 execution-info `Title ID` | ISO, ZAR, XEX |
 | Dreamcast | Product number and territory flags in the `IP.BIN` boot header | CUE/BIN, CHD |
 | Saturn | Product number and area symbols in the `IP.BIN` boot header | CUE/BIN, CHD |
 | Mega-CD / Sega CD | Product field following the disc system header | CUE/BIN, CHD |
@@ -90,6 +91,39 @@ See PPSSPP's [disc reader](https://github.com/hrydgard/ppsspp/blob/master/Core/F
 [PBP layout](https://github.com/hrydgard/ppsspp/blob/master/Core/ELF/PBPReader.cpp)
 and [SFO loading](https://github.com/hrydgard/ppsspp/blob/master/Core/PSPLoaders.cpp).
 OpenCabinet implements its own metadata-only readers and requires no keys.
+
+Xbox 360 reads the unencrypted XEX2 optional-header directory and execution-info
+record. ISO images are inspected as XDVDFS: only the descriptor, bounded root
+directory and `default.xex` header are read. The known game-partition locations
+include extracted XISOs and XGD disc layouts; no ISO mounting is needed. XEX
+files can also be inspected directly. Headers are limited to 1 MiB and the
+root directory to 4 MiB, with bounded, cycle-checked directory traversal.
+
+The hexadecimal Title ID is preferred directly. Current retail catalog keys
+can encode its two ASCII publisher bytes and decimal low word: `4D530805`
+corresponds to `MS-2053`, and `415407D7` to `AT-2007`. That alternative is
+restricted to Xbox 360 retail-shaped IDs; XBLA and unknown publishers are not
+arbitrarily mapped to retail codes. Media IDs are not substituted for Title
+IDs. Region-free or unknown masks leave the region unspecified; recognized
+execution-region flags provide compatibility hints, not proof of an exact
+regional release. Shared IDs retain existing catalog ambiguity rules.
+
+ZAR support implements the ZArchive v1 layout with a separate, metadata-only
+Rust reader. It checks the footer and section ranges, finds `default.xex` in
+the archive root and reads only the required 64 KiB blocks. Both stored and
+Zstandard-compressed blocks are supported; `ruzstd` decodes them with a 64 KiB
+window/output limit. Only one decoded block is retained. Archive file trees,
+name tables and compression indexes are accessed by bounded ranges rather
+than loaded wholesale. There is no archive extraction, external tool or full
+archive checksum scan. Invalid, unsupported or unmatched data falls back to
+title/filename matching. GOD/STFS containers are not added by this reader.
+The global switch and per-file cache also apply to Xbox 360.
+
+See [Xenia's XEX2 layout](https://github.com/xenia-project/xenia/blob/master/src/xenia/kernel/util/xex2_info.h),
+[disc reader](https://github.com/xenia-project/xenia/blob/master/src/xenia/vfs/devices/disc_image_device.cc),
+and the [ZArchive format definitions](https://github.com/Exzap/ZArchive/blob/master/include/zarchive/zarchivecommon.h).
+OpenCabinet implements the format readers independently and never decrypts
+or runs the executable payload.
 
 Dreamcast headers start with `SEGA SEGAKATANA ` and carry a ten-byte product
 number at offset `0x40`, plus territory flags at `0x30`. The reader examines

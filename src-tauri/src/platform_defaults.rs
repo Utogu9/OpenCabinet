@@ -65,7 +65,7 @@ const DEFAULTS: &[Platform] = &[
     },
     Platform {
         name: "Microsoft Xbox 360",
-        extensions: ".iso, .god, .xex",
+        extensions: ".iso, .god, .xex, .zar",
         aliases: &["Xbox 360"],
     },
     Platform {
@@ -421,12 +421,31 @@ pub(crate) fn init(conn: &Connection) -> rusqlite::Result<()> {
         }
         tx.execute("INSERT INTO platform_catalog_versions(version) VALUES(2)",[])?;
     }
+    // Add ZAR once only to untouched Xbox 360 defaults, preserving user filters.
+    let zar_migrated: bool = tx.query_row("SELECT EXISTS(SELECT 1 FROM platform_catalog_versions WHERE version=3)",[],|r|r.get(0))?;
+    if !zar_migrated {
+        tx.execute("UPDATE platforms SET default_extensions='.iso, .god, .xex, .zar' WHERE name='Microsoft Xbox 360' AND default_extensions='.iso, .god, .xex'",[])?;
+        tx.execute("INSERT INTO platform_catalog_versions(version) VALUES(3)",[])?;
+    }
     tx.commit()
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn xbox360_zar_defaults_upgrade_once_without_overwriting_custom_filters() {
+        let conn=library();init(&conn).unwrap();
+        assert_eq!(conn.query_row("SELECT default_extensions FROM platforms WHERE name='Microsoft Xbox 360'",[],|r|r.get::<_,String>(0)).unwrap(),".iso, .god, .xex, .zar");
+        conn.execute("UPDATE platforms SET default_extensions='.iso, .god, .xex' WHERE name='Microsoft Xbox 360'",[]).unwrap();
+        conn.execute("DELETE FROM platform_catalog_versions WHERE version=3",[]).unwrap();init(&conn).unwrap();
+        assert!(conn.query_row("SELECT default_extensions FROM platforms WHERE name='Microsoft Xbox 360'",[],|r|r.get::<_,String>(0)).unwrap().contains(".zar"));
+        conn.execute("UPDATE platforms SET default_extensions='.xex, .custom' WHERE name='Microsoft Xbox 360'",[]).unwrap();
+        conn.execute("DELETE FROM platform_catalog_versions WHERE version=3",[]).unwrap();init(&conn).unwrap();
+        assert_eq!(conn.query_row("SELECT default_extensions FROM platforms WHERE name='Microsoft Xbox 360'",[],|r|r.get::<_,String>(0)).unwrap(),".xex, .custom");
+        conn.execute("UPDATE platforms SET default_extensions='.iso, .god, .xex' WHERE name='Microsoft Xbox 360'",[]).unwrap();init(&conn).unwrap();
+        assert!(!conn.query_row("SELECT default_extensions FROM platforms WHERE name='Microsoft Xbox 360'",[],|r|r.get::<_,String>(0)).unwrap().contains(".zar"));
+    }
     fn library() -> Connection {
         let conn = Connection::open_in_memory().unwrap();
         conn.execute_batch("CREATE TABLE games(id INTEGER PRIMARY KEY,platform TEXT,play_time INTEGER DEFAULT 0);

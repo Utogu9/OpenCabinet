@@ -7,6 +7,7 @@ pub(crate) mod ps3;
 pub(crate) mod ps4;
 pub(crate) mod psp;
 mod sfo;
+pub(crate) mod xbox360;
 use flate2::read::MultiGzDecoder;
 use rusqlite::{params, Connection, OptionalExtension};
 use serde::{Deserialize, Serialize};
@@ -68,6 +69,7 @@ enum System {
     Ps3,
     Ps4,
     Psp,
+    Xbox360,
     Dreamcast,
     Wii,
     GameCube,
@@ -83,6 +85,7 @@ impl System {
             ("Sony PlayStation 3", Self::Ps3),
             ("Sony PlayStation 4", Self::Ps4),
             ("Sony PSP", Self::Psp),
+            ("Microsoft Xbox 360", Self::Xbox360),
             ("Sega Dreamcast", Self::Dreamcast),
             ("Nintendo Wii", Self::Wii),
             ("Nintendo GameCube", Self::GameCube),
@@ -102,6 +105,7 @@ impl System {
             Self::Ps3 => "ps3",
             Self::Ps4 => "ps4",
             Self::Psp => "psp",
+            Self::Xbox360 => "xbox360",
             Self::Dreamcast => "dreamcast",
             Self::Wii => "wii",
             Self::GameCube => "gamecube",
@@ -203,6 +207,11 @@ fn eligible(path: &Path, platform: &str) -> bool {
             .and_then(|v| v.to_str())
             .is_some_and(|name| {
                 let name = name.to_ascii_lowercase();
+                if system == Some(System::Xbox360) {
+                    return [".iso", ".zar", ".xex"]
+                        .iter()
+                        .any(|ext| name.ends_with(ext));
+                }
                 if system == Some(System::Psp) {
                     return [".iso", ".cso", ".pbp", ".chd"]
                         .iter()
@@ -751,6 +760,9 @@ fn inspect_for(
     }
     if system == System::Psp {
         return psp::identity(path, &mut budget);
+    }
+    if system == System::Xbox360 {
+        return xbox360::identity(path, &mut budget);
     }
     if system == System::MegaDrive {
         return megadrive::identity(path, &mut budget);
