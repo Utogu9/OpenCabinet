@@ -1266,22 +1266,49 @@ mod tests {
     #[test]
     fn ps2_boot_serial_precedes_wrong_titles_filename_regions_and_default_regions() {
         let files=Sandbox::new();let catalog=files.catalog();
-        let images=crate::ps2_serial::tests::Files::new();
-        let path=images.write("Example Game (USA).iso",&crate::ps2_serial::tests::iso("SLES_543.21"));
+        let images=crate::disc_serial::tests::Files::new();
+        let path=images.write("Example Game (USA).iso",&crate::disc_serial::tests::iso("SLES_543.21"));
         let results=search_candidate(&catalog,"Example Game (USA)","Sony - PlayStation 2",path.to_str().unwrap()).unwrap();
         assert_eq!(results.len(),1);assert_eq!(results[0].source_key.as_deref(),Some("SLES-54321"));assert!(results[0].exact);
         assert_eq!(super::super::import_match(&catalog,&results,path.to_str().unwrap(),"North America").unwrap(),Some(results[0].game.id));
-        images.write("Example Game (USA).bin",&crate::ps2_serial::tests::iso("SLES_543.21"));
+        images.write("Example Game (USA).bin",&crate::disc_serial::tests::iso("SLES_543.21"));
         let cue=images.write("Example Game (USA).cue",b"FILE \"Example Game (USA).bin\" BINARY\nTRACK 01 MODE1/2048\nINDEX 01 00:00:00\n");
         let results=search_candidate(&catalog,"Wrong title","Sony - PlayStation 2",cue.to_str().unwrap()).unwrap();
         assert_eq!(results.len(),1);assert_eq!(results[0].source_key.as_deref(),Some("SLES-54321"));assert!(results[0].exact);
-        let unknown=images.write("Example Game (USA).iso",&crate::ps2_serial::tests::iso("SLUS_999.99"));
+        let unknown=images.write("Example Game (USA).iso",&crate::disc_serial::tests::iso("SLUS_999.99"));
         let fallback=search_candidate(&catalog,"Example Game","Sony - PlayStation 2",unknown.to_str().unwrap()).unwrap();
         assert!(fallback.iter().any(|r|r.source_key.as_deref()==Some("SLUS-12345")));
     }
     pub(super) struct Sandbox {
         pub(super) root: PathBuf,
         pub(super) job: Arc<ImportJob>,
+    }
+    #[test]
+    fn ps1_and_dreamcast_disc_ids_override_renamed_files_and_preserve_embedded_region() {
+        let files=Sandbox::new();let mut conn=files.catalog();
+        let images=crate::disc_serial::tests::Files::new();
+        for (source,fixture) in [
+            ("Sony - PlayStation",r#"{"games":{"SLUS-00999":{"entries":[{"name":"Actual PS1 game (USA)"}],"images":{}}}}"#),
+            ("Sega - Dreamcast",r#"{"games":{"51035":{"entries":[{"name":"Crazy Taxi (USA)"}],"images":{}},"MK-51035-50":{"entries":[{"name":"Crazy Taxi (Europe)"}],"images":{}},"T-1218N":{"entries":[{"name":"Capcom vs. SNK (USA)"}],"images":{}}}}"#)
+        ] {
+            conn.execute("INSERT INTO platforms VALUES(?1)",[source]).unwrap();let path=files.job.directory.join("discs.json");
+            let mut fixture:serde_json::Value=serde_json::from_str(fixture).unwrap();fixture["schema_version"]=serde_json::json!(2);fixture["system"]=serde_json::json!(source);
+            fs::write(&path,serde_json::to_vec(&fixture).unwrap()).unwrap();
+            insert_platform(&mut conn,&files.job,source,&path,|_|()).unwrap();
+        }
+        images.write("renamed.bin",&crate::disc_serial::tests::ps1_iso("SLUS_009.99"));
+        let ps1=images.write("renamed.cue",b"FILE \"renamed.bin\" BINARY\nTRACK 01 MODE1/2048\nINDEX 01 00:00:00\n");
+        let matches=search_candidate(&conn,"Wrong title","Sony - PlayStation",ps1.to_str().unwrap()).unwrap();
+        assert_eq!(matches.len(),1);assert_eq!(matches[0].source_key.as_deref(),Some("SLUS-00999"));
+        images.write("dc.bin",&crate::disc_serial::optical::tests::dreamcast_data("MK-51035","E"));
+        let dc=images.write("Wrong game (USA).cue",b"FILE \"dc.bin\" BINARY\nTRACK 01 MODE1/2048\nINDEX 01 00:00:00\n");
+        let matches=search_candidate(&conn,"Wrong game","Sega - Dreamcast",dc.to_str().unwrap()).unwrap();
+        assert_eq!(matches.len(),1);assert_eq!(matches[0].source_key.as_deref(),Some("MK-51035-50"));
+        assert_eq!(super::super::import_match(&conn,&matches,dc.to_str().unwrap(),"North America").unwrap(),Some(matches[0].game.id));
+        images.write("dc.bin",&crate::disc_serial::optical::tests::dreamcast_data("MK-51035","U"));
+        let matches=search_candidate(&conn,"Wrong game","Sega - Dreamcast",dc.to_str().unwrap()).unwrap();assert_eq!(matches.len(),1);assert_eq!(matches[0].source_key.as_deref(),Some("51035"));
+        images.write("dc.bin",&crate::disc_serial::optical::tests::dreamcast_data("T1218N","U"));
+        let matches=search_candidate(&conn,"Wrong game","Sega - Dreamcast",dc.to_str().unwrap()).unwrap();assert_eq!(matches.len(),1);assert_eq!(matches[0].source_key.as_deref(),Some("T-1218N"));
     }
     impl Sandbox {
         pub(super) fn new() -> Self {

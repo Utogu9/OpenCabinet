@@ -1,6 +1,6 @@
-//! Read PS2 BOOT2 serials without mounting images or launching an emulator.
+//! Read PlayStation and Dreamcast disc identities without mounting images.
 //! PCSX2's packed gzip index is read as a file format, never as native pointers.
-mod optical;
+pub(crate) mod optical;
 use flate2::read::MultiGzDecoder;
 use rusqlite::{Connection, OptionalExtension, params};
 use serde::{Deserialize, Serialize};
@@ -20,16 +20,49 @@ const MAX_CNF: usize = 64 * 1024;
 const MAX_INFLATED: u64 = 256 * 1024 * 1024;
 const FORMAT: i32 = 1;
 
+#[derive(Clone, Copy, PartialEq)]
+enum System {
+    Ps1,
+    Ps2,
+    Dreamcast,
+}
+impl System {
+    fn from_platform(platform: &str) -> Option<Self> {
+        [
+            ("Sony PlayStation", Self::Ps1),
+            ("Sony PlayStation 2", Self::Ps2),
+            ("Sega Dreamcast", Self::Dreamcast),
+        ]
+        .into_iter()
+        .find_map(|(name, system)| {
+            crate::platform_defaults::equivalent(platform, name).then_some(system)
+        })
+    }
+    fn key(self) -> &'static str {
+        match self {
+            Self::Ps1 => "ps1",
+            Self::Ps2 => "ps2",
+            Self::Dreamcast => "dreamcast",
+        }
+    }
+}
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub(crate) struct Identity {
+    pub serial: String,
+    #[serde(default)]
+    pub regions: Vec<String>,
+}
+
 fn invalid() -> io::Error {
     io::Error::new(
         io::ErrorKind::InvalidData,
-        "Invalid PS2 disc metadata or gzip index",
+        "Invalid disc metadata or gzip index",
     )
 }
 fn limited() -> io::Error {
     io::Error::new(
         io::ErrorKind::TimedOut,
-        "PS2 serial inspection budget exceeded",
+        "Disc identity inspection budget exceeded",
     )
 }
 fn u32le(bytes: &[u8]) -> io::Result<u32> {
@@ -40,7 +73,11 @@ fn u64le(bytes: &[u8]) -> io::Result<u64> {
 }
 
 pub fn init(conn: &Connection) -> rusqlite::Result<()> {
-    conn.execute_batch("CREATE TABLE IF NOT EXISTS ps2_disc_identities(path TEXT PRIMARY KEY,stamp TEXT NOT NULL,serial TEXT,format INTEGER NOT NULL);")
+    conn.execute_batch("CREATE TABLE IF NOT EXISTS disc_identities(path TEXT NOT NULL,platform TEXT NOT NULL,stamp TEXT NOT NULL,identity TEXT,format INTEGER NOT NULL,PRIMARY KEY(path,platform));")?;
+    if conn.query_row("SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE type='table' AND name='ps2_disc_identities')",[],|r|r.get::<_,bool>(0))? {
+        conn.execute_batch("INSERT OR IGNORE INTO disc_identities SELECT path,'ps2',stamp,CASE WHEN serial IS NULL THEN NULL ELSE json_object('serial',serial,'regions',json('[]')) END,format FROM ps2_disc_identities;")?;
+    }
+    Ok(())
 }
 #[derive(Serialize, Deserialize, PartialEq)]
 struct Stamp {
@@ -73,18 +110,22 @@ fn file_stamp(path: &Path) -> Option<String> {
         .extension()
         .is_some_and(|s| s.eq_ignore_ascii_case("cue"))
     {
-        let track = optical::cue_track(path).ok()?;
-        return serde_json::to_string(&(
-            stamp(path)?,
-            track.file.to_string_lossy(),
-            stamp(&track.file)?,
-        ))
-        .ok();
+        let tracks = optical::cue_tracks(path).ok()?;
+        let tracks = tracks
+            .iter()
+            .map(|track| {
+                Some((
+                    track.file.to_string_lossy().to_string(),
+                    stamp(&track.file)?,
+                ))
+            })
+            .collect::<Option<Vec<_>>>()?;
+        return serde_json::to_string(&(stamp(path)?, tracks)).ok();
     }
     serde_json::to_string(&(stamp(path)?, stamp(&index_path(path)))).ok()
 }
 fn eligible(path: &Path, platform: &str) -> bool {
-    crate::platform_defaults::equivalent(platform, "Sony PlayStation 2")
+    System::from_platform(platform).is_some()
         && path
             .file_name()
             .and_then(|v| v.to_str())
@@ -97,7 +138,11 @@ fn eligible(path: &Path, platform: &str) -> bool {
             })
 }
 /// Cache is optional: a read-only/unavailable library must not prevent matching.
-pub fn serial_checked(path: &str, platform: &str, cancelled: &dyn Fn() -> bool) -> Option<String> {
+pub(crate) fn identity_checked(
+    path: &str,
+    platform: &str,
+    cancelled: &dyn Fn() -> bool,
+) -> Option<Identity> {
     let path = Path::new(path);
     if !eligible(path, platform) {
         return None;
@@ -106,13 +151,27 @@ pub fn serial_checked(path: &str, platform: &str, cancelled: &dyn Fn() -> bool) 
     let cache = crate::get_db_connection().ok();
     #[cfg(test)]
     let cache: Option<Connection> = None; // Tests never mutate the real debug library.
-    cached_serial(path, cache.as_ref(), cancelled)
+    cached_identity(
+        path,
+        System::from_platform(platform)?,
+        cache.as_ref(),
+        cancelled,
+    )
 }
+#[cfg(test)]
 fn cached_serial(
     path: &Path,
     cache: Option<&Connection>,
     cancelled: &dyn Fn() -> bool,
 ) -> Option<String> {
+    cached_identity(path, System::Ps2, cache, cancelled).map(|id| id.serial)
+}
+fn cached_identity(
+    path: &Path,
+    system: System,
+    cache: Option<&Connection>,
+    cancelled: &dyn Fn() -> bool,
+) -> Option<Identity> {
     if cancelled() {
         return None;
     }
@@ -121,21 +180,24 @@ fn cached_serial(
     if let Some(conn) = cache {
         let saved: Option<Option<String>> = conn
             .query_row(
-                "SELECT serial FROM ps2_disc_identities WHERE path=?1 AND stamp=?2 AND format=?3",
-                params![key, signature, FORMAT],
+                "SELECT identity FROM disc_identities WHERE path=?1 AND platform=?2 AND stamp=?3 AND format=?4",
+                params![key,system.key(), signature, FORMAT],
                 |r| r.get(0),
             )
             .optional()
             .ok()
             .flatten();
         if let Some(serial) = saved {
-            return serial;
+            return serial.and_then(|value| serde_json::from_str(&value).ok());
         }
     }
-    let result = inspect(path, cancelled).ok()?;
+    let result = inspect_for(path, system, cancelled).ok()?;
     if !cancelled() && file_stamp(path).as_deref() == Some(&signature) {
         if let Some(conn) = cache {
-            let _=conn.execute("INSERT INTO ps2_disc_identities VALUES(?1,?2,?3,?4) ON CONFLICT(path) DO UPDATE SET stamp=excluded.stamp,serial=excluded.serial,format=excluded.format",params![key,signature,result,FORMAT]);
+            let encoded = result
+                .as_ref()
+                .and_then(|id| serde_json::to_string(id).ok());
+            let _=conn.execute("INSERT INTO disc_identities VALUES(?1,?2,?3,?4,?5) ON CONFLICT(path,platform) DO UPDATE SET stamp=excluded.stamp,identity=excluded.identity,format=excluded.format",params![key,system.key(),signature,encoded,FORMAT]);
         }
         result
     } else {
@@ -497,7 +559,11 @@ fn read_range(
     }
     Ok(())
 }
-pub(crate) fn boot_serial(cnf: &[u8]) -> Option<String> {
+#[cfg(test)]
+fn boot_serial(cnf: &[u8]) -> Option<String> {
+    boot_serial_for(cnf, System::Ps2)
+}
+fn boot_serial_for(cnf: &[u8], system: System) -> Option<String> {
     let cnf = std::str::from_utf8(cnf)
         .ok()?
         .trim_start_matches('\u{feff}');
@@ -505,7 +571,11 @@ pub(crate) fn boot_serial(cnf: &[u8]) -> Option<String> {
         let Some((key, value)) = line.split_once('=') else {
             continue;
         };
-        if !key.trim().eq_ignore_ascii_case("BOOT2") {
+        if !key.trim().eq_ignore_ascii_case(if system == System::Ps1 {
+            "BOOT"
+        } else {
+            "BOOT2"
+        }) {
             continue;
         }
         let value = value.trim().trim_matches('"').split(';').next()?.trim();
@@ -545,15 +615,26 @@ fn extent(bytes: &[u8]) -> io::Result<(u64, usize)> {
     }
     Ok((u64::from(block) * SECTOR, length as usize))
 }
+#[cfg(test)]
 fn inspect(path: &Path, cancelled: &dyn Fn() -> bool) -> io::Result<Option<String>> {
+    inspect_for(path, System::Ps2, cancelled).map(|id| id.map(|id| id.serial))
+}
+fn inspect_for(
+    path: &Path,
+    system: System,
+    cancelled: &dyn Fn() -> bool,
+) -> io::Result<Option<Identity>> {
     let mut budget = Budget {
         started: Instant::now(),
         inflated: 0,
         cancelled,
     };
+    if system == System::Dreamcast {
+        return optical::dreamcast_identity(path, &mut budget);
+    }
     let mut image = Image::open(path, &mut budget)?;
     let indexed = matches!(&image, Image::Gzip { index: Some(_), .. });
-    let result = inspect_image(&mut image, &mut budget);
+    let result = inspect_image(&mut image, &mut budget, system);
     // An apparently valid but damaged sidecar can decode into invalid ISO data.
     // Retry ordinary gzip without touching the sidecar, within the same budget.
     if indexed
@@ -564,12 +645,16 @@ fn inspect(path: &Path, cancelled: &dyn Fn() -> bool) -> io::Result<Option<Strin
         if let Image::Gzip { index, .. } = &mut image {
             *index = None;
         }
-        inspect_image(&mut image, &mut budget)
+        inspect_image(&mut image, &mut budget, system)
     } else {
         result
     }
 }
-fn inspect_image(image: &mut Image, budget: &mut Budget<'_>) -> io::Result<Option<String>> {
+fn inspect_image(
+    image: &mut Image,
+    budget: &mut Budget<'_>,
+    system: System,
+) -> io::Result<Option<Identity>> {
     let mut sector = [0; SECTOR as usize];
     let mut root = None;
     for block in 16..48 {
@@ -633,7 +718,10 @@ fn inspect_image(image: &mut Image, budget: &mut Budget<'_>) -> io::Result<Optio
         }
         let mut cnf = vec![0; length];
         image.read_at(offset, &mut cnf, budget)?;
-        return Ok(boot_serial(&cnf));
+        return Ok(boot_serial_for(&cnf, system).map(|serial| Identity {
+            serial,
+            regions: Vec::new(),
+        }));
     }
     Ok(None)
 }
@@ -710,6 +798,79 @@ pub(crate) mod tests {
         data[32 * SECTOR as usize..32 * SECTOR as usize + cnf.len()]
             .copy_from_slice(cnf.as_bytes());
         data
+    }
+
+    pub fn ps1_iso(boot: &str) -> Vec<u8> {
+        let mut data = iso(boot);
+        let offset = data.windows(5).position(|b| b == b"BOOT2").unwrap();
+        data[offset..offset + 5].copy_from_slice(b"BOOT ");
+        data
+    }
+    #[test]
+    fn ps1_boot_serial_uses_the_selected_platform_and_persistent_cache_migrates_ps2() {
+        let files = Files::new();
+        let data = ps1_iso("SLUS_009.99");
+        let path = files.write("Renamed.iso", &data);
+        let conn = Connection::open_in_memory().unwrap();
+        conn.execute_batch("CREATE TABLE ps2_disc_identities(path TEXT PRIMARY KEY,stamp TEXT NOT NULL,serial TEXT,format INTEGER NOT NULL);INSERT INTO ps2_disc_identities VALUES('old','stamp','SLUS-20998',1);").unwrap();
+        init(&conn).unwrap();
+        init(&conn).unwrap();
+        assert_eq!(conn.query_row("SELECT json_extract(identity,'$.serial') FROM disc_identities WHERE path='old' AND platform='ps2'",[],|r|r.get::<_,String>(0)).unwrap(),"SLUS-20998");
+        assert!(cached_identity(&path, System::Ps2, Some(&conn), &|| false).is_none());
+        assert_eq!(
+            cached_identity(&path, System::Ps1, Some(&conn), &|| false)
+                .unwrap()
+                .serial,
+            "SLUS-00999"
+        );
+        let bytes = optical::tests::sectors(&data, 2352, 24, 0);
+        files.write("data.bin", &bytes);
+        let cue = files.write(
+            "game.cue",
+            b"FILE \"data.bin\" BINARY\nTRACK 01 MODE2/2352\nINDEX 01 00:00:00\n",
+        );
+        assert_eq!(
+            inspect_for(&cue, System::Ps1, &|| false)
+                .unwrap()
+                .unwrap()
+                .serial,
+            "SLUS-00999"
+        );
+        let chd = files.write(
+            "game.chd",
+            &optical::tests::chd(
+                &optical::tests::sectors(&data, 2448, 24, 0),
+                2448,
+                Some("TRACK:1 TYPE:MODE2_RAW SUBTYPE:NONE FRAMES:40"),
+            ),
+        );
+        assert_eq!(
+            inspect_for(&chd, System::Ps1, &|| false)
+                .unwrap()
+                .unwrap()
+                .serial,
+            "SLUS-00999"
+        );
+        assert!(identity_checked(chd.to_str().unwrap(), "Sega Saturn", &|| false).is_none());
+    }
+    #[test]
+    #[ignore = "Read-only check of explicitly supplied disc paths; never touches the library database"]
+    fn inspect_local_disc_images_read_only() {
+        let values: Vec<(String, String)> = serde_json::from_str(
+            &std::env::var("OPENCABINET_DISC_SAMPLES").expect("JSON array of [platform,path]"),
+        )
+        .unwrap();
+        for (platform, path) in values {
+            let now = Instant::now();
+            let result = inspect_for(
+                Path::new(&path),
+                System::from_platform(&platform).unwrap(),
+                &|| false,
+            )
+            .unwrap();
+            println!("{path}: {result:?} ({:?})", now.elapsed());
+            assert!(result.is_some());
+        }
     }
     fn gzip(data: &[u8]) -> Vec<u8> {
         let mut encoder = flate2::write::GzEncoder::new(Vec::new(), flate2::Compression::fast());
@@ -802,7 +963,7 @@ pub(crate) mod tests {
             assert!(!index_path(&path).exists());
         }
         assert!(eligible(Path::new("X.ISO.GZ"), "Sony - PlayStation 2"));
-        assert!(!eligible(Path::new("X.iso"), "Sony PlayStation"));
+        assert!(eligible(Path::new("X.iso"), "Sony PlayStation"));
         assert!(!eligible(Path::new("X.exe"), "Sony PlayStation 2"));
     }
     #[test]
@@ -873,8 +1034,11 @@ pub(crate) mod tests {
             cached_serial(&path, Some(&conn), &|| false).as_deref(),
             Some("SLUS-20998")
         );
-        conn.execute("UPDATE ps2_disc_identities SET serial='cached'", [])
-            .unwrap();
+        conn.execute(
+            "UPDATE disc_identities SET identity='{\"serial\":\"cached\"}'",
+            [],
+        )
+        .unwrap();
         assert_eq!(
             cached_serial(&path, Some(&conn), &|| false).as_deref(),
             Some("cached")

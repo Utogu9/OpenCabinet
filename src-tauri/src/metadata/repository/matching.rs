@@ -98,15 +98,9 @@ pub(in crate::metadata) fn search_candidate_checked(
     conn: &Connection,title: &str,platform: &str,path: &str,cancelled: &dyn Fn()->bool,
 ) -> Result<Vec<SearchResult>> {
     if catalog_is_repository(conn) {
-        if let Some(serial)=crate::ps2_serial::serial_checked(path,platform,cancelled) {
-            for query in [&serial, &serial.replace('-',"")] {
-                let results=exact_catalog_matches(conn,query,Some(platform))?;
-                if !results.is_empty() {
-                    // A real product ID wins over an alias that happens to look like one.
-                    let exact:Vec<_>=results.iter().filter(|r|r.source_key.as_deref().is_some_and(|key|key.eq_ignore_ascii_case(&serial))).cloned().collect();
-                    return Ok(if exact.is_empty(){results}else{exact});
-                }
-            }
+        if let Some(identity)=crate::disc_serial::identity_checked(path,platform,cancelled) {
+            let results=disc_matches(conn,platform,&identity)?;
+            if !results.is_empty(){return Ok(results);}
         }
     }
     let original = rom_name(path);
@@ -141,6 +135,38 @@ pub(in crate::metadata) fn search_candidate_checked(
         return Ok(results);
     }
     search_catalog(conn, &original, platform)
+}
+
+fn disc_matches(conn:&Connection,platform:&str,identity:&crate::disc_serial::Identity)->Result<Vec<SearchResult>> {
+    let serial=&identity.serial;
+    let mut queries=vec![serial.clone(),serial.replace('-',"")];
+    let dreamcast=crate::platform_defaults::equivalent(platform,"Sega Dreamcast");
+    if dreamcast {
+        if let Some(value)=serial.strip_prefix('T').filter(|v|v.as_bytes().first().is_some_and(u8::is_ascii_digit)) {queries.push(format!("T-{value}"));}
+        // Sega's US packaging omits MK-, while European packaging adds a
+        // territory suffix which is not always present in IP.BIN.
+        if let Some(value)=serial.strip_prefix("MK-"){queries.push(value.to_owned());}
+        let base=queries.iter().find_map(|q|q.strip_prefix("MK-").or_else(||q.bytes().all(|b|b.is_ascii_digit()).then_some(q.as_str()))).map(str::to_owned);
+        if let Some(base)=base.filter(|base|base.len()>=4&&base.bytes().all(|b|b.is_ascii_digit())) {
+            let prefix=format!("{platform}/MK-{base}-");
+            let mut statement=conn.prepare("SELECT source_key FROM repository_keys WHERE source_key>=?1 AND source_key<?2 ORDER BY source_key LIMIT 100").map_err(err)?;
+            let keys=statement.query_map(params![prefix,format!("{prefix}\u{10ffff}")],|row|row.get::<_,String>(0)).map_err(err)?;
+            for key in keys {queries.push(key.map_err(err)?.rsplit('/').next().unwrap_or_default().to_owned());}
+        }
+    }
+    let mut found=Vec::new();let mut seen=HashSet::new();
+    for query in queries {
+        let results=exact_catalog_matches(conn,&query,Some(platform))?;
+        // A product key wins over a title alias which happens to look like it.
+        let direct:Vec<_>=results.iter().filter(|r|r.source_key.as_deref().is_some_and(|key|key.eq_ignore_ascii_case(&query))).cloned().collect();
+        let results=if direct.is_empty(){results}else{direct};
+        for result in results {
+            if !identity.regions.is_empty() && !result.regions.is_empty() && !result.regions.iter().any(|region|super::super::canonical_region(region).is_some_and(|region|identity.regions.iter().any(|r|r==region))) {continue;}
+            if seen.insert(result.game.id){found.push(result);}
+        }
+        if !dreamcast && !found.is_empty(){break;}
+    }
+    Ok(found)
 }
 
 pub(in crate::metadata) fn finish_search_results(

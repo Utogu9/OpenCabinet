@@ -24,7 +24,7 @@ mod library_features;
 mod launch_actions;
 mod user_profiles;
 mod retroachievements;
-mod ps2_serial;
+mod disc_serial;
 mod game_shortcuts;
 mod launch_screen;
 mod launch_window_probe;
@@ -322,7 +322,7 @@ fn init_database(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     session_history::recover(&conn)?;
     user_profiles::init(&conn)?;
     retroachievements::init(&conn)?;
-    ps2_serial::init(&conn)?;
+    disc_serial::init(&conn)?;
     metadata::init_library_schema(&conn)?;
     init_game_images(&conn)?;
     media_library::init_schema(&conn)?;

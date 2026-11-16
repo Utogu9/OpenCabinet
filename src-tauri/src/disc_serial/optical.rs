@@ -9,6 +9,68 @@ use std::{
 
 const MAX_CUE: u64 = 1024 * 1024;
 const MAX_HUNK: u32 = 16 * 1024 * 1024;
+
+fn dreamcast_header(bytes: &[u8]) -> Option<super::Identity> {
+    if bytes.len() < 0x50 || &bytes[..16] != b"SEGA SEGAKATANA " {
+        return None;
+    }
+    let serial = std::str::from_utf8(&bytes[0x40..0x4a])
+        .ok()?
+        .split('\0')
+        .next()?
+        .trim()
+        .to_ascii_uppercase();
+    if !(4..=10).contains(&serial.len())
+        || !serial
+            .bytes()
+            .all(|b| b.is_ascii_alphanumeric() || b == b'-')
+        || !serial.bytes().any(|b| b.is_ascii_digit())
+    {
+        return None;
+    }
+    let regions = [(b'J', "Japan"), (b'U', "North America"), (b'E', "Europe")]
+        .into_iter()
+        .filter(|(key, _)| bytes[0x30..0x38].contains(key))
+        .map(|(_, name)| name.to_owned())
+        .collect();
+    Some(super::Identity { serial, regions })
+}
+pub(super) fn dreamcast_identity(
+    path: &Path,
+    budget: &mut Budget<'_>,
+) -> io::Result<Option<super::Identity>> {
+    let mut header = [0; 256];
+    if path
+        .extension()
+        .is_some_and(|ext| ext.eq_ignore_ascii_case("cue"))
+    {
+        for track in cue_tracks(path)? {
+            budget.check()?;
+            let mut track = DataTrack::cue_track(track)?;
+            track.read_at(0, &mut header, budget)?;
+            if let Some(id) = dreamcast_header(&header) {
+                return Ok(Some(id));
+            }
+        }
+    } else if path
+        .extension()
+        .is_some_and(|ext| ext.eq_ignore_ascii_case("chd"))
+    {
+        let mut track = DataTrack::chd(path, budget)?;
+        let layouts = std::iter::once((track.payload, track.base / track.stride, track.frames))
+            .chain(std::mem::take(&mut track.alternatives));
+        for (payload, first, frames) in layouts {
+            track.payload = payload;
+            track.base = first * track.stride;
+            track.frames = frames;
+            track.read_at(0, &mut header, budget)?;
+            if let Some(id) = dreamcast_header(&header) {
+                return Ok(Some(id));
+            }
+        }
+    }
+    Ok(None)
+}
 #[derive(Clone)]
 struct CueEntry {
     file: PathBuf,
@@ -61,7 +123,7 @@ fn layout(mode: &str) -> Option<(u64, u64)> {
         _ => None,
     }
 }
-pub(super) fn cue_track(path: &Path) -> io::Result<CueTrack> {
+pub(super) fn cue_tracks(path: &Path) -> io::Result<Vec<CueTrack>> {
     let file = File::open(path)?;
     if file.metadata()?.len() > MAX_CUE {
         return Err(invalid());
@@ -143,42 +205,47 @@ pub(super) fn cue_track(path: &Path) -> io::Result<CueTrack> {
             _ => {}
         }
     }
-    let (position, track) = tracks
+    let mut data = Vec::new();
+    for (position, track) in tracks
         .iter()
         .enumerate()
-        .find(|(_, t)| t.binary && layout(&t.mode).is_some())
-        .ok_or_else(invalid)?;
-    let (stride, payload) = layout(&track.mode).unwrap();
-    let index = track.index1.ok_or_else(invalid)?;
-    if track.index0.is_some_and(|zero| zero > index) {
-        return Err(invalid());
-    }
-    // A shared BIN with mixed sector sizes cannot use INDEX times as one byte stride.
-    if tracks[..position].iter().any(|t| {
-        t.file == track.file && t.mode != "AUDIO" && layout(&t.mode).is_none_or(|v| v.0 != stride)
-    }) {
-        return Err(invalid());
-    }
-    if tracks[..position]
-        .iter()
-        .any(|t| t.file == track.file && t.mode == "AUDIO" && stride != 2352)
+        .filter(|(_, t)| t.binary && layout(&t.mode).is_some())
     {
+        let (stride, payload) = layout(&track.mode).unwrap();
+        let index = track.index1.ok_or_else(invalid)?;
+        if track.index0.is_some_and(|zero| zero > index) {
+            return Err(invalid());
+        }
+        // INDEX times are frames in the shared BIN, not in the whole disc.
+        if tracks[..position].iter().any(|t| {
+            t.file == track.file
+                && if t.mode == "AUDIO" {
+                    stride != 2352
+                } else {
+                    layout(&t.mode).is_none_or(|v| v.0 != stride)
+                }
+        }) {
+            return Err(invalid());
+        }
+        let end = tracks[position + 1..]
+            .iter()
+            .find(|t| t.file == track.file)
+            .and_then(|t| t.index0.or(t.index1));
+        if end.is_some_and(|end| end <= index) {
+            return Err(invalid());
+        }
+        data.push(CueTrack {
+            file: track.file.clone(),
+            stride,
+            payload,
+            index,
+            end,
+        });
+    }
+    if data.is_empty() {
         return Err(invalid());
     }
-    let end = tracks[position + 1..]
-        .iter()
-        .find(|t| t.file == track.file)
-        .and_then(|t| t.index0.or(t.index1));
-    if end.is_some_and(|end| end <= index) {
-        return Err(invalid());
-    }
-    Ok(CueTrack {
-        file: track.file.clone(),
-        stride,
-        payload,
-        index,
-        end,
-    })
+    Ok(data)
 }
 
 enum Source {
@@ -191,10 +258,13 @@ pub(super) struct DataTrack {
     payload: u64,
     base: u64,
     frames: u64,
+    alternatives: Vec<(u64, u64, u64)>,
 }
 impl DataTrack {
     pub fn cue(path: &Path) -> io::Result<Self> {
-        let track = cue_track(path)?;
+        Self::cue_track(cue_tracks(path)?.remove(0))
+    }
+    fn cue_track(track: CueTrack) -> io::Result<Self> {
         let file = File::open(&track.file)?;
         let size = file.metadata()?.len();
         let total = size / track.stride;
@@ -208,6 +278,7 @@ impl DataTrack {
             payload: track.payload,
             base: track.index * track.stride,
             frames: end - track.index,
+            alternatives: Vec::new(),
         })
     }
     pub fn chd(path: &Path, budget: &mut Budget<'_>) -> io::Result<Self> {
@@ -236,7 +307,9 @@ impl DataTrack {
         let mut chd = chd::Chd::open(file, None).map_err(|_| invalid())?;
         budget.check()?;
         let unit = chd.header().unit_bytes() as u64;
-        let mut track = None;
+        let mut layouts = Vec::new();
+        let mut track_offset = 0u64;
+        let mut number = 0u32;
         let references = chd
             .metadata_refs()
             .take(256)
@@ -244,8 +317,13 @@ impl DataTrack {
             .map_err(|_| invalid())?;
         for reference in references {
             budget.check()?;
-            if ![u32::from_be_bytes(*b"CHTR"), u32::from_be_bytes(*b"CHT2")]
-                .contains(&reference.metatag())
+            if ![
+                u32::from_be_bytes(*b"CHTR"),
+                u32::from_be_bytes(*b"CHT2"),
+                u32::from_be_bytes(*b"CHGD"),
+                u32::from_be_bytes(*b"CHGT"),
+            ]
+            .contains(&reference.metatag())
             {
                 continue;
             }
@@ -261,44 +339,62 @@ impl DataTrack {
                         .map(|(_, value)| value)
                 })
             };
-            if field("TRACK") != Some("1") {
-                continue;
-            }
-            let kind = field("TYPE").ok_or_else(invalid)?;
-            let payload = match kind {
-                "MODE1" | "MODE2_FORM1" => 0,
-                "MODE1_RAW" => 16,
-                "MODE2" | "MODE2_FORM_MIX" => 8,
-                "MODE2_RAW" => 24,
-                _ => return Err(invalid()),
-            };
-            let frames = field("FRAMES")
+            let next = field("TRACK")
                 .ok_or_else(invalid)?
-                .parse::<u64>()
+                .parse::<u32>()
                 .map_err(|_| invalid())?;
-            let pregap = field("PREGAP")
-                .unwrap_or("0")
-                .parse::<u64>()
-                .map_err(|_| invalid())?;
-            let stored = field("PGTYPE").is_some_and(|value| value.starts_with('V'));
-            let first = if stored { pregap } else { 0 };
-            if frames <= first || payload + SECTOR > unit {
+            if next != number + 1 || next > 99 {
                 return Err(invalid());
             }
-            track = Some((payload, first, frames - first));
-            break;
+            number = next;
+            let kind = field("TYPE").ok_or_else(invalid)?;
+            let parse = |key, default| {
+                field(key)
+                    .unwrap_or(default)
+                    .parse::<u64>()
+                    .map_err(|_| invalid())
+            };
+            let frames = parse("FRAMES", "0")?;
+            let pregap = parse("PREGAP", "0")?;
+            let pad = parse("PAD", "0")?;
+            let stored = field("PGTYPE").is_some_and(|value| value.starts_with('V'));
+            let first = if stored { pregap } else { 0 };
+            let playable = frames
+                .checked_sub(first)
+                .and_then(|n| n.checked_sub(pad))
+                .filter(|n| *n > 0)
+                .ok_or_else(invalid)?;
+            let end = track_offset.checked_add(frames).ok_or_else(invalid)?;
+            if unit < SECTOR || end > chd.header().logical_bytes() / unit {
+                return Err(invalid());
+            }
+            let payload = match kind {
+                "MODE1" | "MODE1/2048" | "MODE2_FORM1" => Some(0),
+                "MODE1_RAW" | "MODE1/2352" => Some(16),
+                "MODE2" | "MODE2/2336" | "MODE2_FORM_MIX" => Some(8),
+                "MODE2_RAW" | "MODE2/2352" => Some(24),
+                "AUDIO" => None,
+                _ => return Err(invalid()),
+            };
+            if let Some(payload) = payload {
+                if payload + SECTOR > unit {
+                    return Err(invalid());
+                }
+                layouts.push((payload, track_offset + first, playable));
+            }
+            // CHD padding is present after every track, independently of virtual
+            // pregaps/postgaps. GD-ROM PAD frames are already included in FRAMES.
+            track_offset = track_offset
+                .checked_add(frames.checked_add(3).ok_or_else(invalid)? / 4 * 4)
+                .ok_or_else(invalid)?;
         }
-        let (payload, first, frames) = match track {
-            Some(track) => track,
-            None if unit == SECTOR => (0, 0, chd.header().logical_bytes() / SECTOR),
-            _ => return Err(invalid()),
-        };
-        if first
-            .checked_add(frames)
-            .is_none_or(|end| end > chd.header().logical_bytes() / unit)
-        {
+        if layouts.is_empty() && number == 0 && unit == SECTOR {
+            layouts.push((0, 0, chd.header().logical_bytes() / unit));
+        }
+        if layouts.is_empty() {
             return Err(invalid());
         }
+        let (payload, first, frames) = layouts.remove(0);
         let hunk_size = chd.header().hunk_size() as usize;
         Ok(Self {
             source: Source::Chd(ChdReader {
@@ -311,6 +407,7 @@ impl DataTrack {
             payload,
             base: first * unit,
             frames,
+            alternatives: layouts,
         })
     }
     pub fn read_at(
@@ -391,7 +488,7 @@ impl ChdReader {
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use super::super::{
         cached_serial, file_stamp, init, inspect,
         tests::{Files, iso},
@@ -400,7 +497,7 @@ mod tests {
     use rusqlite::Connection;
     use std::fs;
 
-    fn sectors(data: &[u8], stride: usize, payload: usize, pregap: usize) -> Vec<u8> {
+    pub(crate) fn sectors(data: &[u8], stride: usize, payload: usize, pregap: usize) -> Vec<u8> {
         let mut bytes = vec![0; (pregap + data.len() / 2048) * stride];
         for (index, sector) in data.chunks_exact(2048).enumerate() {
             let start = (index + pregap) * stride + payload;
@@ -415,11 +512,22 @@ mod tests {
     // A small, valid CHD v5 with an uncompressed map. Real compressed hunks are
     // also exercised by the opt-in read-only local-media test in the parent.
     pub(crate) fn chd(data: &[u8], unit: usize, metadata: Option<&str>) -> Vec<u8> {
+        let metadata = metadata
+            .map(|text| vec![(*b"CHT2", text)])
+            .unwrap_or_default();
+        chd_tracks(data, unit, &metadata)
+    }
+    pub(crate) fn chd_tracks(data: &[u8], unit: usize, metadata: &[([u8; 4], &str)]) -> Vec<u8> {
         let hunk = unit * 8;
         let count = data.len().div_ceil(hunk);
         let metadata_offset = 124 + count * 4;
-        let data_start =
-            (metadata_offset + metadata.map_or(0, |m| 16 + m.len() + 1)).div_ceil(hunk) * hunk;
+        let data_start = (metadata_offset
+            + metadata
+                .iter()
+                .map(|(_, m)| 16 + m.len() + 1)
+                .sum::<usize>())
+        .div_ceil(hunk)
+            * hunk;
         let mut out = vec![0; data_start + count * hunk];
         out[..8].copy_from_slice(b"MComprHD");
         out[8..12].copy_from_slice(&124u32.to_be_bytes());
@@ -428,13 +536,20 @@ mod tests {
         out[40..48].copy_from_slice(&124u64.to_be_bytes());
         out[56..60].copy_from_slice(&(hunk as u32).to_be_bytes());
         out[60..64].copy_from_slice(&(unit as u32).to_be_bytes());
-        if let Some(metadata) = metadata {
+        if !metadata.is_empty() {
             out[48..56].copy_from_slice(&(metadata_offset as u64).to_be_bytes());
-            out[metadata_offset..metadata_offset + 4].copy_from_slice(b"CHT2");
-            out[metadata_offset + 4..metadata_offset + 8]
-                .copy_from_slice(&((metadata.len() + 1) as u32).to_be_bytes());
-            out[metadata_offset + 16..metadata_offset + 16 + metadata.len()]
-                .copy_from_slice(metadata.as_bytes());
+            let mut offset = metadata_offset;
+            for (index, (tag, text)) in metadata.iter().enumerate() {
+                out[offset..offset + 4].copy_from_slice(tag);
+                out[offset + 4..offset + 8]
+                    .copy_from_slice(&((text.len() + 1) as u32).to_be_bytes());
+                let next = offset + 16 + text.len() + 1;
+                if index + 1 < metadata.len() {
+                    out[offset + 8..offset + 16].copy_from_slice(&(next as u64).to_be_bytes());
+                }
+                out[offset + 16..offset + 16 + text.len()].copy_from_slice(text.as_bytes());
+                offset = next;
+            }
         }
         for index in 0..count {
             out[124 + index * 4..128 + index * 4]
@@ -585,5 +700,68 @@ mod tests {
             Some("TRACK:1 TYPE:AUDIO SUBTYPE:NONE FRAMES:40"),
         );
         assert!(serial(&files.write("audio.chd", &audio)).is_none());
+    }
+    pub(crate) fn dreamcast_data(serial: &str, area: &str) -> Vec<u8> {
+        let mut data = vec![b' '; 2048 * 8];
+        data[..16].copy_from_slice(b"SEGA SEGAKATANA ");
+        data[0x30..0x38].fill(b' ');
+        data[0x30..0x30 + area.len()].copy_from_slice(area.as_bytes());
+        data[0x40..0x4a].fill(b' ');
+        data[0x40..0x40 + serial.len()].copy_from_slice(serial.as_bytes());
+        data
+    }
+    #[test]
+    fn dreamcast_tracks_skip_audio_and_low_density_data_with_chd_padding_and_stored_pregaps() {
+        let files = Files::new();
+        let data = dreamcast_data("MK-51035", "E");
+        let mut raw = vec![0; 16 * 2448];
+        raw.extend(sectors(&data, 2448, 16, 2));
+        let metadata = [
+            (
+                *b"CHGD",
+                "TRACK:1 TYPE:MODE1_RAW SUBTYPE:NONE FRAMES:5 PAD:1",
+            ),
+            (*b"CHGD", "TRACK:2 TYPE:AUDIO SUBTYPE:NONE FRAMES:7 PAD:1"),
+            (
+                *b"CHGD",
+                "TRACK:3 TYPE:MODE1_RAW SUBTYPE:NONE FRAMES:10 PAD:0 PREGAP:2 PGTYPE:VMODE1",
+            ),
+        ];
+        let path = files.write("gd.chd", &chd_tracks(&raw, 2448, &metadata));
+        let mut budget = Budget {
+            started: std::time::Instant::now(),
+            inflated: 0,
+            cancelled: &|| false,
+        };
+        let identity = dreamcast_identity(&path, &mut budget).unwrap().unwrap();
+        assert_eq!(identity.serial, "MK-51035");
+        assert_eq!(identity.regions, ["Europe"]);
+        files.write("track1.bin", &vec![0; 8 * 2352]);
+        files.write("track3.bin", &sectors(&data, 2352, 16, 0));
+        let cue=files.write("gd.cue",b"FILE \"track1.bin\" BINARY\nTRACK 01 MODE1/2352\nINDEX 01 00:00:00\nFILE \"audio.wav\" WAVE\nTRACK 02 AUDIO\nINDEX 01 00:00:00\nFILE \"track3.bin\" BINARY\nTRACK 03 MODE1/2352\nINDEX 01 00:00:00\n");
+        assert_eq!(
+            dreamcast_identity(&cue, &mut budget)
+                .unwrap()
+                .unwrap()
+                .serial,
+            "MK-51035"
+        );
+        let mut bin = vec![0; 7 * 2352];
+        bin.extend(sectors(&data, 2352, 24, 0));
+        files.write("mil.bin", &bin);
+        let cue=files.write("mil.cue",b"FILE \"mil.bin\" BINARY\nTRACK 01 AUDIO\nINDEX 01 00:00:00\nTRACK 02 MODE2/2352\nINDEX 01 00:00:07\n");
+        assert_eq!(
+            dreamcast_identity(&cue, &mut budget)
+                .unwrap()
+                .unwrap()
+                .regions,
+            ["Europe"]
+        );
+        let mut invalid = data.clone();
+        invalid[0] = 0;
+        assert!(dreamcast_header(&invalid).is_none());
+        let mut invalid = data;
+        invalid[0x40..0x4a].fill(b' ');
+        assert!(dreamcast_header(&invalid).is_none());
     }
 }

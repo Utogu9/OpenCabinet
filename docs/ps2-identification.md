@@ -48,11 +48,13 @@ images with 2048-byte units are supported too. No `chdman` installation, tempora
 extraction or conversion is required. Parent-dependent CHDs, unsupported track
 layouts and unreadable images fall back to the existing name-based matching.
 
-This identifies PS2 `BOOT2` executables; it does not add PS1 identification.
+This PS2 path identifies `BOOT2` executables. The shared reader also supports
+[PS1 and Dreamcast identification](disc-identification.md).
 
 ## Limits and caching
 
-The serial is cached in the library's `ps2_disc_identities` table. The cache
+The serial is cached in the library's `disc_identities` table, keyed by path
+and platform. Existing `ps2_disc_identities` entries are migrated automatically. The cache
 includes file path, size, modification timestamp and the index's presence,
 size and timestamp. Changing either source invalidates the cached result.
 For CUE images, the signature also includes the referenced data-track path,
