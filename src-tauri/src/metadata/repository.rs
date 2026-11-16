@@ -1391,6 +1391,31 @@ mod tests {
         }
     }
     #[test]
+    fn xbox_xbe_ids_match_three_digit_product_codes_and_both_iso_suffixes() {
+        let files=Sandbox::new();let mut conn=files.catalog();let source="Microsoft - Xbox";
+        conn.execute("INSERT INTO platforms VALUES(?1)",[source]).unwrap();let fixture=files.job.directory.join("xbox.json");
+        fs::write(&fixture,r#"{"schema_version":2,"system":"Microsoft - Xbox","games":{
+            "AC-001":{"entries":[{"name":"Dave Mirra Freestyle BMX 2 (USA)"}],"images":{}},
+            "4D530004":{"entries":[{"name":"Exact ID release (USA)"}],"images":{}},
+            "MS-004":{"entries":[{"name":"Printed code release (USA)"}],"images":{}},
+            "AC-003":{"entries":[{"name":"Wrong Game (Japan)"}],"images":{}}
+        }}"#).unwrap();insert_platform(&mut conn,&files.job,source,&fixture,|_|()).unwrap();
+        let images=crate::disc_serial::tests::Files::new();let executable=crate::disc_serial::xbox::tests::xbe(0x41430001,1);
+        for (name,bytes) in [("Wrong Game (Japan).xbe",executable.clone()),("Wrong Game (Japan).iso",crate::disc_serial::xbox::tests::iso(&executable)),("Wrong Game (Japan).xiso.iso",crate::disc_serial::xbox::tests::iso(&executable))] {
+            let path=images.write(name,&bytes);let results=search_candidate(&conn,"Wrong Game (Japan)",source,path.to_str().unwrap()).unwrap();
+            assert_eq!(results.len(),1);assert_eq!(results[0].source_key.as_deref(),Some("AC-001"));assert!(results[0].exact);
+            assert_eq!(super::super::import_match(&conn,&results,path.to_str().unwrap(),"Japan").unwrap(),Some(results[0].game.id));
+            let disabled=matching::search_candidate_with_serial_matching(&conn,"Wrong Game (Japan)",source,path.to_str().unwrap(),&||panic!("disabled identification must not open Xbox images"),false).unwrap();
+            assert_eq!(disabled.len(),1);assert_eq!(disabled[0].source_key.as_deref(),Some("AC-003"));
+        }
+        let exact=images.write("Renamed.xbe",&crate::disc_serial::xbox::tests::xbe(0x4d530004,1));
+        let results=search_candidate(&conn,"Wrong Game",source,exact.to_str().unwrap()).unwrap();assert_eq!(results.len(),1);assert_eq!(results[0].source_key.as_deref(),Some("4D530004"));
+        for bytes in [crate::disc_serial::xbox::tests::iso(&crate::disc_serial::xbox::tests::xbe(0x454103e7,7)),b"invalid ISO".to_vec()] {
+            let path=images.write("Wrong Game (Japan).xiso.iso",&bytes);let results=search_candidate(&conn,"Wrong Game",source,path.to_str().unwrap()).unwrap();
+            assert_eq!(results.len(),1);assert_eq!(results[0].source_key.as_deref(),Some("AC-003"));
+        }
+    }
+    #[test]
     fn xbox360_title_ids_match_printed_retail_codes_and_keep_exact_hex_ids_first() {
         let files=Sandbox::new();let mut conn=files.catalog();let source="Microsoft - Xbox 360";
         conn.execute("INSERT INTO platforms VALUES(?1)",[source]).unwrap();let fixture=files.job.directory.join("xbox360.json");

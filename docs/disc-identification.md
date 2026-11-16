@@ -21,6 +21,7 @@ preference backups.
 | PlayStation 3 | `TITLE_ID` in the adjacent `PARAM.SFO` | Extracted folders launched through `USRDIR/EBOOT.BIN` |
 | PlayStation 4 | `TITLE_ID` in `sce_sys/param.sfo` | Extracted folders launched through `eboot.bin` |
 | PSP | `DISC_ID` in `PSP_GAME/PARAM.SFO` or the PBP metadata section | ISO, CSO, CHD, PBP |
+| Xbox | Certificate `Title ID` in `default.xbe` | ISO (including `.xiso.iso`), XBE |
 | Xbox 360 | XEX2 execution-info `Title ID` | ISO, ZAR, XEX |
 | Dreamcast | Product number and territory flags in the `IP.BIN` boot header | CUE/BIN, CHD |
 | Saturn | Product number and area symbols in the `IP.BIN` boot header | CUE/BIN, CHD |
@@ -92,12 +93,34 @@ See PPSSPP's [disc reader](https://github.com/hrydgard/ppsspp/blob/master/Core/F
 and [SFO loading](https://github.com/hrydgard/ppsspp/blob/master/Core/PSPLoaders.cpp).
 OpenCabinet implements its own metadata-only readers and requires no keys.
 
+Original Xbox shares that bounded XDVDFS reader, looking for `default.xbe`
+instead of `default.xex`. Both `.iso` and `.xiso.iso` are ordinary ISO inputs;
+loose `.xbe` files are also supported. The reader checks `XBEH`, the base
+address and header size, then translates the certificate's virtual address
+to its file offset using checked subtraction. It validates the certificate
+size and bounds before reading the little-endian Title ID. Only the header
+fields and certificate metadata are read, with a 1 MiB header limit; no keys,
+mounting or executable loading is required. See
+[xemu's XBE structures](https://github.com/xemu-project/xemu/blob/master/xemu-xbe.h).
+OpenCabinet implements an independent metadata reader.
+
+Exact hexadecimal catalog IDs are preferred. Original Xbox printed codes use
+a three-digit decimal low word, preserving leading zeroes: `41430001` becomes
+`AC-001`, `4D530004` becomes `MS-004`, and `4D530085` becomes `MS-133`.
+These rules are platform-specific and do not apply Xbox 360's retail numbering
+to original Xbox games. Known certificate execution-region bits retain broad
+Asian and PAL groups; region-free or unknown flags leave the region unknown.
+Shared Title IDs do not establish an exact revision or pressing. Missing,
+invalid or unmatched certificates use title/filename matching. The global
+switch applies, and cached Xbox identities are separate from Xbox 360.
+
 Xbox 360 reads the unencrypted XEX2 optional-header directory and execution-info
 record. ISO images are inspected as XDVDFS: only the descriptor, bounded root
 directory and `default.xex` header are read. The known game-partition locations
 include extracted XISOs and XGD disc layouts; no ISO mounting is needed. XEX
 files can also be inspected directly. Headers are limited to 1 MiB and the
 root directory to 4 MiB, with bounded, cycle-checked directory traversal.
+
 
 The hexadecimal Title ID is preferred directly. Current retail catalog keys
 can encode its two ASCII publisher bytes and decimal low word: `4D530805`

@@ -145,6 +145,9 @@ pub(super) fn search_candidate_with_serial_matching(
 fn disc_matches(conn:&Connection,platform:&str,identity:&crate::disc_serial::Identity)->Result<Vec<SearchResult>> {
     let serial=&identity.serial;
     let mut queries=vec![serial.clone(),serial.replace('-',"")];
+    if crate::platform_defaults::equivalent(platform,"Microsoft Xbox") {
+        if let Some(product)=crate::disc_serial::xbox::product_code(serial) {queries.extend([product.clone(),product.replace('-',"")]);}
+    }
     if crate::platform_defaults::equivalent(platform,"Microsoft Xbox 360") {
         if let Some(product)=crate::disc_serial::xbox360::product_code(serial) {queries.extend([product.clone(),product.replace('-',"")]);}
     }
