@@ -11,6 +11,7 @@ external CHD tool or full-disc hash is required. Source files are read only.
 | PlayStation 2 | `BOOT2` executable in ISO 9660 `SYSTEM.CNF` | CUE/BIN, CHD, ISO, ISO.GZ |
 | Dreamcast | Product number and territory flags in the `IP.BIN` boot header | CUE/BIN, CHD |
 | Wii | Six-byte game ID (`ID6`) in the unencrypted disc header | ISO, RVZ, WBFS |
+| GameCube | Six-byte game ID (`ID6`) in the disc header | ISO, RVZ |
 
 For PlayStation, `cdrom:\SLUS_009.99;1` becomes `SLUS-00999`. `BOOT` and
 `BOOT2` are deliberately distinct; selecting PS1 must not return a PS2 identity.
@@ -54,6 +55,19 @@ Single-game WBFS files are supported, including the first file of a split
 filesystems are not treated as one game. Container signatures, bounds and
 RVZ compatibility versions are checked; GameCube headers are rejected in the
 Wii reader. This is identification, not a container-integrity check.
+
+GameCube shares the bounded ISO/RVZ header reader, but uses its own magic
+at `0x1C` and RVZ disc type `1` (Wii uses type `2`). A Wii file cannot be
+identified as GameCube merely by selecting that platform. Catalog product
+codes such as `DL-DOL-GAFE-USA` or `DOL-GAFE-USA` are looked up from `GAFE01`,
+preserving the regional character and preferring an exact ID6 key when present.
+Each platform has a separate cache entry. Disc number and revision do not
+change ID6, so discs of one game may share an ID; existing multi-disc handling
+and catalog ambiguity rules still apply.
+
+The reused Datel `DTLX01` identifier is excluded from automatic GameCube
+matching because it does not identify a unique product. See
+[Dolphin's GameCube identification notes](https://github.com/dolphin-emu/dolphin/blob/master/Source/Core/DiscIO/VolumeGC.cpp).
 
 Results, including missing identifiers, are cached in `disc_identities` with
 separate keys for each platform. Changes to a source file invalidate its entry;

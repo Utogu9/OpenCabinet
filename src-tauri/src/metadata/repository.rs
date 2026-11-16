@@ -1322,16 +1322,36 @@ mod tests {
             "00010001524D4745":{"entries":[{"name":"Digital game (USA)"}],"images":{}}
         }}"#).unwrap();insert_platform(&mut conn,&files.job,source,&fixture,|_|()).unwrap();
         let images=crate::disc_serial::tests::Files::new();
-        for (name,bytes) in [("Wrong title (Japan).iso",crate::disc_serial::wii::tests::disc("RMGE01")),
-            ("Wrong title (USA).rvz",crate::disc_serial::wii::tests::rvz(&crate::disc_serial::wii::tests::disc("RMGP01")))] {
+        for (name,bytes) in [("Wrong title (Japan).iso",crate::disc_serial::nintendo::tests::disc("RMGE01")),
+            ("Wrong title (USA).rvz",crate::disc_serial::nintendo::tests::rvz(&crate::disc_serial::nintendo::tests::disc("RMGP01")))] {
             let path=images.write(name,&bytes);let matches=search_candidate(&conn,"Wrong title",source,path.to_str().unwrap()).unwrap();
             assert_eq!(matches.len(),1);assert!(matches[0].exact);
             let expected=if name.ends_with("iso"){"RVL-RMGE-USA"}else{"RVL-RMGP-EUR"};assert_eq!(matches[0].source_key.as_deref(),Some(expected));
             assert_eq!(super::super::import_match(&conn,&matches,path.to_str().unwrap(),"Japan").unwrap(),Some(matches[0].game.id));
         }
-        let path=images.write("Super Mario Galaxy (USA).iso",&crate::disc_serial::wii::tests::disc("RZZE01"));
+        let path=images.write("Super Mario Galaxy (USA).iso",&crate::disc_serial::nintendo::tests::disc("RZZE01"));
         let matches=search_candidate(&conn,"Super Mario Galaxy",source,path.to_str().unwrap()).unwrap();
         assert!(matches.iter().any(|m|m.source_key.as_deref()==Some("RVL-RMGE-USA")),"unknown IDs keep filename matching");
+    }
+
+    #[test]
+    fn gamecube_internal_ids_match_product_codes_in_iso_and_rvz_without_filename_help() {
+        let files=Sandbox::new();let mut conn=files.catalog();let source="Nintendo - GameCube";
+        conn.execute("INSERT INTO platforms VALUES(?1)",[source]).unwrap();
+        let fixture=files.job.directory.join("gamecube.json");
+        fs::write(&fixture,r#"{"schema_version":2,"system":"Nintendo - GameCube","games":{
+            "DL-DOL-GAFE-USA":{"entries":[{"name":"Animal Crossing (USA)"}],"images":{}},
+            "DOL-GAFP-EUR":{"entries":[{"name":"Animal Crossing (Europe)"}],"images":{}}
+        }}"#).unwrap();insert_platform(&mut conn,&files.job,source,&fixture,|_|()).unwrap();
+        let images=crate::disc_serial::tests::Files::new();
+        for (name,bytes,key) in [("Wrong (Europe).iso",crate::disc_serial::nintendo::tests::gc_disc("GAFE01"),"DL-DOL-GAFE-USA"),
+            ("Wrong (Japan).rvz",crate::disc_serial::nintendo::tests::gc_rvz(&crate::disc_serial::nintendo::tests::gc_disc("GAFP01")),"DOL-GAFP-EUR")] {
+            let path=images.write(name,&bytes);let matches=search_candidate(&conn,"Wrong",source,path.to_str().unwrap()).unwrap();
+            assert_eq!(matches.len(),1);assert!(matches[0].exact);assert_eq!(matches[0].source_key.as_deref(),Some(key));
+            assert_eq!(super::super::import_match(&conn,&matches,path.to_str().unwrap(),"Japan").unwrap(),Some(matches[0].game.id));
+        }
+        let path=images.write("Animal Crossing (USA).iso",&crate::disc_serial::nintendo::tests::gc_disc("GZZE01"));
+        assert!(!search_candidate(&conn,"Animal Crossing",source,path.to_str().unwrap()).unwrap().is_empty());
     }
     impl Sandbox {
         pub(super) fn new() -> Self {

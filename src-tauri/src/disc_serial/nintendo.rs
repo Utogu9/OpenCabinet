@@ -1,5 +1,5 @@
-//! Read unencrypted Wii ID6 headers, without opening encrypted partitions.
-use super::{Budget, Identity, invalid};
+//! Read GameCube/Wii ID6 headers without decompressing or decrypting game data.
+use super::{Budget, Identity, System, invalid};
 use std::{
     fs::File,
     io::{self, Read, Seek, SeekFrom},
@@ -8,6 +8,7 @@ use std::{
 
 const HEADER_SIZE: usize = 0x80;
 const WII_MAGIC: [u8; 4] = [0x5d, 0x1c, 0x9e, 0xa3];
+const GAMECUBE_MAGIC: [u8; 4] = [0xc2, 0x33, 0x9f, 0x3d];
 
 fn read_at(
     file: &mut File,
@@ -26,7 +27,11 @@ fn read_at(
     file.read_exact(bytes)?;
     budget.check()
 }
-pub(super) fn identity(path: &Path, budget: &mut Budget<'_>) -> io::Result<Option<Identity>> {
+pub(super) fn identity(
+    path: &Path,
+    budget: &mut Budget<'_>,
+    system: System,
+) -> io::Result<Option<Identity>> {
     budget.check()?;
     let mut file = File::open(path)?;
     let extension = path
@@ -35,6 +40,7 @@ pub(super) fn identity(path: &Path, budget: &mut Budget<'_>) -> io::Result<Optio
         .unwrap_or_default()
         .to_ascii_lowercase();
     let mut header = [0; HEADER_SIZE];
+    let gamecube = system == System::GameCube;
     match extension.as_str() {
         "iso" => read_at(&mut file, 0, &mut header, budget)?,
         "rvz" => {
@@ -51,13 +57,16 @@ pub(super) fn identity(path: &Path, budget: &mut Budget<'_>) -> io::Result<Optio
                 || u32be(8) == 0
                 || size < 0x90
                 || 0x48 + size > file.metadata()?.len()
-                || u32be(0x48) != 2
+                || u32be(0x48) != if gamecube { 1 } else { 2 }
             {
                 return Err(invalid());
             }
             read_at(&mut file, 0x58, &mut header, budget)?;
         }
         "wbfs" => {
+            if gamecube {
+                return Ok(None);
+            }
             let mut container = [0; 12];
             read_at(&mut file, 0, &mut container, budget)?;
             if &container[..4] != b"WBFS"
@@ -84,7 +93,12 @@ pub(super) fn identity(path: &Path, budget: &mut Budget<'_>) -> io::Result<Optio
         }
         _ => return Ok(None),
     }
-    if header[0x18..0x1c] != WII_MAGIC
+    let signature = if gamecube {
+        header[0x1c..0x20] == GAMECUBE_MAGIC && header[0x18..0x1c] != WII_MAGIC
+    } else {
+        header[0x18..0x1c] == WII_MAGIC
+    };
+    if !signature
         || !header[..6]
             .iter()
             .all(|b| b.is_ascii_uppercase() || b.is_ascii_digit())
@@ -94,13 +108,20 @@ pub(super) fn identity(path: &Path, budget: &mut Budget<'_>) -> io::Result<Optio
     let serial = std::str::from_utf8(&header[..6])
         .map_err(|_| invalid())?
         .to_owned();
+    // Datel reused this ID across unrelated products; a serial lookup would
+    // misleadingly identify all of them as the same game.
+    if gamecube && serial == "DTLX01" {
+        return Ok(None);
+    }
     // Only unambiguous territory codes: others can denote special releases
     // across countries. The full ID still remains available for matching.
     let region = match header[3] {
+        b'E' if gamecube && header[7] >= 0x30 => Some("Korea"),
         b'E' => Some("North America"),
         b'J' => Some("Japan"),
         b'P' => Some("Europe"),
-        b'K' => Some("Korea"),
+        b'K' if !gamecube => Some("Korea"),
+        b'W' | b'K' | b'Q' | b'T' if gamecube => Some("Korea"),
         _ => None,
     };
     Ok(Some(Identity {
@@ -151,6 +172,7 @@ pub(crate) mod tests {
                 inflated: 0,
                 cancelled: &|| false,
             },
+            System::Wii,
         )
     }
     #[test]
@@ -207,7 +229,9 @@ pub(crate) mod tests {
             cancelled: &|| true,
         };
         assert_eq!(
-            identity(&path, &mut cancelled).unwrap_err().kind(),
+            identity(&path, &mut cancelled, System::Wii)
+                .unwrap_err()
+                .kind(),
             io::ErrorKind::Interrupted
         );
         let mut gc = data.clone();
@@ -236,5 +260,95 @@ pub(crate) mod tests {
         for name in ["truncated.iso", "truncated.rvz", "truncated.wbfs"] {
             assert!(inspect(&files.write(name, b"1234")).is_err());
         }
+    }
+    pub(crate) fn gc_disc(id: &str) -> Vec<u8> {
+        let mut bytes = disc(id);
+        bytes[0x18..0x1c].fill(0);
+        bytes[0x1c..0x20].copy_from_slice(&GAMECUBE_MAGIC);
+        bytes
+    }
+    pub(crate) fn gc_rvz(disc: &[u8]) -> Vec<u8> {
+        let mut bytes = rvz(disc);
+        bytes[0x48..0x4c].copy_from_slice(&1u32.to_be_bytes());
+        bytes
+    }
+    #[test]
+    fn gamecube_headers_preserve_id_region_and_disc_number_and_reject_wii() {
+        let files = Files::new();
+        let data = gc_disc("GAFE01");
+        for (name, bytes) in [("wrong.iso", data.clone()), ("wrong.rvz", gc_rvz(&data))] {
+            let path = files.write(name, &bytes);
+            let mut budget = Budget {
+                started: Instant::now(),
+                inflated: 0,
+                cancelled: &|| false,
+            };
+            let id = identity(&path, &mut budget, System::GameCube)
+                .unwrap()
+                .unwrap();
+            assert_eq!(id.serial, "GAFE01");
+            assert_eq!(id.regions, ["North America"]);
+            assert!(
+                identity(&path, &mut budget, System::Wii)
+                    .ok()
+                    .flatten()
+                    .is_none()
+            );
+            assert_eq!(std::fs::read(&path).unwrap(), bytes);
+            let conn = Connection::open_in_memory().unwrap();
+            init(&conn).unwrap();
+            assert_eq!(
+                cached_identity(&path, System::GameCube, Some(&conn), &|| false)
+                    .unwrap()
+                    .serial,
+                "GAFE01"
+            );
+            assert!(cached_identity(&path, System::Wii, Some(&conn), &|| false).is_none());
+        }
+        let mut data = gc_disc("GKBEAF");
+        data[6] = 1;
+        let path = files.write("disc2.iso", &data);
+        let mut budget = Budget {
+            started: Instant::now(),
+            inflated: 0,
+            cancelled: &|| false,
+        };
+        assert_eq!(
+            identity(&path, &mut budget, System::GameCube)
+                .unwrap()
+                .unwrap()
+                .serial,
+            "GKBEAF"
+        );
+        for (name, bytes) in [
+            ("wii.iso", disc("RMGE01")),
+            ("wii.rvz", rvz(&disc("RMGE01"))),
+            ("wrong.wbfs", wbfs(&data, 9)),
+            ("ambiguous.iso", gc_disc("DTLX01")),
+        ] {
+            let path = files.write(name, &bytes);
+            assert!(
+                identity(&path, &mut budget, System::GameCube)
+                    .ok()
+                    .flatten()
+                    .is_none()
+            );
+        }
+        assert!(
+            identity(
+                &files.write("truncated.rvz", b"RVZ"),
+                &mut budget,
+                System::GameCube
+            )
+            .is_err()
+        );
+        assert!(
+            crate::disc_serial::identity_checked(
+                path.to_str().unwrap(),
+                "Nintendo GameCube",
+                &|| true
+            )
+            .is_none()
+        );
     }
 }
