@@ -10,6 +10,7 @@ external CHD tool or full-disc hash is required. Source files are read only.
 | PlayStation | `BOOT` executable in ISO 9660 `SYSTEM.CNF` | CUE/BIN, CHD, ISO, ISO.GZ |
 | PlayStation 2 | `BOOT2` executable in ISO 9660 `SYSTEM.CNF` | CUE/BIN, CHD, ISO, ISO.GZ |
 | Dreamcast | Product number and territory flags in the `IP.BIN` boot header | CUE/BIN, CHD |
+| Saturn | Product number and area symbols in the `IP.BIN` boot header | CUE/BIN, CHD |
 | Wii | Six-byte game ID (`ID6`) in the unencrypted disc header | ISO, RVZ, WBFS |
 | GameCube | Six-byte game ID (`ID6`) in the disc header | ISO, RVZ |
 
@@ -34,6 +35,18 @@ Matching considers these packaging variants and filters known regional
 conflicts using the header's `J`, `U` and `E` flags. It never reduces arbitrary
 third-party product numbers to digits alone. Multiple compatible releases
 remain subject to the existing region and ambiguity rules.
+
+Saturn shares the bounded Sega data-track reader, using its own
+`SEGA SEGASATURN ` signature. Its ten-byte product number starts at `0x20`
+and its sixteen-byte territory field at `0x40`, unlike Dreamcast. `J`, `U`
+and `E` flags restrict known Japanese, North American and European matches;
+unrecognized territory codes do not invent a region. Numeric Sega catalog
+keys and `MK-` packaging variants use the same matching rules as Dreamcast,
+without applying them to other platforms. A Dreamcast header is not accepted
+as Saturn. The header fields can be checked against
+[Yabause's disc-header reader](https://github.com/Yabause/yabause/blob/master/yabause/src/cs2.c).
+Only the required CHD hunks are decoded; no conversion, BIOS or external tool
+is needed. Saturn results use their own cache namespace.
 
 Wii identification reads only the disc header: ID6 at offset `0x00`, validated
 against the Wii magic at `0x18`. RVZ preserves the first 128 disc bytes in its

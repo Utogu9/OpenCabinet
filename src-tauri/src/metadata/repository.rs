@@ -1353,6 +1353,30 @@ mod tests {
         let path=images.write("Animal Crossing (USA).iso",&crate::disc_serial::nintendo::tests::gc_disc("GZZE01"));
         assert!(!search_candidate(&conn,"Animal Crossing",source,path.to_str().unwrap()).unwrap().is_empty());
     }
+
+    #[test]
+    fn saturn_internal_product_codes_take_priority_and_preserve_territories() {
+        let files=Sandbox::new();let mut conn=files.catalog();let source="Sega - Saturn";
+        conn.execute("INSERT INTO platforms VALUES(?1)",[source]).unwrap();
+        let fixture=files.job.directory.join("saturn.json");
+        fs::write(&fixture,r#"{"schema_version":2,"system":"Sega - Saturn","games":{
+            "81020":{"entries":[{"name":"Sega Rally Championship (USA)"}],"images":{}},
+            "MK-81020-50":{"entries":[{"name":"Sega Rally Championship (Europe)"}],"images":{}},
+            "T-15901H":{"entries":[{"name":"Alien Trilogy (USA)"}],"images":{}}
+        }}"#).unwrap();insert_platform(&mut conn,&files.job,source,&fixture,|_|()).unwrap();
+        let images=crate::disc_serial::tests::Files::new();
+        for (serial,region,key) in [("MK-81020","U","81020"),("MK-81020","E","MK-81020-50"),("T15901H","U","T-15901H")] {
+            let data=crate::disc_serial::optical::tests::saturn_data(serial,region);
+            let bytes=crate::disc_serial::optical::tests::chd(&crate::disc_serial::optical::tests::sectors(&data,2448,16,0),2448,Some("TRACK:1 TYPE:MODE1_RAW SUBTYPE:NONE FRAMES:8"));
+            let path=images.write("Wrong name (Japan).chd",&bytes);let matches=search_candidate(&conn,"Wrong name",source,path.to_str().unwrap()).unwrap();
+            assert_eq!(matches.len(),1);assert!(matches[0].exact);assert_eq!(matches[0].source_key.as_deref(),Some(key));
+            assert_eq!(super::super::import_match(&conn,&matches,path.to_str().unwrap(),"Japan").unwrap(),Some(matches[0].game.id));
+        }
+        let data=crate::disc_serial::optical::tests::saturn_data("MK-99999","U");
+        let bytes=crate::disc_serial::optical::tests::chd(&crate::disc_serial::optical::tests::sectors(&data,2448,16,0),2448,Some("TRACK:1 TYPE:MODE1_RAW FRAMES:8"));
+        let path=images.write("Alien Trilogy (USA).chd",&bytes);
+        assert!(!search_candidate(&conn,"Alien Trilogy",source,path.to_str().unwrap()).unwrap().is_empty());
+    }
     impl Sandbox {
         pub(super) fn new() -> Self {
             let root = std::env::current_dir()

@@ -1,5 +1,5 @@
 //! Cook CD data sectors into the same 2048-byte ISO view used by DVD images.
-use super::{Budget, SECTOR, invalid};
+use super::{Budget, SECTOR, System, invalid};
 use chd::metadata::MetadataTag;
 use std::{
     fs::File,
@@ -10,11 +10,19 @@ use std::{
 const MAX_CUE: u64 = 1024 * 1024;
 const MAX_HUNK: u32 = 16 * 1024 * 1024;
 
-fn dreamcast_header(bytes: &[u8]) -> Option<super::Identity> {
-    if bytes.len() < 0x50 || &bytes[..16] != b"SEGA SEGAKATANA " {
+fn sega_header(bytes: &[u8], system: System) -> Option<super::Identity> {
+    if system == System::SegaCd {
+        return segacd_header(bytes);
+    }
+    let (signature, product, area) = if system == System::Saturn {
+        (b"SEGA SEGASATURN ", 0x20, 0x40)
+    } else {
+        (b"SEGA SEGAKATANA ", 0x40, 0x30)
+    };
+    if bytes.len() < 0x50 || &bytes[..16] != signature {
         return None;
     }
-    let serial = std::str::from_utf8(&bytes[0x40..0x4a])
+    let serial = std::str::from_utf8(&bytes[product..product + 10])
         .ok()?
         .split('\0')
         .next()?
@@ -30,16 +38,61 @@ fn dreamcast_header(bytes: &[u8]) -> Option<super::Identity> {
     }
     let regions = [(b'J', "Japan"), (b'U', "North America"), (b'E', "Europe")]
         .into_iter()
-        .filter(|(key, _)| bytes[0x30..0x38].contains(key))
+        .filter(|(key, _)| {
+            bytes[area..area + if system == System::Saturn { 16 } else { 8 }].contains(key)
+        })
         .map(|(_, name)| name.to_owned())
         .collect();
     Some(super::Identity { serial, regions })
 }
-pub(super) fn dreamcast_identity(
+fn segacd_header(bytes: &[u8]) -> Option<super::Identity> {
+    if bytes.len() < 0x20c || &bytes[..14] != b"SEGADISCSYSTEM" {
+        return None;
+    }
+    let field = std::str::from_utf8(&bytes[0x180..0x18e])
+        .ok()?
+        .split('\0')
+        .next()?
+        .trim()
+        .to_ascii_uppercase();
+    let serial = field
+        .strip_prefix("GM")
+        .or_else(|| field.strip_prefix("AI"))?
+        .trim()
+        .chars()
+        .filter(|c| !c.is_ascii_whitespace())
+        .collect::<String>();
+    if !(4..=12).contains(&serial.len())
+        || !serial
+            .bytes()
+            .all(|b| b.is_ascii_alphanumeric() || b == b'-')
+        || !serial.bytes().any(|b| b.is_ascii_digit() && b != b'0')
+    {
+        return None;
+    }
+    let regions = match bytes[0x20b] {
+        0x64 => vec!["Europe".to_owned()],
+        0xa1 => vec!["Japan".to_owned()],
+        _ => [(b'J', "Japan"), (b'U', "North America"), (b'E', "Europe")]
+            .into_iter()
+            .filter(|(key, _)| bytes[0x1f0..0x200].contains(key))
+            .map(|(_, name)| name.to_owned())
+            .collect(),
+    };
+    #[cfg(test)]
+    println!(
+        "Sega CD product={field:?}, territory={:?}, security={:02x}",
+        String::from_utf8_lossy(&bytes[0x1f0..0x200]),
+        bytes[0x20b]
+    );
+    Some(super::Identity { serial, regions })
+}
+pub(super) fn sega_identity(
     path: &Path,
     budget: &mut Budget<'_>,
+    system: System,
 ) -> io::Result<Option<super::Identity>> {
-    let mut header = [0; 256];
+    let mut header = vec![0; if system == System::SegaCd { 0x210 } else { 256 }];
     if path
         .extension()
         .is_some_and(|ext| ext.eq_ignore_ascii_case("cue"))
@@ -48,7 +101,7 @@ pub(super) fn dreamcast_identity(
             budget.check()?;
             let mut track = DataTrack::cue_track(track)?;
             track.read_at(0, &mut header, budget)?;
-            if let Some(id) = dreamcast_header(&header) {
+            if let Some(id) = sega_header(&header, system) {
                 return Ok(Some(id));
             }
         }
@@ -64,7 +117,7 @@ pub(super) fn dreamcast_identity(
             track.base = first * track.stride;
             track.frames = frames;
             track.read_at(0, &mut header, budget)?;
-            if let Some(id) = dreamcast_header(&header) {
+            if let Some(id) = sega_header(&header, system) {
                 return Ok(Some(id));
             }
         }
@@ -733,14 +786,16 @@ pub(crate) mod tests {
             inflated: 0,
             cancelled: &|| false,
         };
-        let identity = dreamcast_identity(&path, &mut budget).unwrap().unwrap();
+        let identity = sega_identity(&path, &mut budget, System::Dreamcast)
+            .unwrap()
+            .unwrap();
         assert_eq!(identity.serial, "MK-51035");
         assert_eq!(identity.regions, ["Europe"]);
         files.write("track1.bin", &vec![0; 8 * 2352]);
         files.write("track3.bin", &sectors(&data, 2352, 16, 0));
         let cue=files.write("gd.cue",b"FILE \"track1.bin\" BINARY\nTRACK 01 MODE1/2352\nINDEX 01 00:00:00\nFILE \"audio.wav\" WAVE\nTRACK 02 AUDIO\nINDEX 01 00:00:00\nFILE \"track3.bin\" BINARY\nTRACK 03 MODE1/2352\nINDEX 01 00:00:00\n");
         assert_eq!(
-            dreamcast_identity(&cue, &mut budget)
+            sega_identity(&cue, &mut budget, System::Dreamcast)
                 .unwrap()
                 .unwrap()
                 .serial,
@@ -751,7 +806,7 @@ pub(crate) mod tests {
         files.write("mil.bin", &bin);
         let cue=files.write("mil.cue",b"FILE \"mil.bin\" BINARY\nTRACK 01 AUDIO\nINDEX 01 00:00:00\nTRACK 02 MODE2/2352\nINDEX 01 00:00:07\n");
         assert_eq!(
-            dreamcast_identity(&cue, &mut budget)
+            sega_identity(&cue, &mut budget, System::Dreamcast)
                 .unwrap()
                 .unwrap()
                 .regions,
@@ -759,9 +814,66 @@ pub(crate) mod tests {
         );
         let mut invalid = data.clone();
         invalid[0] = 0;
-        assert!(dreamcast_header(&invalid).is_none());
+        assert!(sega_header(&invalid, System::Dreamcast).is_none());
         let mut invalid = data;
         invalid[0x40..0x4a].fill(b' ');
-        assert!(dreamcast_header(&invalid).is_none());
+        assert!(sega_header(&invalid, System::Dreamcast).is_none());
+    }
+    pub(crate) fn saturn_data(serial: &str, area: &str) -> Vec<u8> {
+        let mut bytes = vec![b' '; 8 * 2048];
+        bytes[..16].copy_from_slice(b"SEGA SEGASATURN ");
+        bytes[0x20..0x2a].fill(b' ');
+        bytes[0x20..0x20 + serial.len()].copy_from_slice(serial.as_bytes());
+        bytes[0x40..0x50].fill(b' ');
+        bytes[0x40..0x40 + area.len()].copy_from_slice(area.as_bytes());
+        bytes
+    }
+    #[test]
+    fn saturn_chd_and_cue_read_their_own_boot_header_and_cache_by_platform() {
+        let files = Files::new();
+        let conn = Connection::open_in_memory().unwrap();
+        init(&conn).unwrap();
+        for (kind, payload) in [("MODE1_RAW", 16), ("MODE2_RAW", 24)] {
+            let data = saturn_data("MK-81020", "U");
+            let raw = sectors(&data, 2448, payload, 150);
+            let metadata =
+                format!("TRACK:1 TYPE:{kind} SUBTYPE:NONE FRAMES:158 PREGAP:150 PGTYPE:VMODE1");
+            let bytes = chd(&raw, 2448, Some(&metadata));
+            let path = files.write("Wrong name.chd", &bytes);
+            assert!(
+                super::super::cached_identity(&path, System::Dreamcast, Some(&conn), &|| false)
+                    .is_none()
+            );
+            let id = super::super::cached_identity(&path, System::Saturn, Some(&conn), &|| false)
+                .unwrap();
+            assert_eq!(id.serial, "MK-81020");
+            assert_eq!(id.regions, ["North America"]);
+            assert_eq!(fs::read(&path).unwrap(), bytes);
+        }
+        let data = saturn_data("T-15901H", "E");
+        files.write("track.bin", &sectors(&data, 2352, 16, 0));
+        let cue = files.write(
+            "Wrong name.cue",
+            b"FILE \"track.bin\" BINARY\nTRACK 01 MODE1/2352\nINDEX 01 00:00:00\n",
+        );
+        let id =
+            super::super::cached_identity(&cue, System::Saturn, Some(&conn), &|| false).unwrap();
+        assert_eq!(id.serial, "T-15901H");
+        assert_eq!(id.regions, ["Europe"]);
+        assert!(
+            super::super::identity_checked(cue.to_str().unwrap(), "Sega - Saturn", &|| true)
+                .is_none()
+        );
+        let mut multiple = saturn_data("T-99901G", "                ");
+        multiple[0x4f] = b'J';
+        assert_eq!(
+            sega_header(&multiple, System::Saturn).unwrap().regions,
+            ["Japan"]
+        );
+        assert!(sega_header(&data, System::Dreamcast).is_none());
+        assert!(sega_header(&dreamcast_data("T1218N", "U"), System::Saturn).is_none());
+        assert!(sega_header(&saturn_data("", "U"), System::Saturn).is_none());
+        assert!(sega_header(&saturn_data("HOMEBREW", "J"), System::Saturn).is_none());
+        assert!(sega_header(&data[..0x40], System::Saturn).is_none());
     }
 }

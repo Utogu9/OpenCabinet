@@ -141,6 +141,7 @@ fn disc_matches(conn:&Connection,platform:&str,identity:&crate::disc_serial::Ide
     let serial=&identity.serial;
     let mut queries=vec![serial.clone(),serial.replace('-',"")];
     let dreamcast=crate::platform_defaults::equivalent(platform,"Sega Dreamcast");
+    let saturn=crate::platform_defaults::equivalent(platform,"Sega Saturn");
     let wii=crate::platform_defaults::equivalent(platform,"Nintendo Wii");
     let gamecube=crate::platform_defaults::equivalent(platform,"Nintendo GameCube");
     if (wii || gamecube) && serial.len()==6 && serial.bytes().all(|b|b.is_ascii_alphanumeric()) {
@@ -153,7 +154,7 @@ fn disc_matches(conn:&Connection,platform:&str,identity:&crate::disc_serial::Ide
             for key in keys {queries.push(key.map_err(err)?.rsplit('/').next().unwrap_or_default().to_owned());}
         }
     }
-    if dreamcast {
+    if dreamcast || saturn {
         if let Some(value)=serial.strip_prefix('T').filter(|v|v.as_bytes().first().is_some_and(u8::is_ascii_digit)) {queries.push(format!("T-{value}"));}
         // Sega's US packaging omits MK-, while European packaging adds a
         // territory suffix which is not always present in IP.BIN.
@@ -176,7 +177,7 @@ fn disc_matches(conn:&Connection,platform:&str,identity:&crate::disc_serial::Ide
             if !identity.regions.is_empty() && !result.regions.is_empty() && !result.regions.iter().any(|region|super::super::canonical_region(region).is_some_and(|region|identity.regions.iter().any(|r|r==region))) {continue;}
             if seen.insert(result.game.id){found.push(result);}
         }
-        if !dreamcast && !found.is_empty() && (!(wii || gamecube) || query==*serial){break;}
+        if !(dreamcast || saturn) && !found.is_empty() && (!(wii || gamecube) || query==*serial){break;}
     }
     Ok(found)
 }

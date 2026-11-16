@@ -28,6 +28,8 @@ enum System {
     Dreamcast,
     Wii,
     GameCube,
+    Saturn,
+    SegaCd,
 }
 impl System {
     fn from_platform(platform: &str) -> Option<Self> {
@@ -37,6 +39,8 @@ impl System {
             ("Sega Dreamcast", Self::Dreamcast),
             ("Nintendo Wii", Self::Wii),
             ("Nintendo GameCube", Self::GameCube),
+            ("Sega Saturn", Self::Saturn),
+            ("Sega CD", Self::SegaCd),
         ]
         .into_iter()
         .find_map(|(name, system)| {
@@ -50,6 +54,8 @@ impl System {
             Self::Dreamcast => "dreamcast",
             Self::Wii => "wii",
             Self::GameCube => "gamecube",
+            Self::Saturn => "saturn",
+            Self::SegaCd => "segacd",
         }
     }
 }
@@ -139,6 +145,9 @@ fn eligible(path: &Path, platform: &str) -> bool {
             .and_then(|v| v.to_str())
             .is_some_and(|name| {
                 let name = name.to_ascii_lowercase();
+                if matches!(system, Some(System::Saturn | System::SegaCd)) {
+                    return name.ends_with(".chd") || name.ends_with(".cue");
+                }
                 if system == Some(System::GameCube) {
                     return name.ends_with(".iso") || name.ends_with(".rvz");
                 }
@@ -648,8 +657,8 @@ fn inspect_for(
     if matches!(system, System::Wii | System::GameCube) {
         return nintendo::identity(path, &mut budget, system);
     }
-    if system == System::Dreamcast {
-        return optical::dreamcast_identity(path, &mut budget);
+    if matches!(system, System::Dreamcast | System::Saturn | System::SegaCd) {
+        return optical::sega_identity(path, &mut budget, system);
     }
     let mut image = Image::open(path, &mut budget)?;
     let indexed = matches!(&image, Image::Gzip { index: Some(_), .. });
