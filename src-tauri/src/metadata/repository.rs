@@ -6,7 +6,7 @@ mod sources;
 mod sqlite;
 #[cfg(test)]
 mod sqlite_tests;
-pub(super) use matching::{finish_search_results, search_candidate, shortest_match};
+pub(super) use matching::{finish_search_results, search_candidate, search_candidate_checked, shortest_match};
 const ROOT_URL: &str = "https://api.github.com/repos/Utogu9/OpenCabinet-BDD/contents?ref=main";
 const RAW_URL: &str = "https://raw.githubusercontent.com/Utogu9/OpenCabinet-BDD/main/";
 const CONFIG: &str = "metadata/source.json";
@@ -1263,6 +1263,18 @@ mod tests {
         "bad":{"kind":"logo","path":"../bad.webp"}}},
       "SLES-54321":{"entries":[{"name":"Example Game (Europe)"}],"images":{"logo":{"kind":"logo","path":"SLES-54321/logo.webp"}}}
     }}"#;
+    #[test]
+    fn ps2_boot_serial_precedes_wrong_titles_filename_regions_and_default_regions() {
+        let files=Sandbox::new();let catalog=files.catalog();
+        let images=crate::ps2_serial::tests::Files::new();
+        let path=images.write("Example Game (USA).iso",&crate::ps2_serial::tests::iso("SLES_543.21"));
+        let results=search_candidate(&catalog,"Example Game (USA)","Sony - PlayStation 2",path.to_str().unwrap()).unwrap();
+        assert_eq!(results.len(),1);assert_eq!(results[0].source_key.as_deref(),Some("SLES-54321"));assert!(results[0].exact);
+        assert_eq!(super::super::import_match(&catalog,&results,path.to_str().unwrap(),"North America").unwrap(),Some(results[0].game.id));
+        let unknown=images.write("Example Game (USA).iso",&crate::ps2_serial::tests::iso("SLUS_999.99"));
+        let fallback=search_candidate(&catalog,"Example Game","Sony - PlayStation 2",unknown.to_str().unwrap()).unwrap();
+        assert!(fallback.iter().any(|r|r.source_key.as_deref()==Some("SLUS-12345")));
+    }
     pub(super) struct Sandbox {
         pub(super) root: PathBuf,
         pub(super) job: Arc<ImportJob>,

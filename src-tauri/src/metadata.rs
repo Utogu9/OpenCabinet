@@ -1757,7 +1757,7 @@ pub async fn match_metadata_games(
                 let title = candidate.title.clone();
                 catalog_search_operation(&catalog, &job, Duration::from_secs(20), move || {
                     let _ = channel.send(progress_job.progress("matching", index as u64, Some(total), Some(title.clone())));
-                }, || repository::search_candidate(&catalog, &candidate.title, &source_platform, &candidate.rom_path))?
+                }, || repository::search_candidate_checked(&catalog, &candidate.title, &source_platform, &candidate.rom_path,&||job.cancelled.load(Ordering::Acquire)))?
             };
             let selected_id = import_match(&catalog,&candidates,&candidate.rom_path,default_region.as_deref().unwrap_or("North America"))?;
             rows.push(MatchRow {

@@ -2812,6 +2812,7 @@ dependencies = [
 name = "opencabinet"
 version = "0.8.0"
 dependencies = [
+ "flate2",
  "image",
  "lofty",
  "quick-xml 0.38.4",
@@ -2831,6 +2832,7 @@ dependencies = [
  "windows-sys 0.61.2",
  "winreg",
  "zip 9.0.4",
+ "zlib-rs",
 ]
 
 [[package]]

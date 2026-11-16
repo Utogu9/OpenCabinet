@@ -91,6 +91,24 @@ pub(in crate::metadata) fn search_candidate(
     platform: &str,
     path: &str,
 ) -> Result<Vec<SearchResult>> {
+    search_candidate_checked(conn,title,platform,path,&||false)
+}
+
+pub(in crate::metadata) fn search_candidate_checked(
+    conn: &Connection,title: &str,platform: &str,path: &str,cancelled: &dyn Fn()->bool,
+) -> Result<Vec<SearchResult>> {
+    if catalog_is_repository(conn) {
+        if let Some(serial)=crate::ps2_serial::serial_checked(path,platform,cancelled) {
+            for query in [&serial, &serial.replace('-',"")] {
+                let results=exact_catalog_matches(conn,query,Some(platform))?;
+                if !results.is_empty() {
+                    // A real product ID wins over an alias that happens to look like one.
+                    let exact:Vec<_>=results.iter().filter(|r|r.source_key.as_deref().is_some_and(|key|key.eq_ignore_ascii_case(&serial))).cloned().collect();
+                    return Ok(if exact.is_empty(){results}else{exact});
+                }
+            }
+        }
+    }
     let original = rom_name(path);
     let mut queries = if catalog_is_repository(conn) {
         // The repository indexes regional filenames; keep their disambiguation.
