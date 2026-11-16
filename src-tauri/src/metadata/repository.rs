@@ -1399,6 +1399,32 @@ mod tests {
             assert_eq!(super::super::import_match(&conn,&matches,path.to_str().unwrap(),"Japan").unwrap(),Some(matches[0].game.id));
         }
     }
+
+    #[test]
+    fn megadrive_internal_products_preserve_revisions_and_skip_generic_catalog_ids() {
+        let files=Sandbox::new();let mut conn=files.catalog();let source="Sega - Mega Drive - Genesis";
+        conn.execute("INSERT INTO platforms VALUES(?1)",[source]).unwrap();
+        let fixture=files.job.directory.join("megadrive.json");
+        fs::write(&fixture,r#"{"schema_version":2,"system":"Sega - Mega Drive - Genesis","games":{
+            "MK-1042-00":{"entries":[{"name":"Ecco the Dolphin (USA, Europe, Korea)"}],"images":{}},
+            "T-081096-00":{"entries":[{"name":"Alien 3 (USA, Europe)"}],"images":{}},
+            "00001009-00":{"entries":[{"name":"Sonic the Hedgehog (USA, Europe)"}],"images":{}},
+            "00001009-01":{"entries":[{"name":"Sonic the Hedgehog (Japan) (Rev 1)"}],"images":{}},
+            "00000000-00":{"entries":[{"name":"Unrelated prototype (USA)"}],"images":{}}
+        }}"#).unwrap();insert_platform(&mut conn,&files.job,source,&fixture,|_|()).unwrap();
+        let images=crate::disc_serial::tests::Files::new();
+        for (code,region,key) in [("GM MK-1042 -00","U","MK-1042-00"),("GM T-081096 00","JUE","T-081096-00"),("GM 00001009-01","J","00001009-01")] {
+            let bytes=crate::disc_serial::megadrive::tests::rom(code,region);let path=images.write("Wrong (USA).gen",&bytes);
+            let matches=search_candidate(&conn,"Wrong",source,path.to_str().unwrap()).unwrap();
+            assert_eq!(matches.len(),1);assert!(matches[0].exact);assert_eq!(matches[0].source_key.as_deref(),Some(key));
+            assert_eq!(super::super::import_match(&conn,&matches,path.to_str().unwrap(),"North America").unwrap(),Some(matches[0].game.id));
+        }
+        for code in ["GM 00000000-00","GM UNKNOWN","GM MK-9999-00"] {
+            let path=images.write("Ecco the Dolphin (USA).gen",&crate::disc_serial::megadrive::tests::rom(code,"U"));
+            let matches=search_candidate(&conn,"Ecco the Dolphin",source,path.to_str().unwrap()).unwrap();
+            assert!(matches.iter().any(|m|m.source_key.as_deref()==Some("MK-1042-00")));assert!(matches.iter().all(|m|m.source_key.as_deref()!=Some("00000000-00")));
+        }
+    }
     impl Sandbox {
         pub(super) fn new() -> Self {
             let root = std::env::current_dir()

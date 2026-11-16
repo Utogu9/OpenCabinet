@@ -1,5 +1,6 @@
-//! Read optical disc identities without mounting images or launching emulators.
+//! Read ROM and optical disc identities without mounting or launching emulators.
 //! PCSX2's packed gzip index is read as a file format, never as native pointers.
+pub(crate) mod megadrive;
 pub(crate) mod nintendo;
 pub(crate) mod optical;
 use flate2::read::MultiGzDecoder;
@@ -30,6 +31,7 @@ enum System {
     GameCube,
     Saturn,
     SegaCd,
+    MegaDrive,
 }
 impl System {
     fn from_platform(platform: &str) -> Option<Self> {
@@ -41,6 +43,7 @@ impl System {
             ("Nintendo GameCube", Self::GameCube),
             ("Sega Saturn", Self::Saturn),
             ("Sega CD", Self::SegaCd),
+            ("Sega Genesis", Self::MegaDrive),
         ]
         .into_iter()
         .find_map(|(name, system)| {
@@ -56,6 +59,7 @@ impl System {
             Self::GameCube => "gamecube",
             Self::Saturn => "saturn",
             Self::SegaCd => "segacd",
+            Self::MegaDrive => "megadrive",
         }
     }
 }
@@ -145,6 +149,11 @@ fn eligible(path: &Path, platform: &str) -> bool {
             .and_then(|v| v.to_str())
             .is_some_and(|name| {
                 let name = name.to_ascii_lowercase();
+                if system == Some(System::MegaDrive) {
+                    return [".gen", ".md", ".bin"]
+                        .iter()
+                        .any(|ext| name.ends_with(ext));
+                }
                 if matches!(system, Some(System::Saturn | System::SegaCd)) {
                     return name.ends_with(".chd") || name.ends_with(".cue");
                 }
@@ -654,6 +663,9 @@ fn inspect_for(
         inflated: 0,
         cancelled,
     };
+    if system == System::MegaDrive {
+        return megadrive::identity(path, &mut budget);
+    }
     if matches!(system, System::Wii | System::GameCube) {
         return nintendo::identity(path, &mut budget, system);
     }
@@ -761,16 +773,18 @@ pub(crate) mod tests {
     pub struct Files(pub PathBuf);
     impl Files {
         pub fn new() -> Self {
+            static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
             let root = std::env::current_dir()
                 .unwrap()
                 .join("target/ps2-serial-tests")
                 .join(format!(
-                    "{}-{}",
+                    "{}-{}-{}",
                     std::process::id(),
                     std::time::SystemTime::now()
                         .duration_since(UNIX_EPOCH)
                         .unwrap()
-                        .as_nanos()
+                        .as_nanos(),
+                    NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
                 ));
             fs::create_dir_all(&root).unwrap();
             Self(root)

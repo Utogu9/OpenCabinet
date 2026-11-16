@@ -1,4 +1,4 @@
-# Optical disc identification
+# ROM and optical disc identification
 
 Automatic OpenCabinet-BDD matching reads product identifiers before falling
 back to the reviewed title and original filename. Manual searches and explicit
@@ -14,6 +14,7 @@ external CHD tool or full-disc hash is required. Source files are read only.
 | Mega-CD / Sega CD | Product field following the disc system header | CUE/BIN, CHD |
 | Wii | Six-byte game ID (`ID6`) in the unencrypted disc header | ISO, RVZ, WBFS |
 | GameCube | Six-byte game ID (`ID6`) in the disc header | ISO, RVZ |
+| Mega Drive / Genesis | Product code and revision in the ROM header | GEN, MD, BIN (linear dumps) |
 
 For PlayStation, `cdrom:\SLUS_009.99;1` becomes `SLUS-00999`. `BOOT` and
 `BOOT2` are deliberately distinct; selecting PS1 must not return a PS2 identity.
@@ -98,6 +99,31 @@ and catalog ambiguity rules still apply.
 The reused Datel `DTLX01` identifier is excluded from automatic GameCube
 matching because it does not identify a unique product. See
 [Dolphin's GameCube identification notes](https://github.com/dolphin-emu/dolphin/blob/master/Source/Core/DiscIO/VolumeGC.cpp).
+
+Mega Drive/Genesis cartridges also have product codes. The reader examines
+only the first 512 bytes of a linear ROM: console signature at `0x100`,
+product/revision at `0x180` and territory at `0x1F0`. Recognized `GM`, `GK`,
+`MK` and `AI` program-type prefixes and spaces are removed where appropriate.
+`GM MK-1042 -00` becomes `MK-1042-00`; `MK 00001019-00` becomes
+`00001019-00`. A header with no separate type, such as `MK-1136`, keeps
+that product code. `T-081096 00` is normalized to `T-081096-00`.
+Leading zeroes and revision digits are preserved, matching the repository's
+actual cartridge identifiers without applying Sega CD's revision-removal rules.
+
+Territories can be `J`/`U`/`E` combinations or hexadecimal bitmasks (`1` Japan,
+`4` North America, `8` Europe). Recognized country names are also accepted;
+unrecognized values leave the region unknown. Word-byte-swapped linear dumps
+are recognized without changing the source file. Interleaved SMD archives and
+32X/Sega CD headers are not treated as Genesis ROMs.
+
+These are product codes, not unique serial numbers for individual cartridges.
+Blank, malformed and generic zero/one product codes are excluded: catalog
+entries such as `00000000-00` and `00000001-00` combine unrelated prototypes
+or games. Missing or unsuitable codes use the existing filename/title matching.
+The header layout and region masks are documented in
+[Genesis Plus GX's header reader](https://github.com/ekeeke/Genesis-Plus-GX/blob/master/core/loadrom.c).
+OpenCabinet reads those fields independently and never executes ROM code.
+Genesis results use the existing cache table with a separate `megadrive` key.
 
 Results, including missing identifiers, are cached in `disc_identities` with
 separate keys for each platform. Changes to a source file invalidate its entry;
