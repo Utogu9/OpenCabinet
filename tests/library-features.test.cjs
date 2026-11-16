@@ -5,12 +5,15 @@ const vm=require('./helpers/localized-vm.cjs');
 const tick=()=>new Promise(resolve=>setImmediate(resolve));
 function app(handlers={}){
   class Element{
-    constructor(tag){this.tag=tag;this.children=[];this.attributes={};this.style={};this.value='';this.listeners={};this.disabled=false;this.className='';const classes=new Set();this.classList={add:k=>classes.add(k),remove:k=>classes.delete(k),toggle:(k,on)=>{if(on)classes.add(k);else classes.delete(k);}};}
+    constructor(tag){this.tag=tag;this.children=[];this.attributes={};this.style={};this.value='';this.listeners={};this.disabled=false;this.className='';const classes=new Set();this.classList={add:k=>classes.add(k),remove:k=>classes.delete(k),contains:k=>classes.has(k),toggle:(k,on)=>{if(on)classes.add(k);else classes.delete(k);}};}
     appendChild(child){if(child.parentNode)child.remove();child.parentNode=this;this.children.push(child);if(this.tag==='select'&&!this.value)this.value=child.value;return child;}
     append(...children){children.forEach(child=>this.appendChild(child));}
+    insertBefore(child,before){child.parentNode=this;this.children.splice(this.children.indexOf(before),0,child);}
     replaceChildren(...children){this.children=[];this.append(...children);}
     set textContent(value){this.text=value;this.children=[];}get textContent(){return this.text||'';}
     setAttribute(key,value){this.attributes[key]=value;}removeAttribute(key){delete this.attributes[key];}
+    hasAttribute(key){return key in this.attributes;}
+    get value(){return this.currentValue||'';}set value(value){this.currentValue=value;if(this.tag==='progress')this.attributes.value=String(value);}
     addEventListener(key,fn){this.listeners[key]=fn;}
     showModal(){this.open=true;}close(){this.open=false;this.listeners.close?.();}
     remove(){if(this.parentNode)this.parentNode.children=this.parentNode.children.filter(child=>child!==this);}
@@ -20,6 +23,7 @@ function app(handlers={}){
   const calls=[],changes=[],errors=[],games=[{id:1,title:'Game <script>',personal:{status:'playing',favorite:false,rating:3,notes:'Existing'}}];
   const invoke=async(command,args)=>{calls.push({command,args});if(handlers[command])return handlers[command](args);if(command==='set_game_personal')return args.personal;throw Error(command);};
   const context=vm.createContext({document,console});context.window=context;context.__TAURI__={core:{Channel:class{}}};
+  context.OpenCabinetTaskWindows={attach:card=>({show:()=>card.classList.remove('hidden'),hide:()=>card.classList.add('hidden')})};
   vm.runInContext(fs.readFileSync('src/library-features.js','utf8'),context);
   const feature=context.OpenCabinetFeatures.create({document,invoke,getGames:()=>games,onPersonal:(id,personal)=>{games[0].personal=personal;changes.push({id,personal});},onError:error=>errors.push(error),formatDuration:seconds=>seconds+' s',confirm:async()=>true,onEdit:()=>{},onRelocate:async()=>{},onResume:()=>{}});
   const descendants=node=>node.children.flatMap(child=>[child,...descendants(child)]);
@@ -112,4 +116,59 @@ test('A resumed import commits the original preview and closes its job without p
   const finish=fixture.find(node=>node.tag==='button'&&node.textContent==='Finalizar importación');assert.equal(finish.disabled,false);await finish.onclick();
   const request=fixture.calls.find(call=>call.command==='import_scanned_roms');assert.equal(request.args.preview,preview);assert.equal(request.args.jobId,'new-job');assert.equal(request.args.platform,'PS2');
   assert.equal(fixture.calls.at(-1).command,'end_metadata_import');assert.equal(fixture.calls.some(call=>call.command==='pause_metadata_import'),false);
+});
+test('Minimizing a resumed download keeps progress and completion alive and restores the same session',async()=>{
+  let complete;
+  const fixture=app({restore_metadata_import:()=>({job_id:'new-job',platform:'PS2',preview:{games:[]}}),retry_metadata_images:()=>new Promise(resolve=>{complete=resolve;}),pause_metadata_import:()=>{}});
+  const downloading=fixture.feature.resume({id:'old-job'});await tick();
+  const dialog=fixture.dialog(),card=fixture.find(node=>node.id==='pending-downloads-task');
+  fixture.find(node=>node.attributes['aria-label']==='Minimizar').onclick();
+  assert.equal(dialog.open,false);assert.ok(fixture.document.body.children.includes(dialog));assert.equal(card.classList.contains('hidden'),false);
+  const channel=fixture.calls.find(call=>call.command==='retry_metadata_images').args.onProgress;
+  channel.onmessage({processed:3,total:4,current_file:'cover.webp'});
+  assert.match(card.children[1].textContent,/3 \/ 4/);assert.equal(card.children[2].value,75);
+  complete({image_count:4,manual_count:1,failures:[]});await downloading;
+  assert.match(card.children[1].textContent,/4.*1/);assert.equal(card.children[2].value,100);
+  assert.equal(fixture.calls.some(call=>call.command==='pause_metadata_import'),false);
+  await fixture.feature.pending();
+  assert.equal(dialog.open,true);assert.equal(card.classList.contains('hidden'),true);
+  assert.equal(fixture.calls.filter(call=>call.command==='restore_metadata_import').length,1);
+  assert.equal(fixture.calls.some(call=>call.command==='get_pending_imports'),false);
+  assert.equal(fixture.find(node=>node.textContent==='Finalizar importación').disabled,false);
+});
+test('Backdrop clicks and Escape minimize pending downloads while content drags do not',async()=>{
+  const fixture=app({get_pending_imports:()=>[{id:'old',platform:'PS2',games:1,completed:1,total:2}]});await fixture.feature.pending();
+  const dialog=fixture.dialog(),restore=fixture.find(node=>node.attributes['aria-label']==='Volver a descargas pendientes');
+  dialog.listeners.pointerdown({button:0,target:dialog.children[1]});dialog.listeners.click({target:dialog});assert.equal(dialog.open,true);
+  dialog.listeners.pointerdown({button:0,target:dialog});dialog.listeners.click({target:dialog});assert.equal(dialog.open,false);
+  restore.onclick();assert.equal(dialog.open,true);assert.equal(fixture.all().filter(node=>node.tag==='article').length,1);
+  let prevented=false;dialog.listeners.cancel({preventDefault(){prevented=true;}});assert.equal(prevented,true);assert.equal(dialog.open,false);
+  restore.onclick();assert.equal(fixture.dialog(),dialog);assert.equal(dialog.open,true);assert.equal(fixture.calls.length,1);
+});
+test('A pending list and a restoring job can both finish loading while minimized',async()=>{
+  let listReady,sessionReady,downloadReady;
+  const listing=app({get_pending_imports:()=>new Promise(resolve=>{listReady=resolve;})});
+  const loading=listing.feature.pending();const dialog=listing.dialog();listing.find(node=>node.attributes['aria-label']==='Minimizar').onclick();
+  listReady([{id:'old',platform:'PS2',games:1,completed:0,total:2}]);await loading;
+  listing.find(node=>node.attributes['aria-label']==='Volver a descargas pendientes').onclick();assert.equal(dialog.open,true);assert.equal(listing.all().filter(node=>node.tag==='article').length,1);
+  const fixture=app({restore_metadata_import:()=>new Promise(resolve=>{sessionReady=resolve;}),retry_metadata_images:()=>new Promise(resolve=>{downloadReady=resolve;}),pause_metadata_import:()=>{}});
+  const restoring=fixture.feature.resume({id:'old'});fixture.find(node=>node.attributes['aria-label']==='Minimizar').onclick();
+  sessionReady({job_id:'new',platform:'PS2',preview:{games:[]}});await tick();assert.equal(typeof downloadReady,'function');
+  downloadReady({image_count:2,manual_count:0,failures:[]});await restoring;
+  assert.equal(fixture.calls.some(call=>call.command==='pause_metadata_import'),false);
+  // Closing the minimized task is still an explicit pause.
+  fixture.find(node=>node.id==='pending-downloads-task').children[0].children.at(-1).onclick();await tick();
+  assert.equal(fixture.calls.at(-1).command,'pause_metadata_import');
+});
+test('Minimizing during final import preserves the commit and never pauses or submits it twice',async()=>{
+  let committed;
+  const fixture=app({restore_metadata_import:()=>({job_id:'new',platform:'PS2',preview:{games:[]}}),retry_metadata_images:()=>({image_count:1,failures:[]}),import_scanned_roms:()=>new Promise(resolve=>{committed=resolve;}),end_metadata_import:()=>{}});
+  await fixture.feature.resume({id:'old'});const dialog=fixture.dialog();
+  const finish=fixture.find(node=>node.textContent==='Finalizar importación'),commit=finish.onclick();
+  // The close button must not pause an import that is already being committed.
+  dialog.children[0].children.at(-1).onclick();assert.equal(dialog.open,false);
+  await finish.onclick();assert.equal(fixture.calls.filter(call=>call.command==='import_scanned_roms').length,1);
+  committed({added_count:1});await commit;
+  assert.equal(fixture.calls.at(-1).command,'end_metadata_import');assert.equal(fixture.calls.some(call=>call.command==='pause_metadata_import'),false);
+  assert.equal(fixture.document.body.children.includes(dialog),false);
 });

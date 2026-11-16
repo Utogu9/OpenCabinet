@@ -1872,6 +1872,7 @@
     "report.emulator": "No emulator configured",
     "report.allPlatforms": "All platforms",
     "report.count": "{0} games match these filters.",
+    "resume.restore": "Return to pending downloads",
     "resume.title": "Pending downloads",
     "resume.invalid": "Invalid pending import.",
     "resume.sourceChanged": "Select the same metadata source used when this import started before resuming.",

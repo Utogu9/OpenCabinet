@@ -4,14 +4,55 @@
   const t=(key,...args)=>root.OpenCabinetI18n.t(key,...args);
   const personal=game=>({status:'unplayed',favorite:false,rating:0,notes:'',...game?.personal,status:game?.personal?.status||'unplayed'});
   function create({document,invoke,getGames,onPersonal,onEdit,onRelocate,onResume,formatDuration,confirm,onError=()=>{}}){
-    const savingGames=new Set();let displayedGameId=null;
+    const savingGames=new Set();let displayedGameId=null,pendingWindow=null,pendingCard=null;
     const el=(tag,text,cls)=>{const node=document.createElement(tag);if(text!==undefined)node.textContent=text;if(cls)node.className=cls;return node;};
     const button=(label,action,cls='secondary-btn')=>{const node=el('button',label,cls);node.type='button';node.onclick=action;return node;};
-    function dialog(title){
+    function dialog(title,{persistent=false}={}){
       const node=el('dialog',undefined,'confirmation-dialog library-tool-dialog feature-dialog'),header=el('div',undefined,'modal-header'),body=el('div',undefined,'modal-body');
       const close=button('',()=>node.close(),'close-btn');root.OpenCabinetIcons.set(close,'x');close.setAttribute('aria-label',t('backup.close'));
       header.append(el('h2',title),close);node.append(header,body);document.body.appendChild(node);
-      node.addEventListener('close',()=>node.remove(),{once:true});return {node,body};
+      if(!persistent)node.addEventListener('close',()=>node.remove(),{once:true});return {node,body,header,close};
+    }
+    function pendingDialog(status,progress=null){
+      // Reuse one floating card and its drag listeners across completed jobs.
+      if(!pendingCard){
+        const card=el('aside',undefined,'import-task hidden'),header=el('div',undefined,'import-task-header');
+        const title=el('h3',t('resume.title')),restore=button('',()=>pendingWindow?.restore(),'task-restore-btn'),close=button('',()=>pendingWindow?.close(),'close-btn');
+        title.id='pending-downloads-task-title';card.id='pending-downloads-task';card.setAttribute('aria-labelledby',title.id);
+        for(const [control,icon,label] of [[restore,'external-link',t('resume.restore')],[close,'x',t('backup.close')]]){root.OpenCabinetIcons.set(control,icon);control.title=label;control.setAttribute('aria-label',label);}
+        const label=el('p','', 'task-label'),bar=el('progress');label.setAttribute('role','status');bar.max=100;bar.setAttribute('aria-label',t('resume.title'));
+        header.append(title,restore,close);card.append(header,label,bar);document.body.appendChild(card);
+        pendingCard={card,label,bar,floating:root.OpenCabinetTaskWindows?.attach(card)};
+      }
+      const {node,body,header,close}=dialog(t('resume.title'),{persistent:true});
+      node.classList.add('pending-downloads-dialog');
+      const minimize=button('\u2212',()=>api.minimize(),'close-btn');minimize.title=t('msg.2ce6eaaece');minimize.setAttribute('aria-label',t('msg.3fc5f90b27'));header.insertBefore(minimize,close);
+      let alive=true,detached=false,pressedBackdrop=false,ready=false;
+      const showCard=()=>{if(pendingCard.floating)pendingCard.floating.show();else pendingCard.card.classList.remove('hidden');};
+      const hideCard=()=>{if(pendingCard.floating)pendingCard.floating.hide();else pendingCard.card.classList.add('hidden');};
+      const api={node,body,onClose:()=>{},canClose:()=>true,get alive(){return alive;},
+        sync(nextReady=ready){
+          if(!alive)return;
+          ready=nextReady;
+          pendingCard.label.textContent=status.textContent;pendingCard.card.classList.toggle('import-task-success',ready);
+          pendingCard.bar.classList.toggle('hidden',!progress);
+          if(progress){pendingCard.bar.max=progress.max;if(progress.hasAttribute('value'))pendingCard.bar.value=progress.value;else pendingCard.bar.removeAttribute('value');}
+        },
+        minimize(){if(!alive||detached)return;detached=true;node.close();api.sync();showCard();},
+        restore(){if(!alive)return;detached=false;hideCard();if(!node.open)node.showModal();},
+        close(){
+          if(!alive)return;if(!api.canClose()){api.minimize();return;}
+          alive=false;hideCard();if(pendingWindow===api)pendingWindow=null;api.onClose();node.close();node.remove();
+        }
+      };
+      close.onclick=()=>api.close();
+      node.addEventListener('cancel',event=>{event.preventDefault();api.minimize();});
+      node.addEventListener('pointerdown',event=>{pressedBackdrop=event.button===0&&event.target===node;});
+      node.addEventListener('pointercancel',()=>{pressedBackdrop=false;});
+      node.addEventListener('click',event=>{const outside=pressedBackdrop&&event.target===node;pressedBackdrop=false;if(outside)api.minimize();});
+      // A native close event can arrive after a fast minimize/restore cycle.
+      node.addEventListener('close',()=>{if(alive&&!detached&&!node.open)api.close();});
+      pendingWindow=api;api.sync();return api;
     }
     function fields(host,value){
       const status=el('select');status.setAttribute('aria-label',t('personal.status'));
@@ -88,18 +129,56 @@
       }
     }
     async function pending(){
-      const {node,body}=dialog(t('resume.title')),status=el('p',t('insights.loading'),'help-text'),list=el('div',undefined,'feature-report-list');body.append(status,list);node.showModal();
-      async function load(){try{const rows=await invoke('get_pending_imports');if(!node.open)return;status.textContent=rows.length?t('resume.help'):t('resume.empty');list.replaceChildren();for(const row of rows){const item=el('article',undefined,'feature-report-row'),actions=el('div',undefined,'feature-toolbar');item.append(el('strong',row.platform),el('p',t('resume.summary',row.games,row.completed,row.total)));actions.append(button(t('resume.continue'),()=>{node.close();onResume(row);},'primary-btn'),button(t('resume.discard'),async()=>{if(await confirm(t('resume.discardConfirm'))){try{await invoke('discard_pending_import',{id:row.id});await load();}catch(reason){status.textContent=String(reason);}}}));item.append(actions);list.appendChild(item);}}catch(reason){if(node.open)status.textContent=String(reason);}}
+      if(pendingWindow){pendingWindow.restore();return;}
+      const status=el('p',t('insights.loading'),'help-text'),list=el('div',undefined,'feature-report-list');
+      const task=pendingDialog(status),{node,body}=task;body.append(status,list);node.showModal();
+      async function load(){try{
+        const rows=await invoke('get_pending_imports');if(!task.alive)return;
+        status.textContent=rows.length?t('resume.help'):t('resume.empty');list.replaceChildren();
+        for(const row of rows){
+          const item=el('article',undefined,'feature-report-row'),actions=el('div',undefined,'feature-toolbar');
+          item.append(el('strong',row.platform),el('p',t('resume.summary',row.games,row.completed,row.total)));
+          actions.append(button(t('resume.continue'),()=>{task.close();onResume(row);},'primary-btn'),button(t('resume.discard'),async()=>{
+            if(await confirm(t('resume.discardConfirm'))){try{await invoke('discard_pending_import',{id:row.id});await load();}catch(reason){if(task.alive){status.textContent=String(reason);task.sync();}}}
+          }));item.append(actions);list.appendChild(item);
+        }
+        task.sync();
+      }catch(reason){if(task.alive){status.textContent=String(reason);task.sync();}}}
       await load();
     }
     async function resume(row){
-      const {node,body}=dialog(t('resume.title')),status=el('p',t('insights.loading')),bar=el('progress'),failures=el('div'),actions=el('div',undefined,'form-actions');bar.max=100;body.append(status,bar,failures,actions);node.showModal();let session=null,busy=false,closing=false,committed=false;
-      const retry=button(t('msg.918d57e47c'),download),finish=button(t('resume.import'),commit,'primary-btn'),pause=button(t('resume.pause'),()=>node.close());actions.append(pause,retry,finish);retry.disabled=finish.disabled=true;
-      const progress=()=>{const channel=new root.__TAURI__.core.Channel();channel.onmessage=update=>{if(!node.open)return;status.textContent=t('resume.progress',update.processed,update.total||'?')+(update.current_file?' · '+update.current_file:'');if(update.total)bar.value=update.processed/update.total*100;else bar.removeAttribute('value');};return channel;};
-      node.addEventListener('close',()=>{closing=true;if(session&&!committed)void invoke('pause_metadata_import',{jobId:session.job_id}).catch(()=>{});});
-      try{session=await invoke('restore_metadata_import',{id:row.id});if(closing){await invoke('pause_metadata_import',{jobId:session.job_id});return;}await download();}catch(reason){if(node.open)status.textContent=String(reason);}
-      async function download(){if(!session||busy)return;busy=true;retry.disabled=finish.disabled=true;try{const report=await invoke('retry_metadata_images',{jobId:session.job_id,onProgress:progress()});if(!node.open)return;failures.replaceChildren();for(const error of report.failures)failures.append(el('p',`${error.title}: ${error.message}`,'feature-error'));status.textContent=t('resume.ready',report.image_count,report.manual_count||0);retry.disabled=!report.failures.length;finish.disabled=false;}catch(reason){if(node.open){status.textContent=String(reason);retry.disabled=false;}}finally{busy=false;}}
-      async function commit(){if(!session||busy)return;busy=true;retry.disabled=finish.disabled=pause.disabled=true;try{await invoke('import_scanned_roms',{preview:session.preview,platform:session.platform,jobId:session.job_id,mediaSelections:[],onProgress:progress()});committed=true;await invoke('end_metadata_import',{jobId:session.job_id});node.close();await onResume(null,true);}catch(reason){if(node.open){status.textContent=String(reason);retry.disabled=finish.disabled=pause.disabled=false;}}finally{busy=false;}}
+      if(pendingWindow){pendingWindow.restore();return;}
+      const status=el('p',t('insights.loading')),bar=el('progress'),failures=el('div'),actions=el('div',undefined,'form-actions');bar.max=100;bar.removeAttribute('value');
+      const task=pendingDialog(status,bar),{node,body}=task;body.append(status,bar,failures,actions);node.showModal();
+      let session=null,busy=false,closing=false,committed=false,committing=false;
+      const retry=button(t('msg.918d57e47c'),download),finish=button(t('resume.import'),commit,'primary-btn'),pause=button(t('resume.pause'),()=>task.close());actions.append(pause,retry,finish);retry.disabled=finish.disabled=true;
+      task.canClose=()=>!committing;
+      task.onClose=()=>{closing=true;if(session&&!committed)void invoke('pause_metadata_import',{jobId:session.job_id}).catch(()=>{});};
+      const progress=()=>{
+        const channel=new root.__TAURI__.core.Channel();channel.onmessage=update=>{
+          if(!task.alive)return;
+          status.textContent=t('resume.progress',update.processed,update.total||'?')+(update.current_file?' \u00b7 '+update.current_file:'');
+          if(update.total)bar.value=update.processed/update.total*100;else bar.removeAttribute('value');task.sync(false);
+        };return channel;
+      };
+      try{session=await invoke('restore_metadata_import',{id:row.id});if(closing){await invoke('pause_metadata_import',{jobId:session.job_id});return;}await download();}
+      catch(reason){if(task.alive){status.textContent=String(reason);task.sync();}}
+      async function download(){
+        if(!session||busy)return;busy=true;retry.disabled=finish.disabled=true;bar.removeAttribute('value');task.sync(false);
+        try{
+          const report=await invoke('retry_metadata_images',{jobId:session.job_id,onProgress:progress()});if(!task.alive)return;
+          failures.replaceChildren();for(const error of report.failures)failures.append(el('p',`${error.title}: ${error.message}`,'feature-error'));
+          status.textContent=t('resume.ready',report.image_count,report.manual_count||0);bar.value=100;retry.disabled=!report.failures.length;finish.disabled=false;task.sync(!report.failures.length);
+        }catch(reason){if(task.alive){status.textContent=String(reason);retry.disabled=false;task.sync();}}finally{busy=false;}
+      }
+      async function commit(){
+        if(!session||busy)return;busy=true;committing=true;retry.disabled=finish.disabled=pause.disabled=true;
+        try{
+          await invoke('import_scanned_roms',{preview:session.preview,platform:session.platform,jobId:session.job_id,mediaSelections:[],onProgress:progress()});
+          committed=true;await invoke('end_metadata_import',{jobId:session.job_id});committing=false;task.close();await onResume(null,true);
+        }catch(reason){if(task.alive){status.textContent=String(reason);retry.disabled=finish.disabled=pause.disabled=false;task.sync();}}
+        finally{busy=false;committing=false;}
+      }
     }
     return {editPersonal,showGame,dashboard,report,pending,resume,fields};
   }

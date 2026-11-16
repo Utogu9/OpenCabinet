@@ -1872,6 +1872,7 @@
     "report.emulator": "Sin emulador configurado",
     "report.allPlatforms": "Todas las plataformas",
     "report.count": "{0} juegos coinciden con estos filtros.",
+    "resume.restore": "Volver a descargas pendientes",
     "resume.title": "Descargas pendientes",
     "resume.invalid": "La importación pendiente no es válida.",
     "resume.sourceChanged": "Seleccioná la misma fuente de datos usada al iniciar esta importación para reanudarla.",

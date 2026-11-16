@@ -1536,6 +1536,8 @@ html[data-os="linux"] .game-box-model .game-box-face { will-change: transform; }
 dialog.feature-dialog { width: min(1000px, calc(100vw - 40px)); max-height: calc(100vh - 40px); padding: 0; overflow: hidden; }
 dialog.feature-dialog[open] { display: flex; flex-direction: column; }
 .feature-dialog > .modal-header { flex-shrink: 0; }
+.pending-downloads-dialog > .modal-header { gap: 8px; }
+.pending-downloads-dialog > .modal-header h2 { flex: 1; min-width: 0; }
 .feature-dialog > .modal-body { padding: 24px; overflow: auto; min-height: 0; }
 .feature-dialog .form-actions { padding: 16px 0 0; margin: 0; }
 .feature-dialog input, .feature-dialog select, .feature-dialog textarea, .personal-sidebar select { color: var(--text-main); background: var(--bg-color); border: 1px solid var(--border-color); padding: 8px; border-radius: 5px; font: inherit; }
