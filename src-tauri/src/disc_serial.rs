@@ -5,9 +5,10 @@ pub(crate) mod nintendo;
 pub(crate) mod optical;
 pub(crate) mod ps3;
 pub(crate) mod ps4;
+pub(crate) mod psp;
 mod sfo;
 use flate2::read::MultiGzDecoder;
-use rusqlite::{Connection, OptionalExtension, params};
+use rusqlite::{params, Connection, OptionalExtension};
 use serde::{Deserialize, Serialize};
 use std::{
     fs::{self, File},
@@ -66,6 +67,7 @@ enum System {
     Ps2,
     Ps3,
     Ps4,
+    Psp,
     Dreamcast,
     Wii,
     GameCube,
@@ -80,6 +82,7 @@ impl System {
             ("Sony PlayStation 2", Self::Ps2),
             ("Sony PlayStation 3", Self::Ps3),
             ("Sony PlayStation 4", Self::Ps4),
+            ("Sony PSP", Self::Psp),
             ("Sega Dreamcast", Self::Dreamcast),
             ("Nintendo Wii", Self::Wii),
             ("Nintendo GameCube", Self::GameCube),
@@ -98,6 +101,7 @@ impl System {
             Self::Ps2 => "ps2",
             Self::Ps3 => "ps3",
             Self::Ps4 => "ps4",
+            Self::Psp => "psp",
             Self::Dreamcast => "dreamcast",
             Self::Wii => "wii",
             Self::GameCube => "gamecube",
@@ -199,6 +203,11 @@ fn eligible(path: &Path, platform: &str) -> bool {
             .and_then(|v| v.to_str())
             .is_some_and(|name| {
                 let name = name.to_ascii_lowercase();
+                if system == Some(System::Psp) {
+                    return [".iso", ".cso", ".pbp", ".chd"]
+                        .iter()
+                        .any(|ext| name.ends_with(ext));
+                }
                 if system == Some(System::MegaDrive) {
                     return [".gen", ".md", ".bin"]
                         .iter()
@@ -554,10 +563,17 @@ enum Image {
     Plain(File),
     Gzip { path: PathBuf, index: Option<Index> },
     Optical(Box<optical::DataTrack>),
+    Cso(Box<psp::Cso>),
 }
 impl Image {
     fn open(path: &Path, budget: &mut Budget<'_>) -> io::Result<Self> {
         budget.check()?;
+        if path
+            .extension()
+            .is_some_and(|s| s.eq_ignore_ascii_case("cso"))
+        {
+            return Ok(Self::Cso(Box::new(psp::Cso::open(path, budget)?)));
+        }
         if path
             .extension()
             .is_some_and(|s| s.eq_ignore_ascii_case("cue"))
@@ -594,6 +610,7 @@ impl Image {
     ) -> io::Result<()> {
         budget.check()?;
         match self {
+            Self::Cso(cso) => cso.read_at(offset, bytes, budget),
             Self::Optical(track) => track.read_at(offset, bytes, budget),
             Self::Plain(file) => {
                 if offset
@@ -732,6 +749,9 @@ fn inspect_for(
     if system == System::Ps4 {
         return ps4::identity(path, &mut budget);
     }
+    if system == System::Psp {
+        return psp::identity(path, &mut budget);
+    }
     if system == System::MegaDrive {
         return megadrive::identity(path, &mut budget);
     }
@@ -764,6 +784,22 @@ fn inspect_image(
     budget: &mut Budget<'_>,
     system: System,
 ) -> io::Result<Option<Identity>> {
+    let Some(cnf) = iso_file(image, &[b"SYSTEM.CNF"], MAX_CNF, budget)? else {
+        return Ok(None);
+    };
+    Ok(boot_serial_for(&cnf, system).map(|serial| Identity {
+        serial,
+        regions: Vec::new(),
+    }))
+}
+
+/// Read one bounded ISO 9660 metadata file through fixed directory components.
+fn iso_file(
+    image: &mut Image,
+    components: &[&[u8]],
+    max_file: usize,
+    budget: &mut Budget<'_>,
+) -> io::Result<Option<Vec<u8>>> {
     let mut sector = [0; SECTOR as usize];
     let mut root = None;
     for block in 16..48 {
@@ -782,55 +818,66 @@ fn inspect_image(
             break;
         }
     }
-    let Some((offset, length)) = root else {
+    let Some(mut current) = root else {
         return Ok(None);
     };
-    if length == 0 || length > MAX_DIRECTORY {
-        return Err(invalid());
-    }
-    let mut directory = vec![0; length];
-    image.read_at(offset, &mut directory, budget)?;
-    let mut start = 0;
-    while start < directory.len() {
-        budget.check()?;
-        let length = directory[start] as usize;
-        if length == 0 {
-            start = ((start / SECTOR as usize) + 1) * SECTOR as usize;
-            continue;
-        }
-        let end = start
-            .checked_add(length)
-            .filter(|end| {
-                *end <= directory.len() && (*end - 1) / SECTOR as usize == start / SECTOR as usize
-            })
-            .ok_or_else(invalid)?;
-        let entry = &directory[start..end];
-        start = end;
-        if entry.len() < 34 {
+    for (index, target) in components.iter().enumerate() {
+        let (offset, length) = current;
+        if length == 0 || length > MAX_DIRECTORY {
             return Err(invalid());
         }
-        let name_end = 33 + entry[32] as usize;
-        if name_end > entry.len() {
-            return Err(invalid());
+        let mut directory = vec![0; length];
+        image.read_at(offset, &mut directory, budget)?;
+        let mut start = 0;
+        let mut found = None;
+        let last = index + 1 == components.len();
+        while start < directory.len() {
+            budget.check()?;
+            let length = directory[start] as usize;
+            if length == 0 {
+                start = ((start / SECTOR as usize) + 1) * SECTOR as usize;
+                continue;
+            }
+            let end = start
+                .checked_add(length)
+                .filter(|end| {
+                    *end <= directory.len()
+                        && (*end - 1) / SECTOR as usize == start / SECTOR as usize
+                })
+                .ok_or_else(invalid)?;
+            let entry = &directory[start..end];
+            start = end;
+            if entry.len() < 34 {
+                return Err(invalid());
+            }
+            let name_end = 33 + entry[32] as usize;
+            if name_end > entry.len() {
+                return Err(invalid());
+            }
+            let name = entry[33..name_end]
+                .split(|b| *b == b';')
+                .next()
+                .unwrap_or_default();
+            if !name.eq_ignore_ascii_case(target) || (entry[25] & 2 != 0) == last {
+                continue;
+            }
+            if entry[25] & 0x80 != 0 {
+                return Err(invalid());
+            }
+            found = Some(extent(entry)?);
+            break;
         }
-        let name = &entry[33..name_end];
-        let name = name.split(|b| *b == b';').next().unwrap_or_default();
-        if !name.eq_ignore_ascii_case(b"SYSTEM.CNF") || entry[25] & 2 != 0 {
-            continue;
+        let Some(entry) = found else { return Ok(None) };
+        if last {
+            let (offset, length) = entry;
+            if length == 0 || length > max_file {
+                return Err(invalid());
+            }
+            let mut bytes = vec![0; length];
+            image.read_at(offset, &mut bytes, budget)?;
+            return Ok(Some(bytes));
         }
-        if entry[25] & 0x80 != 0 {
-            return Err(invalid());
-        }
-        let (offset, length) = extent(entry)?;
-        if length == 0 || length > MAX_CNF {
-            return Err(invalid());
-        }
-        let mut cnf = vec![0; length];
-        image.read_at(offset, &mut cnf, budget)?;
-        return Ok(boot_serial_for(&cnf, system).map(|serial| Identity {
-            serial,
-            regions: Vec::new(),
-        }));
+        current = entry;
     }
     Ok(None)
 }

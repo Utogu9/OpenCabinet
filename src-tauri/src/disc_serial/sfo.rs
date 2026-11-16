@@ -46,6 +46,14 @@ pub(super) fn component(
 }
 
 pub(super) fn title_id<'a>(bytes: &'a [u8], versions: &[u32]) -> io::Result<Option<&'a str>> {
+    string(bytes, b"TITLE_ID", versions)
+}
+
+pub(super) fn string<'a>(
+    bytes: &'a [u8],
+    field: &[u8],
+    versions: &[u32],
+) -> io::Result<Option<&'a str>> {
     if bytes.len() < 20 || &bytes[..4] != b"\0PSF" || !versions.contains(&u32le(&bytes[4..8])?) {
         return Err(invalid());
     }
@@ -78,7 +86,7 @@ pub(super) fn title_id<'a>(bytes: &'a [u8], versions: &[u32]) -> io::Result<Opti
         {
             return Err(invalid());
         }
-        if key == b"TITLE_ID" {
+        if key == field {
             if !matches!(format, 0x0204 | 0x0004) {
                 return Err(invalid());
             }

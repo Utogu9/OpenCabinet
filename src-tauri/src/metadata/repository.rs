@@ -1357,6 +1357,40 @@ mod tests {
         assert_eq!(results.len(),1);assert_eq!(results[0].source_key.as_deref(),Some("CUSA-54321"));
     }
     #[test]
+    fn psp_disc_id_matches_catalog_releases_across_containers_and_respects_the_global_switch() {
+        let files=Sandbox::new();let mut conn=files.catalog();let source="Sony - PSP";
+        conn.execute("INSERT INTO platforms VALUES(?1)",[source]).unwrap();
+        let fixture=files.job.directory.join("psp.json");
+        fs::write(&fixture,r#"{"schema_version":2,"system":"Sony - PSP","games":{
+            "ULUS-10001":{"entries":[{"name":"Example Game (USA)"}],"images":{}},
+            "ULES10002":{"entries":[{"name":"Different Title (Europe)"}],"images":{}},
+            "NPUG12345":{"entries":[{"name":"Digital Game (USA)"}],"images":{}}
+        }}"#).unwrap();
+        insert_platform(&mut conn,&files.job,source,&fixture,|_|()).unwrap();
+        let images=crate::disc_serial::tests::Files::new();let disc=crate::disc_serial::psp::tests::iso("ULES10002");
+        for (name,bytes) in [
+            ("Example Game (USA).iso",disc.clone()),
+            ("Example Game (USA).cso",crate::disc_serial::psp::tests::cso(&disc,2048,0)),
+            ("Example Game (USA).chd",crate::disc_serial::optical::tests::chd(&disc,2048,None)),
+            ("EBOOT.PBP",crate::disc_serial::psp::tests::pbp_sfo(&crate::disc_serial::psp::tests::metadata("ULES10002","EG")))
+        ] {
+            let path=images.write(name,&bytes);
+            let results=search_candidate(&conn,"Example Game (USA)",source,path.to_str().unwrap()).unwrap();
+            assert_eq!(results.len(),1);assert_eq!(results[0].source_key.as_deref(),Some("ULES10002"));assert!(results[0].exact);
+            assert_eq!(super::super::import_match(&conn,&results,path.to_str().unwrap(),"USA").unwrap(),Some(results[0].game.id));
+            let disabled=matching::search_candidate_with_serial_matching(&conn,"Example Game (USA)",source,path.to_str().unwrap(),&||panic!("disabled identification must not read PSP containers"),false).unwrap();
+            assert_eq!(disabled.len(),1);assert_eq!(disabled[0].source_key.as_deref(),Some("ULUS-10001"));
+        }
+        let digital=images.write("EBOOT.PBP",&crate::disc_serial::psp::tests::pbp_sfo(&crate::disc_serial::psp::tests::metadata("NPUG12345","EG")));
+        let results=search_candidate(&conn,"Wrong name",source,digital.to_str().unwrap()).unwrap();
+        assert_eq!(results.len(),1);assert_eq!(results[0].source_key.as_deref(),Some("NPUG12345"));
+        for bytes in [crate::disc_serial::psp::tests::iso("ULUS99999"),b"invalid ISO".to_vec()] {
+            let path=images.write("Example Game (USA).iso",&bytes);
+            let results=search_candidate(&conn,"Example Game",source,path.to_str().unwrap()).unwrap();
+            assert_eq!(results.len(),1);assert_eq!(results[0].source_key.as_deref(),Some("ULUS-10001"));
+        }
+    }
+    #[test]
     fn ps1_and_dreamcast_disc_ids_override_renamed_files_and_preserve_embedded_region() {
         let files=Sandbox::new();let mut conn=files.catalog();
         let images=crate::disc_serial::tests::Files::new();

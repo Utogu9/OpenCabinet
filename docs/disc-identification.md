@@ -20,6 +20,7 @@ preference backups.
 | PlayStation 2 | `BOOT2` executable in ISO 9660 `SYSTEM.CNF` | CUE/BIN, CHD, ISO, ISO.GZ |
 | PlayStation 3 | `TITLE_ID` in the adjacent `PARAM.SFO` | Extracted folders launched through `USRDIR/EBOOT.BIN` |
 | PlayStation 4 | `TITLE_ID` in `sce_sys/param.sfo` | Extracted folders launched through `eboot.bin` |
+| PSP | `DISC_ID` in `PSP_GAME/PARAM.SFO` or the PBP metadata section | ISO, CSO, CHD, PBP |
 | Dreamcast | Product number and territory flags in the `IP.BIN` boot header | CUE/BIN, CHD |
 | Saturn | Product number and area symbols in the `IP.BIN` boot header | CUE/BIN, CHD |
 | Mega-CD / Sega CD | Product field following the disc system header | CUE/BIN, CHD |
@@ -64,6 +65,31 @@ removal, just like PS3. Disabling serial matching skips both readers.
 PS3 and PS4 `.pkg` files are deliberately excluded from this folder-based
 identification. They keep existing title/filename matching even when a valid
 SFO or EBOOT is nearby. The reader does not unpack or decrypt packages.
+
+PSP uses `DISC_ID`, not PS3/PS4's `TITLE_ID`. The shared SFO parser reads it
+from `PSP_GAME/PARAM.SFO` inside an ISO 9660 disc, or the first metadata
+section of a PBP. `ULUS10001` becomes `ULUS-10001`; compact catalog keys are
+also supported. Recognized territory prefixes provide regional hints, while
+unknown territories remain unknown. Only PSP game categories `UG` and `EG`
+are accepted, with PSP product prefixes, excluding normal homebrew, UMD video,
+PS1 Classics and PS3/PS4 identifiers. Modified games may still share identifiers.
+
+CSO versions 0/1 support stored and raw-DEFLATE frames, including zero
+`header_size`, aligned index offsets and larger frames. The reader fetches
+only the required index entries and frames, caching the most recent frame.
+There is no full-image conversion or index allocation. Frame size is bounded
+to 1 MiB, logical image size to 8 GiB, alignment to 20 bits, and decompression
+uses the shared time/output budgets. Unsupported CSO variants fall back to
+name matching. CHD uses the existing bounded optical reader. PBP checks its
+section offsets and reads at most 1 MiB of SFO metadata without decrypting or
+opening its executable payload. Missing, malformed or unknown identifiers
+keep title/filename matching. PSP identities use a separate cache namespace
+and the global serial-matching preference. The default PSP import extensions
+are unchanged; CHD identification is available when that extension is selected.
+See PPSSPP's [disc reader](https://github.com/hrydgard/ppsspp/blob/master/Core/FileSystems/BlockDevices.cpp),
+[PBP layout](https://github.com/hrydgard/ppsspp/blob/master/Core/ELF/PBPReader.cpp)
+and [SFO loading](https://github.com/hrydgard/ppsspp/blob/master/Core/PSPLoaders.cpp).
+OpenCabinet implements its own metadata-only readers and requires no keys.
 
 Dreamcast headers start with `SEGA SEGAKATANA ` and carry a ten-byte product
 number at offset `0x40`, plus territory flags at `0x30`. The reader examines

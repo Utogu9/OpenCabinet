@@ -70,11 +70,13 @@ pub(crate) mod tests {
     use std::fs;
 
     pub fn sfo(id: &str) -> Vec<u8> {
-        let entries = [
+        fields(&[
             ("CATEGORY", "DG"),
             ("TITLE", "Example title"),
             ("TITLE_ID", id),
-        ];
+        ])
+    }
+    pub fn fields(entries: &[(&str, &str)]) -> Vec<u8> {
         let keys: Vec<u8> = entries
             .iter()
             .flat_map(|(key, _)| key.bytes().chain([0]))
