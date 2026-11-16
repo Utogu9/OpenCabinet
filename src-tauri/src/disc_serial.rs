@@ -4,6 +4,8 @@ pub(crate) mod megadrive;
 pub(crate) mod nintendo;
 pub(crate) mod optical;
 pub(crate) mod ps3;
+pub(crate) mod ps4;
+mod sfo;
 use flate2::read::MultiGzDecoder;
 use rusqlite::{Connection, OptionalExtension, params};
 use serde::{Deserialize, Serialize};
@@ -63,6 +65,7 @@ enum System {
     Ps1,
     Ps2,
     Ps3,
+    Ps4,
     Dreamcast,
     Wii,
     GameCube,
@@ -76,6 +79,7 @@ impl System {
             ("Sony PlayStation", Self::Ps1),
             ("Sony PlayStation 2", Self::Ps2),
             ("Sony PlayStation 3", Self::Ps3),
+            ("Sony PlayStation 4", Self::Ps4),
             ("Sega Dreamcast", Self::Dreamcast),
             ("Nintendo Wii", Self::Wii),
             ("Nintendo GameCube", Self::GameCube),
@@ -93,6 +97,7 @@ impl System {
             Self::Ps1 => "ps1",
             Self::Ps2 => "ps2",
             Self::Ps3 => "ps3",
+            Self::Ps4 => "ps4",
             Self::Dreamcast => "dreamcast",
             Self::Wii => "wii",
             Self::GameCube => "gamecube",
@@ -185,6 +190,9 @@ fn eligible(path: &Path, platform: &str) -> bool {
     if system == Some(System::Ps3) {
         return ps3::game_directory(path).is_some();
     }
+    if system == Some(System::Ps4) {
+        return ps4::game_directory(path).is_some();
+    }
     system.is_some()
         && path
             .file_name()
@@ -214,11 +222,13 @@ fn eligible(path: &Path, platform: &str) -> bool {
             })
 }
 fn identity_stamp(path: &Path, system: System) -> Option<String> {
-    if system != System::Ps3 {
-        return file_stamp(path);
-    }
+    let sfo = match system {
+        System::Ps3 => ps3::metadata_path(path).ok()?,
+        System::Ps4 => ps4::metadata_path(path).ok()?,
+        _ => return file_stamp(path),
+    };
     // EBOOT can remain unchanged while PARAM.SFO is added, replaced or removed.
-    let metadata = match ps3::metadata_path(path).ok()? {
+    let metadata = match sfo {
         Some(sfo) => Some((sfo.to_string_lossy().to_string(), stamp(&sfo)?)),
         None => None,
     };
@@ -718,6 +728,9 @@ fn inspect_for(
     };
     if system == System::Ps3 {
         return ps3::identity(path, &mut budget);
+    }
+    if system == System::Ps4 {
+        return ps4::identity(path, &mut budget);
     }
     if system == System::MegaDrive {
         return megadrive::identity(path, &mut budget);

@@ -1324,6 +1324,39 @@ mod tests {
         assert_eq!(results.len(),1);assert_eq!(results[0].source_key.as_deref(),Some("BLES-01234"));
     }
     #[test]
+    fn ps4_sfo_matching_supports_both_catalog_id_spellings_and_pkg_name_fallback() {
+        let files=Sandbox::new();let mut conn=files.catalog();let source="Sony - PlayStation 4";
+        conn.execute("INSERT INTO platforms VALUES(?1)",[source]).unwrap();
+        let fixture=files.job.directory.join("ps4.json");
+        fs::write(&fixture,r#"{"schema_version":2,"system":"Sony - PlayStation 4","games":{
+            "CUSA12345":{"entries":[{"name":"Europe Game (Europe)"}],"images":{}},
+            "CUSA-54321":{"entries":[{"name":"USA Game (USA)"}],"images":{}}
+        }}"#).unwrap();
+        insert_platform(&mut conn,&files.job,source,&fixture,|_|()).unwrap();
+        let images=crate::disc_serial::tests::Files::new();
+        let boot=crate::disc_serial::ps4::tests::game(&images,"USA Game (USA)","CUSA12345");
+        let results=search_candidate(&conn,"USA Game (USA)",source,boot.to_str().unwrap()).unwrap();
+        assert_eq!(results.len(),1);assert_eq!(results[0].source_key.as_deref(),Some("CUSA12345"));assert!(results[0].exact);
+        assert_eq!(super::super::import_match(&conn,&results,boot.to_str().unwrap(),"USA").unwrap(),Some(results[0].game.id));
+        let disabled=matching::search_candidate_with_serial_matching(&conn,"USA Game (USA)",source,boot.to_str().unwrap(),&||panic!("disabled identification must skip SFO"),false).unwrap();
+        assert_eq!(disabled.len(),1);assert_eq!(disabled[0].source_key.as_deref(),Some("CUSA-54321"));
+        let second=crate::disc_serial::ps4::tests::game(&images,"Wrong title (Japan)","CUSA54321");
+        let results=search_candidate(&conn,"Wrong title",source,second.to_str().unwrap()).unwrap();
+        assert_eq!(results.len(),1);assert_eq!(results[0].source_key.as_deref(),Some("CUSA-54321"));
+        let pkg=boot.with_file_name("USA Game (USA).pkg");fs::write(&pkg,b"package not inspected").unwrap();
+        let results=search_candidate(&conn,"USA Game",source,pkg.to_str().unwrap()).unwrap();
+        assert_eq!(results.len(),1);assert_eq!(results[0].source_key.as_deref(),Some("CUSA-54321"));
+        let param=boot.parent().unwrap().join("sce_sys/param.sfo");
+        for bytes in [crate::disc_serial::ps3::tests::sfo("CUSA99999"),crate::disc_serial::ps3::tests::sfo("BLUS30581"),b"invalid SFO".to_vec()] {
+            fs::write(&param,bytes).unwrap();
+            let results=search_candidate(&conn,"USA Game (USA)",source,boot.to_str().unwrap()).unwrap();
+            assert_eq!(results.len(),1);assert_eq!(results[0].source_key.as_deref(),Some("CUSA-54321"));
+        }
+        fs::remove_file(&param).unwrap();
+        let results=search_candidate(&conn,"USA Game (USA)",source,boot.to_str().unwrap()).unwrap();
+        assert_eq!(results.len(),1);assert_eq!(results[0].source_key.as_deref(),Some("CUSA-54321"));
+    }
+    #[test]
     fn ps1_and_dreamcast_disc_ids_override_renamed_files_and_preserve_embedded_region() {
         let files=Sandbox::new();let mut conn=files.catalog();
         let images=crate::disc_serial::tests::Files::new();

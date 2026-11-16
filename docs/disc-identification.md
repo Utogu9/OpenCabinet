@@ -19,6 +19,7 @@ preference backups.
 | PlayStation | `BOOT` executable in ISO 9660 `SYSTEM.CNF` | CUE/BIN, CHD, ISO, ISO.GZ |
 | PlayStation 2 | `BOOT2` executable in ISO 9660 `SYSTEM.CNF` | CUE/BIN, CHD, ISO, ISO.GZ |
 | PlayStation 3 | `TITLE_ID` in the adjacent `PARAM.SFO` | Extracted folders launched through `USRDIR/EBOOT.BIN` |
+| PlayStation 4 | `TITLE_ID` in `sce_sys/param.sfo` | Extracted folders launched through `eboot.bin` |
 | Dreamcast | Product number and territory flags in the `IP.BIN` boot header | CUE/BIN, CHD |
 | Saturn | Product number and area symbols in the `IP.BIN` boot header | CUE/BIN, CHD |
 | Mega-CD / Sega CD | Product field following the disc system header | CUE/BIN, CHD |
@@ -48,6 +49,21 @@ SFO invalidates a cached result even if EBOOT is unchanged. Missing, damaged
 or unmatched metadata falls back to the reviewed title and filename. The
 global serial-matching preference also controls this reader. This adds folder
 support, not PS3 ISO or PKG parsing, and requires no keys or RPCS3 installation.
+
+PlayStation 4 reads `sce_sys/param.sfo` relative to the selected `eboot.bin`.
+It shares the bounded SFO parser, accepting PSF versions 1.0 and 1.1 and
+validating PS4 `CUSA` identifiers separately from PS3. `CUSA12345` and
+`CUSA-12345` catalog keys are both supported. The numeric identifier does not
+encode a dependable territory, so region information comes from the catalog,
+not an assumption that CUSA means USA. Path components support lower/mixed
+case without recursively searching the game. See
+[shadPS4's SFO reader](https://github.com/shadps4-emu/shadPS4/blob/main/src/core/file_format/psf.cpp).
+The PS4 cache has a separate namespace and tracks SFO creation, changes and
+removal, just like PS3. Disabling serial matching skips both readers.
+
+PS3 and PS4 `.pkg` files are deliberately excluded from this folder-based
+identification. They keep existing title/filename matching even when a valid
+SFO or EBOOT is nearby. The reader does not unpack or decrypt packages.
 
 Dreamcast headers start with `SEGA SEGAKATANA ` and carry a ten-byte product
 number at offset `0x40`, plus territory flags at `0x30`. The reader examines
