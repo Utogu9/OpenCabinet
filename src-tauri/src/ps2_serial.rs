@@ -1,5 +1,6 @@
 //! Read PS2 BOOT2 serials without mounting images or launching an emulator.
 //! PCSX2's packed gzip index is read as a file format, never as native pointers.
+mod optical;
 use flate2::read::MultiGzDecoder;
 use rusqlite::{Connection, OptionalExtension, params};
 use serde::{Deserialize, Serialize};
@@ -68,6 +69,18 @@ fn index_path(path: &Path) -> PathBuf {
     PathBuf::from(name)
 }
 fn file_stamp(path: &Path) -> Option<String> {
+    if path
+        .extension()
+        .is_some_and(|s| s.eq_ignore_ascii_case("cue"))
+    {
+        let track = optical::cue_track(path).ok()?;
+        return serde_json::to_string(&(
+            stamp(path)?,
+            track.file.to_string_lossy(),
+            stamp(&track.file)?,
+        ))
+        .ok();
+    }
     serde_json::to_string(&(stamp(path)?, stamp(&index_path(path)))).ok()
 }
 fn eligible(path: &Path, platform: &str) -> bool {
@@ -77,7 +90,10 @@ fn eligible(path: &Path, platform: &str) -> bool {
             .and_then(|v| v.to_str())
             .is_some_and(|name| {
                 let name = name.to_ascii_lowercase();
-                name.ends_with(".iso") || name.ends_with(".iso.gz")
+                name.ends_with(".iso")
+                    || name.ends_with(".iso.gz")
+                    || name.ends_with(".chd")
+                    || name.ends_with(".cue")
             })
 }
 /// Cache is optional: a read-only/unavailable library must not prevent matching.
@@ -378,9 +394,25 @@ impl Read for IndexedReader {
 enum Image {
     Plain(File),
     Gzip { path: PathBuf, index: Option<Index> },
+    Optical(Box<optical::DataTrack>),
 }
 impl Image {
-    fn open(path: &Path) -> io::Result<Self> {
+    fn open(path: &Path, budget: &mut Budget<'_>) -> io::Result<Self> {
+        budget.check()?;
+        if path
+            .extension()
+            .is_some_and(|s| s.eq_ignore_ascii_case("cue"))
+        {
+            return Ok(Self::Optical(Box::new(optical::DataTrack::cue(path)?)));
+        }
+        if path
+            .extension()
+            .is_some_and(|s| s.eq_ignore_ascii_case("chd"))
+        {
+            return Ok(Self::Optical(Box::new(optical::DataTrack::chd(
+                path, budget,
+            )?)));
+        }
         let mut file = File::open(path)?;
         if path
             .extension()
@@ -403,6 +435,7 @@ impl Image {
     ) -> io::Result<()> {
         budget.check()?;
         match self {
+            Self::Optical(track) => track.read_at(offset, bytes, budget),
             Self::Plain(file) => {
                 if offset
                     .checked_add(bytes.len() as u64)
@@ -513,12 +546,12 @@ fn extent(bytes: &[u8]) -> io::Result<(u64, usize)> {
     Ok((u64::from(block) * SECTOR, length as usize))
 }
 fn inspect(path: &Path, cancelled: &dyn Fn() -> bool) -> io::Result<Option<String>> {
-    let mut image = Image::open(path)?;
     let mut budget = Budget {
         started: Instant::now(),
         inflated: 0,
         cancelled,
     };
+    let mut image = Image::open(path, &mut budget)?;
     let indexed = matches!(&image, Image::Gzip { index: Some(_), .. });
     let result = inspect_image(&mut image, &mut budget);
     // An apparently valid but damaged sidecar can decode into invalid ISO data.

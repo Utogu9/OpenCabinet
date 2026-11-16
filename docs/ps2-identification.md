@@ -1,6 +1,6 @@
 # PS2 serial identification
 
-OpenCabinet checks the contents of PS2 `.iso` and `.iso.gz` images when matching
+OpenCabinet checks the contents of PS2 `.iso`, `.iso.gz`, `.chd` and `.cue` images when matching
 import candidates against OpenCabinet-BDD. It reads the ISO 9660 directory and
 `SYSTEM.CNF`, then normalizes the executable named by `BOOT2`. For example,
 `cdrom0:\SLUS_209.98;1` becomes `SLUS-20998`.
@@ -33,11 +33,31 @@ gzip files. The existing index format is documented by the upstream
 and its [checkpoint definitions](https://github.com/PCSX2/pcsx2/blob/master/pcsx2/CDVD/zlib_indexed.h).
 OpenCabinet's implementation reads that format independently.
 
+## CD images: CUE/BIN and CHD
+
+For a `.cue`, the reader opens the referenced binary data track, respecting its
+`INDEX 01` offset and sector layout. MODE1/2048, MODE1/2352, MODE2/2336 and
+MODE2/2352 are supported. Stored pregaps are skipped; virtual `PREGAP` directives
+do not advance the binary file. Additional audio tracks are not inspected.
+Quoted filenames, relative paths and Unicode CUE files are supported.
+
+For `.chd`, the embedded Rust CHD decoder reads the track metadata and only
+decompresses the hunks needed for ISO directories and `SYSTEM.CNF`. CD sector
+headers and subchannel data are excluded from the logical ISO view. CHD DVD
+images with 2048-byte units are supported too. No `chdman` installation, temporary
+extraction or conversion is required. Parent-dependent CHDs, unsupported track
+layouts and unreadable images fall back to the existing name-based matching.
+
+This identifies PS2 `BOOT2` executables; it does not add PS1 identification.
+
 ## Limits and caching
 
 The serial is cached in the library's `ps2_disc_identities` table. The cache
 includes file path, size, modification timestamp and the index's presence,
 size and timestamp. Changing either source invalidates the cached result.
+For CUE images, the signature also includes the referenced data-track path,
+size and timestamp: replacing the BIN invalidates the cache even if the CUE
+itself is unchanged. CHD signatures track the CHD file itself.
 Unavailable or read-only caches do not prevent importing.
 
 Each inspection has a three-second budget, checks import cancellation, and

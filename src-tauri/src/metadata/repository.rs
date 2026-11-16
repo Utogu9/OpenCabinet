@@ -1271,6 +1271,10 @@ mod tests {
         let results=search_candidate(&catalog,"Example Game (USA)","Sony - PlayStation 2",path.to_str().unwrap()).unwrap();
         assert_eq!(results.len(),1);assert_eq!(results[0].source_key.as_deref(),Some("SLES-54321"));assert!(results[0].exact);
         assert_eq!(super::super::import_match(&catalog,&results,path.to_str().unwrap(),"North America").unwrap(),Some(results[0].game.id));
+        images.write("Example Game (USA).bin",&crate::ps2_serial::tests::iso("SLES_543.21"));
+        let cue=images.write("Example Game (USA).cue",b"FILE \"Example Game (USA).bin\" BINARY\nTRACK 01 MODE1/2048\nINDEX 01 00:00:00\n");
+        let results=search_candidate(&catalog,"Wrong title","Sony - PlayStation 2",cue.to_str().unwrap()).unwrap();
+        assert_eq!(results.len(),1);assert_eq!(results[0].source_key.as_deref(),Some("SLES-54321"));assert!(results[0].exact);
         let unknown=images.write("Example Game (USA).iso",&crate::ps2_serial::tests::iso("SLUS_999.99"));
         let fallback=search_candidate(&catalog,"Example Game","Sony - PlayStation 2",unknown.to_str().unwrap()).unwrap();
         assert!(fallback.iter().any(|r|r.source_key.as_deref()==Some("SLUS-12345")));

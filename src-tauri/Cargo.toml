@@ -34,6 +34,7 @@ lofty = "0.25.5"
 flate2 = { version = "1.1.10", default-features = false, features = ["zlib-rs"] }
 # Checkpoint bit priming uses this pinned low-level API; no native zlib is required.
 zlib-rs = { version = "=0.6.8", default-features = false, features = ["std", "__internal-api"] }
+chd = { version = "0.4.0", default-features = false, features = ["std", "cd_full", "verify_block_crc"] }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 image = { version = "0.25.10", default-features = false, features = ["png", "jpeg", "webp", "gif", "bmp"] }
