@@ -834,7 +834,7 @@ pub(crate) mod tests {
             let metadata =
                 format!("TRACK:1 TYPE:{kind} SUBTYPE:NONE FRAMES:158 PREGAP:150 PGTYPE:VMODE1");
             let bytes = chd(&raw, 2448, Some(&metadata));
-            let path = files.write("Wrong name.chd", &bytes);
+            let path = files.write(&format!("Wrong name {kind}.chd"), &bytes);
             assert!(
                 super::super::cached_identity(&path, System::Dreamcast, Some(&conn), &|| false)
                     .is_none()
@@ -894,7 +894,9 @@ pub(crate) mod tests {
                 2448,
                 Some("TRACK:1 TYPE:MODE1_RAW SUBTYPE:NONE FRAMES:158 PREGAP:150 PGTYPE:VMODE1"),
             );
-            let path = files.write("wrong.chd", &bytes);
+            // Keep regional fixtures independent of filesystem timestamp
+            // resolution; they intentionally share the same size and serial.
+            let path = files.write(&format!("wrong-{security:02x}.chd"), &bytes);
             let id = super::super::cached_identity(&path, System::SegaCd, Some(&conn), &|| false)
                 .unwrap();
             assert_eq!(id.serial, "MK-4401-00");
