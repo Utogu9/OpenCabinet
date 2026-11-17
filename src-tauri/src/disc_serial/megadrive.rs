@@ -146,7 +146,10 @@ pub(crate) mod tests {
         ] {
             let data = rom(raw, "JUE");
             for extension in ["gen", "md", "bin"] {
-                let path = files.write(&format!("wrong.{extension}"), &data);
+                // Different fixtures need different paths: rapid same-size
+                // rewrites can share a filesystem timestamp and cache stamp.
+                // Cache invalidation is checked explicitly below via resizing.
+                let path = files.write(&format!("{expected}.{extension}"), &data);
                 let id = cached_identity(&path, System::MegaDrive, Some(&conn), &|| false).unwrap();
                 assert_eq!(id.serial, expected);
                 assert_eq!(id.regions, ["Japan", "North America", "Europe"]);
