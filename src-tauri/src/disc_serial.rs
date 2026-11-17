@@ -1,6 +1,7 @@
 //! Read ROM and optical disc identities without mounting or launching emulators.
 //! PCSX2's packed gzip index is read as a file format, never as native pointers.
 pub(crate) mod megadrive;
+pub(crate) mod nds;
 pub(crate) mod nintendo;
 pub(crate) mod optical;
 pub(crate) mod ps3;
@@ -79,6 +80,7 @@ enum System {
     Saturn,
     SegaCd,
     MegaDrive,
+    Nds,
 }
 impl System {
     fn from_platform(platform: &str) -> Option<Self> {
@@ -96,6 +98,7 @@ impl System {
             ("Sega Saturn", Self::Saturn),
             ("Sega CD", Self::SegaCd),
             ("Sega Genesis", Self::MegaDrive),
+            ("Nintendo DS", Self::Nds),
         ]
         .into_iter()
         .find_map(|(name, system)| {
@@ -117,6 +120,7 @@ impl System {
             Self::Saturn => "saturn",
             Self::SegaCd => "segacd",
             Self::MegaDrive => "megadrive",
+            Self::Nds => "nds",
         }
     }
 }
@@ -212,6 +216,9 @@ fn eligible(path: &Path, platform: &str) -> bool {
             .and_then(|v| v.to_str())
             .is_some_and(|name| {
                 let name = name.to_ascii_lowercase();
+                if system == Some(System::Nds) {
+                    return name.ends_with(".nds") || name.ends_with(".zip");
+                }
                 if system == Some(System::Xbox) {
                     return name.ends_with(".iso") || name.ends_with(".xbe");
                 }
@@ -777,6 +784,9 @@ fn inspect_for(
     }
     if system == System::MegaDrive {
         return megadrive::identity(path, &mut budget);
+    }
+    if system == System::Nds {
+        return nds::identity(path, &mut budget);
     }
     if matches!(system, System::Wii | System::GameCube) {
         return nintendo::identity(path, &mut budget, system);

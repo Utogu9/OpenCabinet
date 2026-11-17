@@ -160,7 +160,7 @@ const DEFAULTS: &[Platform] = &[
     Platform {
         name: "Nintendo DS",
         extensions: ".nds, .zip, .7z",
-        aliases: &[],
+        aliases: &["Nintendo - Nintendo DS"],
     },
     Platform {
         name: "Nintendo 3DS",

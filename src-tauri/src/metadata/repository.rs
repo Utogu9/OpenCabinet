@@ -1474,6 +1474,45 @@ mod tests {
     }
 
     #[test]
+    fn nds_internal_codes_match_catalog_keys_in_raw_and_zipped_roms() {
+        let files=Sandbox::new();let mut conn=files.catalog();let source="Nintendo - Nintendo DS";
+        conn.execute("INSERT INTO platforms VALUES(?1)",[source]).unwrap();
+        let fixture=files.job.directory.join("nds.json");
+        fs::write(&fixture,r#"{"schema_version":2,"system":"Nintendo - Nintendo DS","games":{
+            "YW2E":{"entries":[{"name":"Advance Wars - Days of Ruin (USA)"}],"images":{}},
+            "NTR-YW2E-USA":{"entries":[{"name":"Other packaging (USA)"}],"images":{}},
+            "NTR-AWRP-EUR":{"entries":[{"name":"Advance Wars - Dual Strike (Europe)"}],"images":{}},
+            "TWL-IPKE-USA":{"entries":[{"name":"Pokemon HeartGold (USA)"}],"images":{}},
+            "ADAX":{"entries":[{"name":"Unknown territory (Japan)"}],"images":{}},
+            "NTR-ABCD":{"entries":[{"name":"German game (Europe)"}],"images":{}},
+            "NTR-ABXX-EUR":{"entries":[{"name":"Alternative packaging (Europe)"}],"images":{}},
+            "NTR-ABXX-USA":{"entries":[{"name":"Alternative packaging (USA)"}],"images":{}},
+            "AFAJ":{"entries":[{"name":"Wrong title (Japan)"}],"images":{}}
+        }}"#).unwrap();insert_platform(&mut conn,&files.job,source,&fixture,|_|()).unwrap();
+        let images=crate::disc_serial::tests::Files::new();
+        for (code,expected) in [("YW2E","YW2E"),("AWRP","NTR-AWRP-EUR"),("IPKE","TWL-IPKE-USA"),("ADAX","ADAX"),("ABCD","NTR-ABCD")] {
+            let bytes=crate::disc_serial::nds::tests::rom(code);
+            for (name,data) in [("Wrong title (Japan).nds",bytes.clone()),("Wrong title (Japan).zip",crate::disc_serial::nds::tests::zip(&[("folder/renamed.nds",&bytes)]))] {
+                let path=images.write(name,&data);
+                let results=search_candidate(&conn,"Wrong title (Japan)",source,path.to_str().unwrap()).unwrap();
+                assert_eq!(results.len(),1,"{code}");assert!(results[0].exact);
+                assert_eq!(results[0].source_key.as_deref(),Some(expected));
+                assert_eq!(super::super::import_match(&conn,&results,path.to_str().unwrap(),"Japan").unwrap(),Some(results[0].game.id));
+                let disabled=matching::search_candidate_with_serial_matching(&conn,"Wrong title (Japan)",source,path.to_str().unwrap(),&||panic!("disabled identification must not inspect Nintendo DS ROMs"),false).unwrap();
+                assert_eq!(disabled.len(),1);assert_eq!(disabled[0].source_key.as_deref(),Some("AFAJ"));
+            }
+        }
+        let path=images.write("Unknown.nds",&crate::disc_serial::nds::tests::rom("ABXX"));
+        let results=search_candidate(&conn,"Unknown",source,path.to_str().unwrap()).unwrap();
+        assert_eq!(results.len(),2,"unknown territory must preserve alternative printed-code matches");
+        for data in [crate::disc_serial::nds::tests::rom("ZZZE"),b"damaged ROM".to_vec()] {
+            let path=images.write("Wrong title (Japan).nds",&data);
+            let results=search_candidate(&conn,"Wrong title",source,path.to_str().unwrap()).unwrap();
+            assert_eq!(results.len(),1);assert_eq!(results[0].source_key.as_deref(),Some("AFAJ"));
+        }
+    }
+
+    #[test]
     fn wii_internal_id6_matches_catalog_product_codes_before_wrong_titles_and_regions() {
         let files=Sandbox::new();let mut conn=files.catalog();let source="Nintendo - Wii";
         conn.execute("INSERT INTO platforms VALUES(?1)",[source]).unwrap();

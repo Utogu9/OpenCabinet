@@ -166,10 +166,12 @@ fn disc_matches(conn:&Connection,platform:&str,identity:&crate::disc_serial::Ide
     }
     let wii=crate::platform_defaults::equivalent(platform,"Nintendo Wii");
     let gamecube=crate::platform_defaults::equivalent(platform,"Nintendo GameCube");
-    if (wii || gamecube) && serial.len()==6 && serial.bytes().all(|b|b.is_ascii_alphanumeric()) {
-        // Nintendo discs store ID6, while preservation catalogs may use the
-        // printed product code, without the two-character maker suffix.
-        for product in if gamecube{vec!["DL-DOL","DOL"]}else{vec!["RVL"]} {
+    let nds=crate::platform_defaults::equivalent(platform,"Nintendo DS");
+    if ((wii || gamecube) && serial.len()==6 || nds && serial.len()==4) && serial.bytes().all(|b|b.is_ascii_alphanumeric()) {
+        // Nintendo discs store ID6 and DS cartridges ID4; preservation
+        // catalogs may instead use the printed product code.
+        for product in if nds{vec!["NTR","TWL"]}else if gamecube{vec!["DL-DOL","DOL"]}else{vec!["RVL"]} {
+            if nds { queries.push(format!("{product}-{serial}")); }
             let prefix=format!("{platform}/{product}-{}-",&serial[..4]);
             let mut statement=conn.prepare("SELECT source_key FROM repository_keys WHERE source_key>=?1 AND source_key<?2 ORDER BY source_key LIMIT 100").map_err(err)?;
             let keys=statement.query_map(params![prefix,format!("{prefix}\u{10ffff}")],|row|row.get::<_,String>(0)).map_err(err)?;
@@ -209,7 +211,7 @@ fn disc_matches(conn:&Connection,platform:&str,identity:&crate::disc_serial::Ide
             if !identity.regions.is_empty() && !result.regions.is_empty() && !result.regions.iter().any(|region|super::super::canonical_region(region).is_some_and(|region|identity.regions.iter().any(|r|r==region))) {continue;}
             if seen.insert(result.game.id){found.push(result);}
         }
-        if !(dreamcast || saturn || segacd) && !found.is_empty() && (!(wii || gamecube) || query==*serial){break;}
+        if !(dreamcast || saturn || segacd) && !found.is_empty() && (!(wii || gamecube || nds) || query==*serial){break;}
     }
     Ok(found)
 }

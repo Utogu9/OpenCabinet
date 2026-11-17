@@ -28,7 +28,28 @@ preference backups.
 | Mega-CD / Sega CD | Product field following the disc system header | CUE/BIN, CHD |
 | Wii | Six-byte game ID (`ID6`) in the unencrypted disc header | ISO, RVZ, WBFS |
 | GameCube | Six-byte game ID (`ID6`) in the disc header | ISO, RVZ |
+| Nintendo DS | Four-character game code (`ID4`) in the cartridge header | NDS, ZIP containing a single NDS |
 | Mega Drive / Genesis | Product code and revision in the ROM header | GEN, MD, BIN (linear dumps) |
+
+Nintendo DS reads only the first 352 bytes of the cartridge, including its
+four-character code at `0x0c`. The header CRC16, maker/unit fields and ARM9/ARM7
+file bounds are checked; trimmed dumps and DS-compatible DSi-enhanced cartridges
+are supported. No Nintendo logo data is bundled. See the field layout in
+[melonDS's header definition](https://github.com/melonDS-emu/melonDS/blob/master/src/NDS_Header.h).
+The reader is an independent implementation, not emulator code.
+
+Raw catalog keys such as `YW2E` take priority; printed `NTR-`/`TWL-` variants
+are also supported. Known territory letters supply regional hints, and unknown
+ones remain unknown. The code does not distinguish every revision, translation
+or ROM hack that retains the same header. A valid code without a catalog match,
+or missing/damaged/homebrew metadata, keeps the normal filename/title fallback.
+
+ZIP archives are inspected without extracting files, with a 4 MiB compressed
+archive/index read budget and a 4,096-entry cap. Only 352 bytes of ROM header
+are decompressed. Exactly one NDS member is required; collections, encrypted/unsupported
+archives and 7z keep name matching. Direct NDS and ZIP results share the separate
+DS cache namespace, invalidated when the source file changes. Cancellation and
+the global serial-identification preference apply as on other platforms.
 
 For PlayStation, `cdrom:\SLUS_009.99;1` becomes `SLUS-00999`. `BOOT` and
 `BOOT2` are deliberately distinct; selecting PS1 must not return a PS2 identity.
